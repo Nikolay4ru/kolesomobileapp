@@ -296,20 +296,19 @@ const FilterAutoScreen = ({ navigation }) => {
         </Animated.View>
       </ScrollView>
 
-      {/* Apply Button */}
-      <View style={[styles.bottomContainer, { paddingBottom: tabBarHeight + 20 }]}>
-       <TouchableOpacity 
-        style={[
-          styles.applyButton, 
-          (!selectedMarka || !selectedModel || !selectedYear || !selectedModification) && styles.disabledButton,
-          { bottom: tabBarHeight + 20 } // Отступ от TabBar
-        ]} 
-        onPress={applyAutoFilter}
-        disabled={!selectedMarka || !selectedModel || !selectedYear || !selectedModification}
-      >
-        <Text style={styles.applyButtonText}>Подобрать товары</Text>
-      </TouchableOpacity>
-      </View>
+     
+<View style={[styles.bottomContainer, { paddingBottom: tabBarHeight + 20 }]}>
+  <TouchableOpacity 
+    style={[
+      styles.applyButton, 
+      (!selectedMarka || !selectedModel || !selectedYear || !selectedModification) && styles.disabledButton
+    ]} 
+    onPress={applyAutoFilter}
+    disabled={!selectedMarka || !selectedModel || !selectedYear || !selectedModification}
+  >
+    <Text style={styles.applyButtonText}>Подобрать товары</Text>
+  </TouchableOpacity>
+</View>
 
       {/* Modal */}
       <Modal
@@ -742,16 +741,16 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingBottom: 120, // Добавляем отступ снизу для TabBar
+    paddingBottom: 20, // Добавляем отступ снизу для TabBar
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 130,
+    paddingBottom: 20,
   },
   welcomeCard: {
     backgroundColor: '#FFF',
     borderRadius: 20,
-    padding: 24,
+    padding: 20,
     alignItems: 'center',
     marginBottom: 24,
     shadowColor: '#000',
@@ -764,7 +763,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     color: '#1A1A1A',
-    marginTop: 16,
+    marginTop: 10,
     marginBottom: 8,
     textAlign: 'center',
   },
@@ -842,14 +841,11 @@ const styles = StyleSheet.create({
   iconContainerActive: {
     backgroundColor: '#E6F4F4',
   },
-  bottomContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+bottomContainer: {
     backgroundColor: '#FFF',
     paddingHorizontal: 16,
     paddingTop: 16,
+    paddingBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.1,
@@ -858,15 +854,12 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
   },
-    applyButton: {
-    backgroundColor: '#006363', // Простой цвет без градиента
-    borderRadius: 8,
-    paddingVertical: 16,
-    marginHorizontal: 16,
+applyButton: {
+    backgroundColor: '#006363',
+    borderRadius: 16,
+    paddingVertical: 18,
     alignItems: 'center',
-    position: 'absolute',
-    left: 16,
-    right: 16,
+    justifyContent: 'center',
   },
   applyButtonText: {
     color: '#fff',
