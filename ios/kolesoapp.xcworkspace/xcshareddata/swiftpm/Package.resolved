@@ -1,0 +1,15 @@
+{
+  "originHash" : "8d91a265db88b425002e264470636a3af10da494f1515474a035fedcea810b6e",
+  "pins" : [
+    {
+      "identity" : "sdkpay-static",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/sdkpay/sdkpay-static",
+      "state" : {
+        "branch" : "main",
+        "revision" : "94be64a74e251e5c10f38ec9af9ec0ea90bd0473"
+      }
+    }
+  ],
+  "version" : 3
+}
