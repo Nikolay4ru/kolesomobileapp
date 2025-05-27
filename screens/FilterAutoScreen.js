@@ -1,9 +1,26 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, FlatList, TextInput } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  Modal, 
+  FlatList, 
+  TextInput,
+  Animated,
+  Dimensions,
+  ScrollView,
+  ActivityIndicator,
+  Platform
+} from 'react-native';
 import { useStores } from '../useStores';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import LinearGradient from 'react-native-linear-gradient';
+
+const { width, height } = Dimensions.get('window');
 
 const FilterAutoScreen = ({ navigation }) => {
   const { productStore } = useStores();
@@ -19,6 +36,48 @@ const FilterAutoScreen = ({ navigation }) => {
   
   const insets = useSafeAreaInsets();
   const statusBarHeight = insets.top;
+
+  // Анимации
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      })
+    ]).start();
+  }, []);
+
+  // Анимация прогресса при выборе
+  useEffect(() => {
+    const progress = selectedMarka ? 0.25 : 0;
+    const progress2 = selectedModel ? 0.5 : progress;
+    const progress3 = selectedYear ? 0.75 : progress2;
+    const progress4 = selectedModification ? 1 : progress3;
+
+    Animated.timing(progressAnim, {
+      toValue: progress4,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }, [selectedMarka, selectedModel, selectedYear, selectedModification]);
 
   const openModal = (content) => {
     setModalContent(content);
@@ -40,9 +99,7 @@ const FilterAutoScreen = ({ navigation }) => {
           modification: selectedModification
         });
         
-        // Явно вызываем загрузку товаров с новыми параметрами
         await productStore.fetchProducts(true);
-        
         navigation.navigate('ProductList');
       } catch (error) {
         console.error('Error applying car filter:', error);
@@ -51,6 +108,19 @@ const FilterAutoScreen = ({ navigation }) => {
   };
 
   const clearSelection = () => {
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.95,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      })
+    ]).start();
+
     setSelectedMarka(null);
     setSelectedModel(null);
     setSelectedYear(null);
@@ -105,66 +175,143 @@ const FilterAutoScreen = ({ navigation }) => {
     }
   };
 
+  const getStepProgress = () => {
+    if (selectedModification) return 4;
+    if (selectedYear) return 3;
+    if (selectedModel) return 2;
+    if (selectedMarka) return 1;
+    return 0;
+  };
+
   return (
-    <View style={[styles.container, { paddingTop: statusBarHeight, paddingBottom: tabBarHeight }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
-          <Ionicons name="close" size={24} color="#000" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Подбор по автомобилю</Text>
-        <TouchableOpacity 
-          onPress={clearSelection} 
-          style={styles.clearButton}
-          disabled={!selectedMarka}
-        >
-          <Text style={[styles.clearText, !selectedMarka && styles.disabled]}>Очистить</Text>
-        </TouchableOpacity>
-      </View>
+    <View style={[styles.container, { paddingTop: statusBarHeight }]}>
+      {/* Gradient Header */}
+      <LinearGradient
+        colors={['#006363', '#004545']}
+        style={styles.headerGradient}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
+            <View style={styles.closeButtonInner}>
+              <Ionicons name="close" size={24} color="#FFF" />
+            </View>
+          </TouchableOpacity>
+          
+          <Text style={styles.title}>Подбор по автомобилю</Text>
+          
+          <TouchableOpacity 
+            onPress={clearSelection} 
+            style={[styles.clearButton, !selectedMarka && styles.clearButtonDisabled]}
+            disabled={!selectedMarka}
+          >
+            <Text style={[styles.clearText, !selectedMarka && styles.disabled]}>
+              Сбросить
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-      <View style={styles.content}>
-        <SelectionButton 
-          title="Марка"
-          placeholder="марку"
-          value={selectedMarka} 
-          onPress={() => openModal('marka')} 
-        />
-        <SelectionButton 
-          title="Модель"
-          placeholder="модель"
-          value={selectedModel} 
-          onPress={() => openModal('model')} 
-          disabled={!selectedMarka}
-        />
-        <SelectionButton 
-          title="Год выпуска" 
-          placeholder="год выпуска"
-          value={selectedYear} 
-          onPress={() => openModal('year')} 
-          disabled={!selectedModel}
-        />
-        <SelectionButton 
-          title="Модификация"
-          placeholder="модификацию" 
-          value={selectedModification} 
-          onPress={() => openModal('modification')} 
-          disabled={!selectedYear}
-        />
+        {/* Progress Bar */}
+        <View style={styles.progressContainer}>
+          <View style={styles.progressBar}>
+            <Animated.View 
+              style={[
+                styles.progressFill,
+                {
+                  width: progressAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0%', '100%']
+                  })
+                }
+              ]} 
+            />
+          </View>
+          <Text style={styles.progressText}>
+            {getStepProgress()} из 4 шагов
+          </Text>
+        </View>
+      </LinearGradient>
 
+      {/* Content */}
+      <ScrollView 
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View style={{
+          opacity: fadeAnim,
+          transform: [
+            { translateY: slideAnim },
+            { scale: scaleAnim }
+          ]
+        }}>
+          {/* Welcome Card */}
+          <View style={styles.welcomeCard}>
+            <MaterialCommunityIcons name="car-sports" size={48} color="#006363" />
+            <Text style={styles.welcomeTitle}>Найдите идеальные товары</Text>
+            <Text style={styles.welcomeSubtitle}>
+              Выберите параметры вашего автомобиля для точного подбора
+            </Text>
+          </View>
 
-      </View>
-      <TouchableOpacity 
+          {/* Selection Cards */}
+          <SelectionCard
+            step="1"
+            title="Марка"
+            placeholder="Выберите марку автомобиля"
+            value={selectedMarka}
+            onPress={() => openModal('marka')}
+            enabled={true}
+            icon="car"
+          />
+
+          <SelectionCard
+            step="2"
+            title="Модель"
+            placeholder="Выберите модель"
+            value={selectedModel}
+            onPress={() => openModal('model')}
+            enabled={!!selectedMarka}
+            icon="car-side"
+          />
+
+          <SelectionCard
+            step="3"
+            title="Год выпуска"
+            placeholder="Выберите год"
+            value={selectedYear}
+            onPress={() => openModal('year')}
+            enabled={!!selectedModel}
+            icon="calendar"
+          />
+
+          <SelectionCard
+            step="4"
+            title="Модификация"
+            placeholder="Выберите модификацию"
+            value={selectedModification}
+            onPress={() => openModal('modification')}
+            enabled={!!selectedYear}
+            icon="cog"
+          />
+        </Animated.View>
+      </ScrollView>
+
+      {/* Apply Button */}
+      <View style={[styles.bottomContainer, { paddingBottom: tabBarHeight + 20 }]}>
+       <TouchableOpacity 
         style={[
           styles.applyButton, 
           (!selectedMarka || !selectedModel || !selectedYear || !selectedModification) && styles.disabledButton,
-          { bottom: tabBarHeight + 40 }
+          { bottom: tabBarHeight + 20 } // Отступ от TabBar
         ]} 
         onPress={applyAutoFilter}
         disabled={!selectedMarka || !selectedModel || !selectedYear || !selectedModification}
       >
         <Text style={styles.applyButtonText}>Подобрать товары</Text>
       </TouchableOpacity>
-      
+      </View>
 
+      {/* Modal */}
       <Modal
         animationType="slide"
         transparent={false}
@@ -177,30 +324,82 @@ const FilterAutoScreen = ({ navigation }) => {
   );
 };
 
-const SelectionButton = ({ title, placeholder, value, onPress, disabled = false }) => (
-  <TouchableOpacity
-    style={[styles.selectionButton, disabled && styles.disabledButton]}
-    onPress={onPress}
-    disabled={disabled}
-  >
-    <Text style={[styles.selectionTitle, disabled && styles.disabledText]}>{title}</Text>
-    <Text style={styles.selectionValue} numberOfLines={1}>
-      {value || `Выберите ${placeholder.toLowerCase()}`}
-    </Text>
-    <Ionicons name="chevron-forward" size={20} color={disabled ? '#ccc' : '#006363'} />
-  </TouchableOpacity>
-);
+// Selection Card Component
+const SelectionCard = ({ step, title, placeholder, value, onPress, enabled, icon }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
 
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.97,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  return (
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <TouchableOpacity
+        style={[styles.selectionCard, !enabled && styles.disabledCard]}
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        disabled={!enabled}
+        activeOpacity={0.9}
+      >
+        <View style={styles.selectionCardContent}>
+          <View style={styles.stepBadge}>
+            <Text style={styles.stepText}>{step}</Text>
+          </View>
+          
+          <View style={styles.selectionInfo}>
+            <Text style={[styles.selectionTitle, !enabled && styles.disabledText]}>
+              {title}
+            </Text>
+            <Text style={[
+              styles.selectionValue,
+              !value && styles.placeholderText,
+              !enabled && styles.disabledText
+            ]}>
+              {value || placeholder}
+            </Text>
+          </View>
+          
+          <View style={[styles.iconContainer, value && styles.iconContainerActive]}>
+            <MaterialCommunityIcons 
+              name={value ? "check-circle" : icon} 
+              size={24} 
+              color={value ? "#006363" : (enabled ? "#999" : "#DDD")} 
+            />
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
+
+// Modal Components
 const MarkaModal = ({ onSelect, onClose, searchQuery, setSearchQuery }) => {
   const { productStore } = useStores();
   const [marks, setMarks] = useState([]);
+  const [loading, setLoading] = useState(true);
   const insets = useSafeAreaInsets();
-  const statusBarHeight = insets.top;
 
   useEffect(() => {
     const loadMarks = async () => {
-      const data = await productStore.fetchCarMarks();
-      setMarks(data);
+      try {
+        const data = await productStore.fetchCarMarks();
+        setMarks(data);
+      } catch (error) {
+        console.error('Error loading marks:', error);
+      } finally {
+        setLoading(false);
+      }
     };
     loadMarks();
   }, []);
@@ -210,59 +409,55 @@ const MarkaModal = ({ onSelect, onClose, searchQuery, setSearchQuery }) => {
   );
 
   return (
-    <View style={[styles.modalContainer, { paddingTop: statusBarHeight }]}>
-      <View style={styles.modalHeader}>
-        <TouchableOpacity onPress={onClose} style={styles.modalCloseButton}>
-          <Ionicons name="arrow-back" size={24} color="#000" />
-        </TouchableOpacity>
-        <Text style={styles.modalTitle}>Выберите марку</Text>
-      </View>
-
-      <View style={styles.searchContainer}>
-        <Ionicons name="search-outline" size={20} color="#999" style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Поиск марки..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholderTextColor="#999"
-         // autoFocus
-        />
-      </View>
-
-      <FlatList
-        data={filteredMarks}
-        keyExtractor={(item) => item}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.modalItem}
-            onPress={() => {
-              onSelect(item);
-              onClose();
-            }}
-          >
-            <Text style={styles.modalItemText}>{item}</Text>
-          </TouchableOpacity>
-        )}
+    <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
+      <ModalHeader title="Выберите марку" onClose={onClose} />
+      
+      <SearchBar 
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholder="Поиск марки..."
       />
+
+      {loading ? (
+        <LoadingState />
+      ) : (
+        <FlatList
+          data={filteredMarks}
+          keyExtractor={(item) => item}
+          renderItem={({ item }) => (
+            <ModalItem
+              text={item}
+              onPress={() => {
+                onSelect(item);
+                onClose();
+              }}
+            />
+          )}
+          contentContainerStyle={styles.modalList}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
     </View>
   );
 };
 
-// Аналогичные компоненты для ModelModal, YearModal и ModificationModal
-// (реализация похожа на MarkaModal с соответствующими запросами к productStore)
-
 const ModelModal = ({ marka, onSelect, onClose, searchQuery, setSearchQuery }) => {
   const { productStore } = useStores();
   const [models, setModels] = useState([]);
+  const [loading, setLoading] = useState(true);
   const insets = useSafeAreaInsets();
-  const statusBarHeight = insets.top;
 
   useEffect(() => {
     const loadModels = async () => {
       if (marka) {
-        const data = await productStore.fetchCarModels(marka);
-        setModels(data);
+        try {
+          const data = await productStore.fetchCarModels(marka);
+          setModels(data);
+        } catch (error) {
+          console.error('Error loading models:', error);
+        } finally {
+          setLoading(false);
+        }
       }
     };
     loadModels();
@@ -273,41 +468,34 @@ const ModelModal = ({ marka, onSelect, onClose, searchQuery, setSearchQuery }) =
   );
 
   return (
-    <View style={[styles.modalContainer, { paddingTop: statusBarHeight }]}>
-      <View style={styles.modalHeader}>
-        <TouchableOpacity onPress={onClose} style={styles.modalCloseButton}>
-          <Ionicons name="arrow-back" size={24} color="#000" />
-        </TouchableOpacity>
-        <Text style={styles.modalTitle}>Выберите модель</Text>
-      </View>
-
-      <View style={styles.searchContainer}>
-        <Ionicons name="search-outline" size={20} color="#999" style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Поиск модели..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholderTextColor="#999"
-         // autoFocus
-        />
-      </View>
-
-      <FlatList
-        data={filteredModels}
-        keyExtractor={(item) => item}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.modalItem}
-            onPress={() => {
-              onSelect(item);
-              onClose();
-            }}
-          >
-            <Text style={styles.modalItemText}>{item}</Text>
-          </TouchableOpacity>
-        )}
+    <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
+      <ModalHeader title={`Модели ${marka}`} onClose={onClose} />
+      
+      <SearchBar 
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholder="Поиск модели..."
       />
+
+      {loading ? (
+        <LoadingState />
+      ) : (
+        <FlatList
+          data={filteredModels}
+          keyExtractor={(item) => item}
+          renderItem={({ item }) => (
+            <ModalItem
+              text={item}
+              onPress={() => {
+                onSelect(item);
+                onClose();
+              }}
+            />
+          )}
+          contentContainerStyle={styles.modalList}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
     </View>
   );
 };
@@ -315,43 +503,53 @@ const ModelModal = ({ marka, onSelect, onClose, searchQuery, setSearchQuery }) =
 const YearModal = ({ marka, model, onSelect, onClose }) => {
   const { productStore } = useStores();
   const [years, setYears] = useState([]);
+  const [loading, setLoading] = useState(true);
   const insets = useSafeAreaInsets();
-  const statusBarHeight = insets.top;
 
   useEffect(() => {
     const loadYears = async () => {
       if (marka && model) {
-        const data = await productStore.fetchCarYears(marka, model);
-        setYears(data);
+        try {
+          const data = await productStore.fetchCarYears(marka, model);
+          setYears(data);
+        } catch (error) {
+          console.error('Error loading years:', error);
+        } finally {
+          setLoading(false);
+        }
       }
     };
     loadYears();
   }, [marka, model]);
 
   return (
-    <View style={[styles.modalContainer, { paddingTop: statusBarHeight }]}>
-      <View style={styles.modalHeader}>
-        <TouchableOpacity onPress={onClose} style={styles.modalCloseButton}>
-          <Ionicons name="arrow-back" size={24} color="#000" />
-        </TouchableOpacity>
-        <Text style={styles.modalTitle}>Выберите год</Text>
-      </View>
+    <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
+      <ModalHeader title="Выберите год" onClose={onClose} />
 
-      <FlatList
-        data={years}
-        keyExtractor={(item) => item.toString()}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.modalItem}
-            onPress={() => {
-              onSelect(item);
-              onClose();
-            }}
-          >
-            <Text style={styles.modalItemText}>{item}</Text>
-          </TouchableOpacity>
-        )}
-      />
+      {loading ? (
+        <LoadingState />
+      ) : (
+        <FlatList
+          data={years}
+          keyExtractor={(item) => item.toString()}
+          numColumns={3}
+          columnWrapperStyle={styles.yearGrid}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.yearItem}
+              onPress={() => {
+                onSelect(item);
+                onClose();
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.yearText}>{item}</Text>
+            </TouchableOpacity>
+          )}
+          contentContainerStyle={styles.modalList}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
     </View>
   );
 };
@@ -359,14 +557,20 @@ const YearModal = ({ marka, model, onSelect, onClose }) => {
 const ModificationModal = ({ marka, model, year, onSelect, onClose, searchQuery, setSearchQuery }) => {
   const { productStore } = useStores();
   const [modifications, setModifications] = useState([]);
+  const [loading, setLoading] = useState(true);
   const insets = useSafeAreaInsets();
-  const statusBarHeight = insets.top;
 
   useEffect(() => {
     const loadModifications = async () => {
       if (marka && model && year) {
-        const data = await productStore.fetchCarModifications(marka, model, year);
-        setModifications(data);
+        try {
+          const data = await productStore.fetchCarModifications(marka, model, year);
+          setModifications(data);
+        } catch (error) {
+          console.error('Error loading modifications:', error);
+        } finally {
+          setLoading(false);
+        }
       }
     };
     loadModifications();
@@ -377,109 +581,285 @@ const ModificationModal = ({ marka, model, year, onSelect, onClose, searchQuery,
   );
 
   return (
-    <View style={[styles.modalContainer, { paddingTop: statusBarHeight }]}>
-      <View style={styles.modalHeader}>
-        <TouchableOpacity onPress={onClose} style={styles.modalCloseButton}>
-          <Ionicons name="arrow-back" size={24} color="#000" />
-        </TouchableOpacity>
-        <Text style={styles.modalTitle}>Выберите модификацию</Text>
-      </View>
-
-      <View style={styles.searchContainer}>
-        <Ionicons name="search-outline" size={20} color="#999" style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Поиск модификации..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholderTextColor="#999"
-          autoFocus
-        />
-      </View>
-
-      <FlatList
-        data={filteredModifications}
-        keyExtractor={(item) => item}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.modalItem}
-            onPress={() => {
-              onSelect(item);
-              onClose();
-            }}
-          >
-            <Text style={styles.modalItemText}>{item}</Text>
-          </TouchableOpacity>
-        )}
+    <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
+      <ModalHeader title="Выберите модификацию" onClose={onClose} />
+      
+      <SearchBar 
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholder="Поиск модификации..."
       />
+
+      {loading ? (
+        <LoadingState />
+      ) : (
+        <FlatList
+          data={filteredModifications}
+          keyExtractor={(item) => item}
+          renderItem={({ item }) => (
+            <ModalItem
+              text={item}
+              onPress={() => {
+                onSelect(item);
+                onClose();
+              }}
+              multiline
+            />
+          )}
+          contentContainerStyle={styles.modalList}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
     </View>
   );
 };
 
+// Helper Components
+const ModalHeader = ({ title, onClose }) => (
+  <View style={styles.modalHeader}>
+    <TouchableOpacity onPress={onClose} style={styles.modalCloseButton}>
+      <Ionicons name="arrow-back" size={24} color="#000" />
+    </TouchableOpacity>
+    <Text style={styles.modalTitle}>{title}</Text>
+    <View style={{ width: 40 }} />
+  </View>
+);
+
+const SearchBar = ({ value, onChangeText, placeholder }) => (
+  <View style={styles.searchContainer}>
+    <View style={styles.searchInputWrapper}>
+      <Ionicons name="search-outline" size={20} color="#999" style={styles.searchIcon} />
+      <TextInput
+        style={styles.searchInput}
+        placeholder={placeholder}
+        value={value}
+        onChangeText={onChangeText}
+        placeholderTextColor="#999"
+        autoCorrect={false}
+        returnKeyType="search"
+      />
+      {value.length > 0 && (
+        <TouchableOpacity onPress={() => onChangeText('')} style={styles.clearButton}>
+          <Ionicons name="close-circle" size={20} color="#999" />
+        </TouchableOpacity>
+      )}
+    </View>
+  </View>
+);
+
+const ModalItem = ({ text, onPress, multiline = false }) => (
+  <TouchableOpacity 
+    style={styles.modalItem}
+    onPress={onPress}
+    activeOpacity={0.7}
+  >
+    <Text style={[styles.modalItemText, multiline && styles.modalItemTextMultiline]} numberOfLines={multiline ? 3 : 1}>
+      {text}
+    </Text>
+    <Ionicons name="chevron-forward" size={20} color="#C7C7CC" />
+  </TouchableOpacity>
+);
+
+const LoadingState = () => (
+  <View style={styles.loadingContainer}>
+    <ActivityIndicator size="large" color="#006363" />
+    <Text style={styles.loadingText}>Загрузка...</Text>
+  </View>
+);
+
 const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: '#fff',
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#eee',
-      },
-  title: {
-    fontSize: 18,
-    fontWeight: '600',
+  container: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
+  },
+  headerGradient: {
+    paddingBottom: 20,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 20,
   },
   closeButton: {
-    padding: 8,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButtonInner: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFF',
+    flex: 1,
+    textAlign: 'center',
   },
   clearButton: {
-    padding: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   clearText: {
-    color: '#006363',
+    color: '#FFF',
     fontSize: 16,
+    fontWeight: '500',
+  },
+  clearButtonDisabled: {
+    opacity: 0.5,
   },
   disabled: {
-    color: '#ccc',
+    opacity: 0.5,
+  },
+  progressContainer: {
+    paddingHorizontal: 24,
+    paddingBottom: 8,
+  },
+  progressBar: {
+    height: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#FFF',
+    borderRadius: 3,
+  },
+  progressText: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
   },
   content: {
     flex: 1,
-    padding: 16,
+    paddingBottom: 120, // Добавляем отступ снизу для TabBar
   },
-  selectionButton: {
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 130,
+  },
+  welcomeCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  welcomeTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  welcomeSubtitle: {
+    fontSize: 15,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  selectionCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+  },
+  disabledCard: {
+    opacity: 0.6,
+    backgroundColor: '#FAFAFA',
+  },
+  selectionCardContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    padding: 20,
+  },
+  stepBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#E6F4F4',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  stepText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#006363',
+  },
+  selectionInfo: {
+    flex: 1,
   },
   selectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    width: 100,
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#666',
+    marginBottom: 4,
   },
   selectionValue: {
-    flex: 1,
     fontSize: 16,
-    color: '#666',
-    marginHorizontal: 8,
+    fontWeight: '600',
+    color: '#1A1A1A',
   },
-  disabledButton: {
-    opacity: 0.5,
+  placeholderText: {
+    color: '#999',
+    fontWeight: '400',
   },
   disabledText: {
-    color: '#ccc',
+    color: '#CCC',
   },
-  applyButton: {
-    backgroundColor: '#006363',
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F8F9FA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  iconContainerActive: {
+    backgroundColor: '#E6F4F4',
+  },
+  bottomContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFF',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+    applyButton: {
+    backgroundColor: '#006363', // Простой цвет без градиента
     borderRadius: 8,
     paddingVertical: 16,
     marginHorizontal: 16,
@@ -493,52 +873,233 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  
+  // Modal styles
   modalContainer: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#F8F9FA',
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 16,
+    backgroundColor: '#FFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#F0F0F0',
   },
   modalCloseButton: {
-    marginRight: 16,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    flex: 1,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    textAlign: 'center',
+    marginRight: 40,
   },
   searchContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFF',
+  },
+  searchInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 10,
-    margin: 16,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
     paddingHorizontal: 12,
+    height: 44,
   },
   searchIcon: {
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    height: 40,
+    height: 44,
     fontSize: 16,
     color: '#333',
+  },
+  clearButton: {
+    padding: 4,
+  },
+  modalList: {
+    paddingTop: 8,
+    paddingBottom: 20,
   },
   modalItem: {
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFF',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
   },
   modalItemText: {
+    flex: 1,
     fontSize: 16,
-    color: '#333',
+    color: '#1A1A1A',
+    fontWeight: '500',
+    marginRight: 12,
+  },
+  modalItemTextMultiline: {
+    lineHeight: 22,
+  },
+  yearGrid: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  yearItem: {
+    flex: 1,
+    backgroundColor: '#FFF',
+    margin: 4,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  yearText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1A1A1A',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 32,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 32,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#FF6B6B',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginTop: 12,
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  
+  // Selected items styles
+  selectedContainer: {
+    backgroundColor: '#E6F4F4',
+    borderColor: '#006363',
+    borderWidth: 2,
+  },
+  selectedItemText: {
+    color: '#006363',
+    fontWeight: '600',
+  },
+  selectedYearItem: {
+    backgroundColor: '#E6F4F4',
+    borderColor: '#006363',
+    borderWidth: 2,
+  },
+  selectedYearText: {
+    color: '#006363',
+    fontWeight: '700',
+  },
+  
+  // Check icon styles
+  checkIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#006363',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  
+  // Separator styles
+  sectionSeparator: {
+    height: 12,
+    backgroundColor: 'transparent',
+  },
+  
+  // Special case for transmission type
+  transmissionIcon: {
+    width: 20,
+    height: 20,
+  },
+  
+  // Additional spacing styles
+  firstModalItem: {
+    marginTop: 8,
+  },
+  lastModalItem: {
+    marginBottom: 20,
+  },
+  
+  // Animation styles for smooth transitions
+  fadeIn: {
+    opacity: 1,
+  },
+  fadeOut: {
+    opacity: 0.5,
+  },
+  
+  // Safe area styles
+  safeAreaTop: {
+    backgroundColor: '#006363',
+  },
+  safeAreaBottom: {
+    backgroundColor: '#FFF',
   },
 });
+
 
 export default FilterAutoScreen;

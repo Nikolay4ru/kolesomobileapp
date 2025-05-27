@@ -133,7 +133,7 @@ const HomeScreen = () => {
   const quickActions = [
     {
       id: '1',
-      title: 'Подобрать авто',
+      title: 'Подобрать по авто',
       icon: 'car-sport-outline',
       backgroundColor: '#E7FAF3',
       color: '#34D399',
