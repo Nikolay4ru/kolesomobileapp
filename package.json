@@ -1,7 +1,6 @@
 {
   "name": "kolesoapp",
   "version": "0.0.1",
-  "homepage": "./",
   "private": true,
   
   "scripts": {
@@ -9,9 +8,7 @@
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
-    "test": "jest",
-    "predeploy": "npm run build",
-    "deploy": "npm run build && gh-pages -d dist"
+    "test": "jest"
   },
   "dependencies": {
     "@appmetrica/react-native-analytics": "^3.3.0",
