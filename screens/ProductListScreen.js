@@ -254,6 +254,11 @@ const ProductListScreen = observer(() => {
       opacity: fadeAnim,
     };
 
+     const discount = item.old_price && item.old_price > item.price 
+      ? Math.round(((item.old_price - item.price) / item.old_price) * 100)
+      : 0;
+
+
     return (
 
       <AnimatedTouchableOpacity 
@@ -285,6 +290,11 @@ const ProductListScreen = observer(() => {
               />
             </View>
           </TouchableOpacity>
+          {discount > 0 && (
+            <View style={styles.discountBadge}>
+              <Text style={styles.discountText}>-{discount}%</Text>
+            </View>
+          )}
           {item.out_of_stock && (
             <View style={styles.outOfStockOverlay}>
               <Text style={styles.outOfStockText}>Нет в наличии</Text>
@@ -304,9 +314,16 @@ const ProductListScreen = observer(() => {
 </Text>
           
           <View style={styles.priceRow}>
-            <Text style={styles.productPrice}>
-              {item.price ? parseFloat(item.price).toLocaleString('ru-RU') + ' ₽' : 'Цена не указана'}
-            </Text>
+            <View style={styles.priceContainer}>
+              <Text style={styles.productPrice}>
+                {item.price ? parseFloat(item.price).toLocaleString('ru-RU') + ' ₽' : 'Цена не указана'}
+              </Text>
+              {item.old_price && item.old_price > item.price && (
+                <Text style={styles.productOldPrice}>
+                  {parseFloat(item.old_price).toLocaleString('ru-RU')} ₽
+                </Text>
+              )}
+            </View>
             {!item.out_of_stock && (
               <View style={styles.stockIndicator}>
                 <View style={styles.stockDot} />
