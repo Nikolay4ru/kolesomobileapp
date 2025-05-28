@@ -70,12 +70,21 @@ const statusBarHeight = modal ? 0 : insets.top;
   const animatedIndex = useSharedValue(0);
 
 
-const isInCart = useCallback(() => {
-  return cartStore.items.some(item => item.product_id == product?.id);
-}, [cartStore.items, product?.id]);
+ // Функция проверки наличия товара в корзине
+  const isInCart = useCallback(() => {
+    return cartStore.items.some(item => item.product_id == product?.id);
+  }, [cartStore.items, product?.id]);
 
 
-const [quantity, setQuantity] = useState(1);
+    // Получение количества товара из корзины
+  const getCartQuantity = useCallback(() => {
+    const cartItem = cartStore.items.find(item => item.product_id == product?.id);
+    return cartItem ? cartItem.quantity : 0;
+  }, [cartStore.items, product?.id]);
+
+
+ const [quantity, setQuantity] = useState(1);
+  const [isUpdatingQuantity, setIsUpdatingQuantity] = useState(false);
 
 useEffect(() => {
   if (product && isInCart()) {
@@ -291,31 +300,31 @@ useEffect(() => {
   return unsubscribe;
 }, [navigation]);
 
-// Загружаем корзину при монтировании
-useEffect(() => {
-  if (authStore.isLoggedIn) {
-    cartStore.loadCart(authStore.token);
-  }
-}, [authStore.isLoggedIn, authStore.token]);
+ // Загружаем корзину при монтировании
+  useEffect(() => {
+    if (authStore.isLoggedIn) {
+      cartStore.loadCart(authStore.token);
+    }
+  }, [authStore.isLoggedIn, authStore.token]);
 
   // Загрузка похожих товаров
   const fetchSimilarProducts = async (currentProduct) => {
     try {
-      // Загрузка товаров с таким же брендом и моделью (разные размеры)
-      if (currentProduct.category === 'Автошины') {
-        const sameBrandResponse = await fetch(
-          `https://api.koleso.app/api/product.php?action=same-model&product_id=${currentProduct.id}&limit=10`
-        );
-        if (sameBrandResponse.ok) {
-          const sameBrandData = await sameBrandResponse.json();
-          if (sameBrandData.success) {
-            const filtered = sameBrandData.products
-              .filter(p => p.id !== currentProduct.id)
-              .slice(0, 10);
-            setSameBrandProducts(filtered);
-          }
-        }
-      }
+     // // Загрузка товаров с таким же брендом и моделью (разные размеры)
+     // if (currentProduct.category === 'Автошины') {
+     //   const sameBrandResponse = await fetch(
+     //     `https://api.koleso.app/api/product.php?action=same-model&product_id=${currentProduct.id}&limit=10`
+     //   );
+     //   if (sameBrandResponse.ok) {
+     //     const sameBrandData = await sameBrandResponse.json();
+     //     if (sameBrandData.success) {
+     //       const filtered = sameBrandData.products
+     //         .filter(p => p.id !== currentProduct.id)
+     //         .slice(0, 10);
+     //       setSameBrandProducts(filtered);
+     //     }
+     //   }
+     // }
 
       // Загрузка похожих товаров
       const similarResponse = await fetch(
@@ -336,26 +345,35 @@ useEffect(() => {
     }
   };
 
-const handleQuantityChange = async (value) => {
-  if (!product || !isInCart()) return;
-  
-  const newValue = quantity + value;
-  if (newValue < 0 || newValue > 20) return;
-   
-  try {
-    setQuantity(newValue);
-    Haptics.impact('light');
-    const cartItem = cartStore.items.find(item => item.product_id == product.id);
-    if (cartItem) {
-      await cartStore.updateItemQuantity(cartItem.id, newValue, authStore.token);
+// Обновленная функция изменения количества
+  const handleQuantityChange = async (value) => {
+    if (!product || isUpdatingQuantity) return;
+    
+    const newValue = quantity + value;
+    if (newValue < 1 || newValue > 20) return;
+    
+    try {
+      setIsUpdatingQuantity(true);
+      Haptics.impact('light');
+      
+      if (isInCart()) {
+        // Если товар в корзине, обновляем через cartStore
+        const cartItem = cartStore.items.find(item => item.product_id == product.id);
+        if (cartItem) {
+          await cartStore.updateItemQuantity(cartItem.id, newValue, authStore.token);
+          setQuantity(newValue);
+        }
+      } else {
+        // Если товара нет в корзине, просто обновляем локальное состояние
+        setQuantity(newValue);
+      }
+    } catch (error) {
+      console.error('Error updating quantity:', error);
+      Alert.alert('Ошибка', 'Не удалось обновить количество');
+    } finally {
+      setIsUpdatingQuantity(false);
     }
-  } catch (error) {
-    console.error('Error updating quantity:', error);
-    // Восстанавливаем предыдущее значение при ошибке
-    const cartItem = cartStore.items.find(item => item.product_id == product.id);
-    setQuantity(cartItem?.quantity || 1);
-  }
-};
+  };
 
   const addToCart = async () => {
     if (!authStore.isLoggedIn) {
@@ -991,7 +1009,7 @@ const handleQuantityChange = async (value) => {
         )}
       </ScrollView>
 
-      {/* Фиксированная панель покупки */}
+  {/* Фиксированная панель покупки */}
       <View style={[styles.bottomPanel, { paddingBottom: tabBarHeight }]}>
         <LinearGradient
           colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.8)', 'rgba(255,255,255,1)']}
@@ -1005,73 +1023,74 @@ const handleQuantityChange = async (value) => {
           </View>
           
           <View style={styles.bottomActions}>
-  {isInCart() ? (
-    <>
-      <View style={styles.quantitySection}>
-        <TouchableOpacity 
-          style={[styles.quantityButton, quantity <= 1 && styles.quantityButtonDisabled]}
-          onPress={() => handleQuantityChange(-1)}
-          disabled={quantity <= 0}
-        >
-          <Ionicons name="remove" size={20} color={quantity <= 0 ? "#D1D5DB" : "#374151"} />
-        </TouchableOpacity>
-        
-        <View style={styles.quantityValue}>
-          <Text style={styles.quantityText}>{quantity}</Text>
-        </View>
-        
-        <TouchableOpacity 
-          style={[styles.quantityButton, quantity >= 20 && styles.quantityButtonDisabled]}
-          onPress={() => handleQuantityChange(1)}
-          disabled={quantity >= 20}
-        >
-          <Ionicons name="add" size={20} color={quantity >= 20 ? "#D1D5DB" : "#374151"} />
-        </TouchableOpacity>
-      </View>
-      
-      <TouchableOpacity 
-        style={styles.buyButton}
-        onPress={FastBuyCart}
-        disabled={addingToCart}
-      >
-        {addingToCart ? (
-          <View style={styles.buyButtonContent}>
-            <ActivityIndicator size="small" color="#FFF" />
+            {isInCart() ? (
+              <>
+                <View style={styles.quantitySection}>
+                  <TouchableOpacity 
+                    style={[styles.quantityButton, quantity <= 1 && styles.quantityButtonDisabled]}
+                    onPress={() => handleQuantityChange(-1)}
+                    disabled={quantity <= 0}
+                  >
+                    <Ionicons name="remove" size={20} color={quantity <= 0 ? "#D1D5DB" : "#374151"} />
+                  </TouchableOpacity>
+                  
+                  <View style={styles.quantityValue}>
+                    <Text style={styles.quantityText}>{quantity}</Text>
+                  </View>
+                  
+                  <TouchableOpacity 
+                    style={[styles.quantityButton, quantity >= 20 && styles.quantityButtonDisabled]}
+                    onPress={() => handleQuantityChange(1)}
+                    disabled={quantity >= 20}
+                  >
+                    <Ionicons name="add" size={20} color={quantity >= 20 ? "#D1D5DB" : "#374151"} />
+                  </TouchableOpacity>
+                </View>
+                
+                <TouchableOpacity 
+                  style={styles.buyButton}
+                  onPress={FastBuyCart}
+                  disabled={addingToCart}
+                >
+                  {addingToCart ? (
+                    <View style={styles.buyButtonContent}>
+                      <ActivityIndicator size="small" color="#FFF" />
+                    </View>
+                  ) : (
+                    <LinearGradient
+                      colors={['#006363', '#004545']}
+                      start={{x: 0, y: 0}}
+                      end={{x: 1, y: 1}}
+                      style={styles.buyButtonGradient}
+                    >
+                      <Text style={styles.buyButtonText}>Купить</Text>
+                    </LinearGradient>
+                  )}
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TouchableOpacity 
+                style={styles.addToCartButtonFull}
+                onPress={addToCart}
+                disabled={addingToCart}
+              >
+                {addingToCart ? (
+                  <ActivityIndicator size="small" color="#006363" />
+                ) : (
+                  <>
+                    <Ionicons name="cart-outline" size={24} color="#006363" />
+                    <Text style={styles.addToCartButtonText}>В корзину</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
-        ) : (
-          <LinearGradient
-            colors={['#006363', '#004545']}
-            start={{x: 0, y: 0}}
-            end={{x: 1, y: 1}}
-            style={styles.buyButtonGradient}
-          >
-            <Text style={styles.buyButtonText}>Купить</Text>
-          </LinearGradient>
-        )}
-      </TouchableOpacity>
-    </>
-  ) : (
-    <TouchableOpacity 
-      style={styles.addToCartButtonFull}
-      onPress={addToCart}
-      disabled={addingToCart}
-    >
-      {addingToCart ? (
-        <ActivityIndicator size="small" color="#006363" />
-      ) : (
-        <>
-          <Ionicons name="cart-outline" size={24} color="#006363" />
-          <Text style={styles.addToCartButtonText}>В корзину</Text>
-        </>
-      )}
-    </TouchableOpacity>
-  )}
-</View>
         </View>
       </View>
     </View>
   );
 });
+
 
 // Компонент для отображения характеристик
 const SpecItem = ({ icon, title, value, highlight }) => (
@@ -1877,6 +1896,47 @@ addToCartButtonText: {
   color: '#006363',
   marginLeft: 8,
 },
+reviewsPreview: {
+    marginTop: 16,
+  },
+  reviewsStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  reviewsRating: {
+    flex: 1,
+  },
+  reviewsRatingNumber: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  reviewsStars: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  reviewsCount: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  writeReviewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E6F4F4',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+  },
+  writeReviewText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#006363',
+    marginLeft: 8,
+  },
 });
 
 export default ProductScreen;
