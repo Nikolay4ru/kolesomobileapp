@@ -16,6 +16,7 @@ import {
   Animated,
   Platform
 } from 'react-native';
+import { Haptics } from 'react-native-nitro-haptics';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useSharedValue } from "react-native-reanimated";
@@ -53,7 +54,6 @@ const statusBarHeight = modal ? 0 : insets.top;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeSlide, setActiveSlide] = useState(0);
-  const [quantity, setQuantity] = useState(1);
   const [addingToCart, setAddingToCart] = useState(false);
   const [selectedStore, setSelectedStore] = useState(null);
   const [showFullDescription, setShowFullDescription] = useState(false);
@@ -68,6 +68,25 @@ const statusBarHeight = modal ? 0 : insets.top;
   const width = Dimensions.get("window").width;
   const ref = useRef(null);
   const animatedIndex = useSharedValue(0);
+
+
+const isInCart = useCallback(() => {
+  return cartStore.items.some(item => item.product_id == product?.id);
+}, [cartStore.items, product?.id]);
+
+
+const [quantity, setQuantity] = useState(1);
+
+useEffect(() => {
+  if (product && isInCart()) {
+    const cartItem = cartStore.items.find(item => item.product_id == product.id);
+    if (cartItem) {
+      setQuantity(cartItem.quantity);
+    }
+  }
+}, [product, cartStore.items, isInCart]);
+
+
 
    // Функция для обновления статистики просмотров
   const updateProductViews = async (productId) => {
@@ -138,6 +157,7 @@ const statusBarHeight = modal ? 0 : insets.top;
   }, [selectedStore]);
 
   const isFavorite = useCallback((productId) => {
+    
     if (localFavorites.hasOwnProperty(productId)) {
       return localFavorites[productId];
     }
@@ -155,7 +175,7 @@ const statusBarHeight = modal ? 0 : insets.top;
 
   const toggleFavorite = useCallback(async () => {
     if (!product) return;
-    
+    Haptics.impact('light');
     const productId = product.id;
     const newValue = !isFavorite(productId);
     
@@ -259,6 +279,25 @@ const statusBarHeight = modal ? 0 : insets.top;
     fetchData();
   }, [productId, authStore.token]);
 
+
+
+  useEffect(() => {
+  const unsubscribe = navigation.addListener('focus', () => {
+    favoritesStore.refreshFavorites(authStore.token);
+    setLocalFavorites(favoritesStore.items);
+    cartStore.loadCart(authStore.token); // Загружаем корзину при фокусе
+  });
+  
+  return unsubscribe;
+}, [navigation]);
+
+// Загружаем корзину при монтировании
+useEffect(() => {
+  if (authStore.isLoggedIn) {
+    cartStore.loadCart(authStore.token);
+  }
+}, [authStore.isLoggedIn, authStore.token]);
+
   // Загрузка похожих товаров
   const fetchSimilarProducts = async (currentProduct) => {
     try {
@@ -297,12 +336,26 @@ const statusBarHeight = modal ? 0 : insets.top;
     }
   };
 
-  const handleQuantityChange = (value) => {
-    const newValue = quantity + value;
-    if (newValue >= 1 && newValue <= 20) {
-      setQuantity(newValue);
+const handleQuantityChange = async (value) => {
+  if (!product || !isInCart()) return;
+  
+  const newValue = quantity + value;
+  if (newValue < 0 || newValue > 20) return;
+   
+  try {
+    setQuantity(newValue);
+    Haptics.impact('light');
+    const cartItem = cartStore.items.find(item => item.product_id == product.id);
+    if (cartItem) {
+      await cartStore.updateItemQuantity(cartItem.id, newValue, authStore.token);
     }
-  };
+  } catch (error) {
+    console.error('Error updating quantity:', error);
+    // Восстанавливаем предыдущее значение при ошибке
+    const cartItem = cartStore.items.find(item => item.product_id == product.id);
+    setQuantity(cartItem?.quantity || 1);
+  }
+};
 
   const addToCart = async () => {
     if (!authStore.isLoggedIn) {
@@ -327,10 +380,19 @@ const statusBarHeight = modal ? 0 : insets.top;
                   'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                  productId: item.id,
+                  productId: product.id,
                   action: 'purchase'
                 })
               });
+
+
+       const cartItem = cartStore.items.find(item => item.product_id == product.id);
+    
+    if (cartItem) {
+      // Если товар уже в корзине, обновляем количество
+      await cartStore.updateItemQuantity(cartItem.id, quantity, authStore.token);
+    } else {
+      // Если товара нет в корзине, добавляем
       await cartStore.addToCart({
         product_id: product.id,
         quantity,
@@ -339,6 +401,7 @@ const statusBarHeight = modal ? 0 : insets.top;
         brand: product.brand,
         image_url: product.images[0]
       }, authStore.token);
+    }
        
       Alert.alert('Успешно', 'Товар добавлен в корзину', [
         { text: 'OK', onPress: () => {} },
@@ -370,6 +433,13 @@ const statusBarHeight = modal ? 0 : insets.top;
 
     try {
       setAddingToCart(true);
+      const cartItem = cartStore.items.find(item => item.product_id == product.id);
+    
+    if (cartItem) {
+      // Если товар уже в корзине, обновляем количество
+      await cartStore.updateItemQuantity(cartItem.id, quantity, authStore.token);
+    } else {
+      // Если товара нет в корзине, добавляем
       await cartStore.addToCart({
         product_id: product.id,
         quantity,
@@ -378,6 +448,7 @@ const statusBarHeight = modal ? 0 : insets.top;
         brand: product.brand,
         image_url: product.images[0]
       }, authStore.token);
+    }
       
       navigation.navigate('Cart');
     } catch (error) {
@@ -895,27 +966,7 @@ const statusBarHeight = modal ? 0 : insets.top;
           </View>
         )}
 
-        {/* Другие размеры этой модели */}
-        {sameBrandProducts.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionIcon}>
-                <Ionicons name="options-outline" size={22} color="#006363" />
-              </View>
-              <Text style={styles.sectionTitle}>Другие размеры</Text>
-            </View>
-            <FlatList
-              data={sameBrandProducts}
-              renderItem={renderProductItem}
-              keyExtractor={(item) => item.id.toString()}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.productsList}
-              snapToInterval={width * 0.45 + 12}
-              decelerationRate="fast"
-            />
-          </View>
-        )}
+
 
         {/* Похожие товары */}
         {similarProducts.length > 0 && (
@@ -954,61 +1005,68 @@ const statusBarHeight = modal ? 0 : insets.top;
           </View>
           
           <View style={styles.bottomActions}>
-            <View style={styles.quantitySection}>
-              <TouchableOpacity 
-                style={[styles.quantityButton, quantity <= 1 && styles.quantityButtonDisabled]}
-                onPress={() => handleQuantityChange(-1)}
-                disabled={quantity <= 1}
-              >
-                <Ionicons name="remove" size={20} color={quantity <= 1 ? "#D1D5DB" : "#374151"} />
-              </TouchableOpacity>
-              
-              <View style={styles.quantityValue}>
-                <Text style={styles.quantityText}>{quantity}</Text>
-              </View>
-              
-              <TouchableOpacity 
-                style={[styles.quantityButton, quantity >= 20 && styles.quantityButtonDisabled]}
-                onPress={() => handleQuantityChange(1)}
-                disabled={quantity >= 20}
-              >
-                <Ionicons name="add" size={20} color={quantity >= 20 ? "#D1D5DB" : "#374151"} />
-              </TouchableOpacity>
-            </View>
-            
-            <TouchableOpacity 
-              style={styles.addToCartButton}
-              onPress={addToCart}
-              disabled={addingToCart}
-            >
-              {addingToCart ? (
-                <ActivityIndicator size="small" color="#006363" />
-              ) : (
-                <Ionicons name="cart-outline" size={24} color="#006363" />
-              )}
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.buyButton}
-              onPress={FastBuyCart}
-              disabled={addingToCart}
-            >
-              {addingToCart ? (
-                <View style={styles.buyButtonContent}>
-                  <ActivityIndicator size="small" color="#FFF" />
-                </View>
-              ) : (
-                <LinearGradient
-                  colors={['#006363', '#004545']}
-                  start={{x: 0, y: 0}}
-                  end={{x: 1, y: 1}}
-                  style={styles.buyButtonGradient}
-                >
-                  <Text style={styles.buyButtonText}>Купить</Text>
-                </LinearGradient>
-              )}
-            </TouchableOpacity>
+  {isInCart() ? (
+    <>
+      <View style={styles.quantitySection}>
+        <TouchableOpacity 
+          style={[styles.quantityButton, quantity <= 1 && styles.quantityButtonDisabled]}
+          onPress={() => handleQuantityChange(-1)}
+          disabled={quantity <= 0}
+        >
+          <Ionicons name="remove" size={20} color={quantity <= 0 ? "#D1D5DB" : "#374151"} />
+        </TouchableOpacity>
+        
+        <View style={styles.quantityValue}>
+          <Text style={styles.quantityText}>{quantity}</Text>
+        </View>
+        
+        <TouchableOpacity 
+          style={[styles.quantityButton, quantity >= 20 && styles.quantityButtonDisabled]}
+          onPress={() => handleQuantityChange(1)}
+          disabled={quantity >= 20}
+        >
+          <Ionicons name="add" size={20} color={quantity >= 20 ? "#D1D5DB" : "#374151"} />
+        </TouchableOpacity>
+      </View>
+      
+      <TouchableOpacity 
+        style={styles.buyButton}
+        onPress={FastBuyCart}
+        disabled={addingToCart}
+      >
+        {addingToCart ? (
+          <View style={styles.buyButtonContent}>
+            <ActivityIndicator size="small" color="#FFF" />
           </View>
+        ) : (
+          <LinearGradient
+            colors={['#006363', '#004545']}
+            start={{x: 0, y: 0}}
+            end={{x: 1, y: 1}}
+            style={styles.buyButtonGradient}
+          >
+            <Text style={styles.buyButtonText}>Купить</Text>
+          </LinearGradient>
+        )}
+      </TouchableOpacity>
+    </>
+  ) : (
+    <TouchableOpacity 
+      style={styles.addToCartButtonFull}
+      onPress={addToCart}
+      disabled={addingToCart}
+    >
+      {addingToCart ? (
+        <ActivityIndicator size="small" color="#006363" />
+      ) : (
+        <>
+          <Ionicons name="cart-outline" size={24} color="#006363" />
+          <Text style={styles.addToCartButtonText}>В корзину</Text>
+        </>
+      )}
+    </TouchableOpacity>
+  )}
+</View>
         </View>
       </View>
     </View>
@@ -1787,6 +1845,38 @@ const styles = StyleSheet.create({
     color: '#006363',
     marginLeft: 6,
   },
+  addToCartButtonActive: {
+  backgroundColor: '#006363',
+  borderWidth: 0,
+},
+addToCartButtonText: {
+  color: '#FFF',
+  fontSize: 14,
+  fontWeight: '600',
+  marginLeft: 6,
+},
+addToCartButtonFull: {
+  flex: 1,
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  height: 52,
+  borderRadius: 16,
+  backgroundColor: '#FFF',
+  borderWidth: 2,
+  borderColor: '#006363',
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.1,
+  shadowRadius: 4,
+  elevation: 3,
+},
+addToCartButtonText: {
+  fontSize: 16,
+  fontWeight: '600',
+  color: '#006363',
+  marginLeft: 8,
+},
 });
 
 export default ProductScreen;
