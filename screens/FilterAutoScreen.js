@@ -183,7 +183,11 @@ const FilterAutoScreen = ({ navigation }) => {
     return 0;
   };
 
+ 
+  const [hidden, setHidden] = useState(false);
+  
   return (
+    
     <View style={[styles.container, { paddingTop: statusBarHeight }]}>
       {/* Gradient Header */}
       <LinearGradient
