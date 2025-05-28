@@ -591,14 +591,14 @@ const statusBarHeight = modal ? 0 : insets.top;
         }}
         safeAreaStyle={{
           backgroundColor: '#F5F5F5',
-          paddingTop: StatusBar.currentHeight || 0
+          paddingTop: 0 || 0
         }}
         headerStyle={{
           backgroundColor: '#F5F5F5',
           borderBottomWidth: 0,
           elevation: 0,
           shadowOpacity: 0,
-          marginTop: StatusBar.currentHeight || 0
+          marginTop: 0 || 0
         }}
         rightAction={() => toggleFavorite()}
         onBackPress={handleBackPress}

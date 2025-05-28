@@ -11,7 +11,8 @@ import {
   Dimensions,
   ScrollView,
   ActivityIndicator,
-  Platform
+  Platform,
+  StatusBar
 } from 'react-native';
 import { useStores } from '../useStores';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -42,6 +43,15 @@ const FilterAutoScreen = ({ navigation }) => {
   const slideAnim = useRef(new Animated.Value(30)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
+
+
+  // Установка цвета StatusBar (см. ниже)
+useEffect(() => {
+    StatusBar.setBarStyle('light-content', true);
+    if (Platform.OS === 'android') {
+      StatusBar.setBackgroundColor('#006363', true);
+    }
+  }, []);
 
   useEffect(() => {
     Animated.parallel([
@@ -188,8 +198,17 @@ const FilterAutoScreen = ({ navigation }) => {
   
   return (
     
-    <View style={[styles.container, { paddingTop: statusBarHeight }]}>
-      {/* Gradient Header */}
+    <View style={{flex: 1, backgroundColor: '#fff'}}>
+      {/* Зеленый фон для StatusBar на iOS */}
+      {!!insets.top && (
+        <View style={{ height: insets.top, backgroundColor: '#006363' }} />
+      )}
+      <StatusBar
+        translucent={false}
+        backgroundColor="#006363"
+        barStyle="light-content"
+      />
+      
       <LinearGradient
         colors={['#006363', '#004545']}
         style={styles.headerGradient}

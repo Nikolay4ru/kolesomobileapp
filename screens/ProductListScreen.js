@@ -112,7 +112,11 @@ const ProductListScreen = observer(() => {
     setLastScrollY(currentScrollY);
   }, [lastScrollY, scrollDirection, headerTranslateY]);
 
-  const snapPoints = useMemo(() => ["40%"], []);
+const snapPoints = useMemo(() => {
+  const tabBarHeight = 60; // Или измерьте реальную высоту
+  const sheetHeight = Math.min(height * 0.3, height - tabBarHeight - 100);
+  return [sheetHeight];
+}, [height]);
 
   const renderBackdrop = useCallback(
     (props) => (
@@ -536,12 +540,13 @@ const ProductListScreen = observer(() => {
           index={-1}
           snapPoints={snapPoints}
           enablePanDownToClose={true}
+          bottomInset={insets.bottom + 20}
           onChange={handleSheetChange}
           backdropComponent={renderBackdrop}
           backgroundStyle={styles.bottomSheetBackground}
           handleIndicatorStyle={styles.bottomSheetHandle}
         >
-          <BottomSheetView style={styles.bottomSheetContent}>
+          <BottomSheetView style={[styles.bottomSheetContent, { paddingBottom: insets.bottom + 20 }]}>
             <Text style={styles.bottomSheetTitle}>Сортировка</Text>
             
             {[
@@ -886,6 +891,33 @@ const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
   },
+  productOldPrice: {
+  fontSize: 13,
+  color: '#8E8E93',
+  textDecorationLine: 'line-through',
+  marginTop: 2,
+},
+
+discountBadge: {
+  position: 'absolute',
+  top: 8,
+  left: 8,
+  backgroundColor: '#FF3B30',
+  paddingHorizontal: 8,
+  paddingVertical: 4,
+  borderRadius: 8,
+  zIndex: 1,
+},
+
+discountText: {
+  fontSize: 12,
+  fontWeight: '600',
+  color: '#FFFFFF',
+},
+
+priceContainer: {
+  flex: 1,
+},
 });
 
 export default React.memo(ProductListScreen);
