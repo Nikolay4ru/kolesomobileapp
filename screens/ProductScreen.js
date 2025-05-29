@@ -41,12 +41,10 @@ const ProductScreen = observer(() => {
   const navigation = useNavigation();
   const { productId, fromCart, modal } = route.params;
   const { cartStore, authStore, favoritesStore } = useStores();
-  const [localFavorites, setLocalFavorites] = useState({});
-
+  
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
-// Затем используйте это для определения statusBarHeight
-const statusBarHeight = modal ? 0 : insets.top;
+  const statusBarHeight = modal ? 0 : insets.top;
 
   // States
   const [product, setProduct] = useState(null);
@@ -59,6 +57,9 @@ const statusBarHeight = modal ? 0 : insets.top;
   const [showFullDescription, setShowFullDescription] = useState(false);
   const [similarProducts, setSimilarProducts] = useState([]);
   const [sameBrandProducts, setSameBrandProducts] = useState([]);
+  const [localFavorites, setLocalFavorites] = useState({});
+  const [quantity, setQuantity] = useState(1);
+  const [isUpdatingQuantity, setIsUpdatingQuantity] = useState(false);
   
   const mapRef = useRef(null);
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -69,35 +70,48 @@ const statusBarHeight = modal ? 0 : insets.top;
   const ref = useRef(null);
   const animatedIndex = useSharedValue(0);
 
+  // Получение максимального доступного количества товара
+  const getMaxAvailableQuantity = useCallback(() => {
+    if (!stores || stores.length === 0) return 20; // Дефолтный лимит если нет данных о складах
+    
+    const totalStock = stores.reduce((total, store) => {
+      return total + (store.quantity > 0 ? store.quantity : 0);
+    }, 0);
+    
+    // Возвращаем минимум между общим остатком на складах и максимальным лимитом (20)
+    return Math.min(totalStock, 20);
+  }, [stores]);
 
- // Функция проверки наличия товара в корзине
+  // Проверка доступности количества
+  const isQuantityAvailable = useCallback((requestedQuantity) => {
+    const maxAvailable = getMaxAvailableQuantity();
+    return requestedQuantity <= maxAvailable;
+  }, [getMaxAvailableQuantity]);
   const isInCart = useCallback(() => {
-    return cartStore.items.some(item => item.product_id == product?.id);
+    if (!product) return false;
+    return cartStore.items.some(item => item.product_id == product.id);
   }, [cartStore.items, product?.id]);
 
-
-    // Получение количества товара из корзины
-  const getCartQuantity = useCallback(() => {
-    const cartItem = cartStore.items.find(item => item.product_id == product?.id);
-    return cartItem ? cartItem.quantity : 0;
+  // Получение текущего товара из корзины
+  const getCartItem = useCallback(() => {
+    if (!product) return null;
+    return cartStore.items.find(item => item.product_id == product.id);
   }, [cartStore.items, product?.id]);
 
-
- const [quantity, setQuantity] = useState(1);
-  const [isUpdatingQuantity, setIsUpdatingQuantity] = useState(false);
-
-useEffect(() => {
-  if (product && isInCart()) {
-    const cartItem = cartStore.items.find(item => item.product_id == product.id);
-    if (cartItem) {
-      setQuantity(cartItem.quantity);
+  // Исправленная синхронизация количества с корзиной
+  useEffect(() => {
+    if (product && isInCart()) {
+      const cartItem = getCartItem();
+      if (cartItem && cartItem.quantity !== quantity && !isUpdatingQuantity) {
+        setQuantity(cartItem.quantity);
+      }
+    } else if (!isInCart() && quantity !== 1) {
+      // Если товара нет в корзине, устанавливаем количество в 1
+      setQuantity(1);
     }
-  }
-}, [product, cartStore.items, isInCart]);
+  }, [product, cartStore.items, isInCart, getCartItem, isUpdatingQuantity]);
 
-
-
-   // Функция для обновления статистики просмотров
+  // Обновление статистики просмотров
   const updateProductViews = async (productId) => {
     try {
       await fetch(`${API_URL}/update_product_stats.php`, {
@@ -115,7 +129,6 @@ useEffect(() => {
     }
   };
 
-
   // Анимации при загрузке
   useEffect(() => {
     if (product) {
@@ -131,9 +144,8 @@ useEffect(() => {
           friction: 7,
           useNativeDriver: true,
         })
- ]).start();
+      ]).start();
       
-      // Обновляем статистику просмотров при загрузке товара
       updateProductViews(product.id);
     }
   }, [product]);
@@ -166,7 +178,6 @@ useEffect(() => {
   }, [selectedStore]);
 
   const isFavorite = useCallback((productId) => {
-    
     if (localFavorites.hasOwnProperty(productId)) {
       return localFavorites[productId];
     }
@@ -177,6 +188,9 @@ useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       favoritesStore.refreshFavorites(authStore.token);
       setLocalFavorites(favoritesStore.items);
+      if (authStore.isLoggedIn) {
+        cartStore.loadCart(authStore.token);
+      }
     });
     
     return unsubscribe;
@@ -203,7 +217,6 @@ useEffect(() => {
 
   const formatValue = (value) => {
     let num;
-  
     if (typeof value === 'string') {
       num = Number(value.trim());
     } else if (typeof value === 'number') {
@@ -211,11 +224,9 @@ useEffect(() => {
     } else {
       return value;
     }
-  
     if (isNaN(num)) {
       return value;
     }
-  
     const formatted = num.toFixed(2);
     return parseFloat(formatted).toString();
   };
@@ -288,19 +299,7 @@ useEffect(() => {
     fetchData();
   }, [productId, authStore.token]);
 
-
-
-  useEffect(() => {
-  const unsubscribe = navigation.addListener('focus', () => {
-    favoritesStore.refreshFavorites(authStore.token);
-    setLocalFavorites(favoritesStore.items);
-    cartStore.loadCart(authStore.token); // Загружаем корзину при фокусе
-  });
-  
-  return unsubscribe;
-}, [navigation]);
-
- // Загружаем корзину при монтировании
+  // Загружаем корзину при монтировании
   useEffect(() => {
     if (authStore.isLoggedIn) {
       cartStore.loadCart(authStore.token);
@@ -310,23 +309,21 @@ useEffect(() => {
   // Загрузка похожих товаров
   const fetchSimilarProducts = async (currentProduct) => {
     try {
-     // // Загрузка товаров с таким же брендом и моделью (разные размеры)
-     // if (currentProduct.category === 'Автошины') {
-     //   const sameBrandResponse = await fetch(
-     //     `https://api.koleso.app/api/product.php?action=same-model&product_id=${currentProduct.id}&limit=10`
-     //   );
-     //   if (sameBrandResponse.ok) {
-     //     const sameBrandData = await sameBrandResponse.json();
-     //     if (sameBrandData.success) {
-     //       const filtered = sameBrandData.products
-     //         .filter(p => p.id !== currentProduct.id)
-     //         .slice(0, 10);
-     //       setSameBrandProducts(filtered);
-     //     }
-     //   }
-     // }
+      if (currentProduct.category === 'Автошины') {
+        const sameBrandResponse = await fetch(
+          `https://api.koleso.app/api/product.php?action=same-model&product_id=${currentProduct.id}&limit=10`
+        );
+        if (sameBrandResponse.ok) {
+          const sameBrandData = await sameBrandResponse.json();
+          if (sameBrandData.success) {
+            const filtered = sameBrandData.products
+              .filter(p => p.id !== currentProduct.id)
+              .slice(0, 10);
+            setSameBrandProducts(filtered);
+          }
+        }
+      }
 
-      // Загрузка похожих товаров
       const similarResponse = await fetch(
         `https://api.koleso.app/api/product.php?action=similar&product_id=${currentProduct.id}&limit=10`
       );
@@ -337,7 +334,6 @@ useEffect(() => {
             .filter(p => p.id !== currentProduct.id && p.brand !== currentProduct.brand)
             .slice(0, 10);
           setSimilarProducts(filtered);
-          console.log(filtered);
         }
       }
     } catch (error) {
@@ -345,31 +341,52 @@ useEffect(() => {
     }
   };
 
-// Обновленная функция изменения количества
-  const handleQuantityChange = async (value) => {
-    if (!product || isUpdatingQuantity) return;
+  // Исправленная функция изменения количества
+  const handleQuantityChange = async (delta) => {
+    if (!product || !isInCart() || isUpdatingQuantity) return;
     
-    const newValue = quantity + value;
-    if (newValue < 1 || newValue > 20) return;
+    const cartItem = getCartItem();
+    if (!cartItem) return;
+
+    const newQuantity = quantity + delta;
+    const maxAvailable = getMaxAvailableQuantity();
+    
+    // Проверяем ограничения
+    if (newQuantity < 1) return;
+    
+    if (newQuantity > maxAvailable) {
+      Alert.alert(
+        'Недостаточно товара', 
+        `На складе доступно только ${maxAvailable} шт. этого товара`
+      );
+      return;
+    }
+    
+    if (newQuantity > 20) {
+      Alert.alert('Ограничение', 'Максимально можно добавить 20 штук одного товара');
+      return;
+    }
+    
+    setIsUpdatingQuantity(true);
     
     try {
-      setIsUpdatingQuantity(true);
+      // Оптимистичное обновление UI
+      setQuantity(newQuantity);
       Haptics.impact('light');
       
-      if (isInCart()) {
-        // Если товар в корзине, обновляем через cartStore
-        const cartItem = cartStore.items.find(item => item.product_id == product.id);
-        if (cartItem) {
-          await cartStore.updateItemQuantity(cartItem.id, newValue, authStore.token);
-          setQuantity(newValue);
-        }
-      } else {
-        // Если товара нет в корзине, просто обновляем локальное состояние
-        setQuantity(newValue);
-      }
+      // Обновляем в корзине
+      await cartStore.updateItemQuantity(cartItem.id, newQuantity, authStore.token);
+      
+      console.log(`Количество обновлено: ${newQuantity}`);
+      
     } catch (error) {
       console.error('Error updating quantity:', error);
-      Alert.alert('Ошибка', 'Не удалось обновить количество');
+      // Откатываем изменения при ошибке
+      const currentCartItem = getCartItem();
+      if (currentCartItem) {
+        setQuantity(currentCartItem.quantity);
+      }
+      Alert.alert('Ошибка', 'Не удалось обновить количество товара');
     } finally {
       setIsUpdatingQuantity(false);
     }
@@ -388,38 +405,67 @@ useEffect(() => {
       return;
     }
 
+    if (addingToCart) return;
+
+    // Проверяем доступность количества
+    if (!isQuantityAvailable(quantity)) {
+      const maxAvailable = getMaxAvailableQuantity();
+      Alert.alert(
+        'Недостаточно товара', 
+        `На складе доступно только ${maxAvailable} шт. этого товара`
+      );
+      return;
+    }
+
     try {
       setAddingToCart(true);
 
       // Обновляем статистику покупок
-              await fetch(`${API_URL}/update_product_stats.php`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  productId: product.id,
-                  action: 'purchase'
-                })
-              });
+      await fetch(`${API_URL}/update_product_stats.php`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          productId: product.id,
+          action: 'purchase'
+        })
+      });
 
-
-       const cartItem = cartStore.items.find(item => item.product_id == product.id);
-    
-    if (cartItem) {
-      // Если товар уже в корзине, обновляем количество
-      await cartStore.updateItemQuantity(cartItem.id, quantity, authStore.token);
-    } else {
-      // Если товара нет в корзине, добавляем
-      await cartStore.addToCart({
-        product_id: product.id,
-        quantity,
-        price: product.price,
-        name: product.name,
-        brand: product.brand,
-        image_url: product.images[0]
-      }, authStore.token);
-    }
+      const cartItem = getCartItem();
+      
+      if (cartItem) {
+        // Если товар уже в корзине, проверяем итоговое количество
+        const newTotalQuantity = cartItem.quantity + quantity;
+        const maxAvailable = getMaxAvailableQuantity();
+        
+        if (newTotalQuantity > maxAvailable) {
+          Alert.alert(
+            'Недостаточно товара', 
+            `На складе доступно только ${maxAvailable} шт. В корзине уже ${cartItem.quantity} шт.`
+          );
+          return;
+        }
+        
+        await cartStore.updateItemQuantity(cartItem.id, newTotalQuantity, authStore.token);
+        console.log(`Товар уже в корзине, обновляем количество до: ${newTotalQuantity}`);
+      } else {
+        // Если товара нет в корзине, добавляем
+        await cartStore.addToCart({
+          product_id: product.id,
+          quantity,
+          price: product.price,
+          name: product.name,
+          brand: product.brand,
+          image_url: product.images?.[0] || DEFAULT_IMAGE
+        }, authStore.token);
+        console.log(`Добавляем новый товар в корзину с количеством: ${quantity}`);
+        
+        // Принудительно обновляем корзину после добавления
+        setTimeout(() => {
+          cartStore.loadCart(authStore.token);
+        }, 500);
+      }
        
       Alert.alert('Успешно', 'Товар добавлен в корзину', [
         { text: 'OK', onPress: () => {} },
@@ -449,24 +495,52 @@ useEffect(() => {
       return;
     }
 
+    if (addingToCart) return;
+
+    // Проверяем доступность количества
+    if (!isQuantityAvailable(quantity)) {
+      const maxAvailable = getMaxAvailableQuantity();
+      Alert.alert(
+        'Недостаточно товара', 
+        `На складе доступно только ${maxAvailable} шт. этого товара`
+      );
+      return;
+    }
+
     try {
       setAddingToCart(true);
-      const cartItem = cartStore.items.find(item => item.product_id == product.id);
-    
-    if (cartItem) {
-      // Если товар уже в корзине, обновляем количество
-      await cartStore.updateItemQuantity(cartItem.id, quantity, authStore.token);
-    } else {
-      // Если товара нет в корзине, добавляем
-      await cartStore.addToCart({
-        product_id: product.id,
-        quantity,
-        price: product.price,
-        name: product.name,
-        brand: product.brand,
-        image_url: product.images[0]
-      }, authStore.token);
-    }
+      const cartItem = getCartItem();
+      
+      if (cartItem) {
+        // Если товар уже в корзине, проверяем можем ли обновить количество
+        if (!isQuantityAvailable(quantity)) {
+          const maxAvailable = getMaxAvailableQuantity();
+          Alert.alert(
+            'Недостаточно товара', 
+            `На складе доступно только ${maxAvailable} шт. этого товара`
+          );
+          return;
+        }
+        
+        await cartStore.updateItemQuantity(cartItem.id, quantity, authStore.token);
+        console.log(`FastBuy: обновляем количество до ${quantity}`);
+      } else {
+        // Если товара нет в корзине, добавляем
+        await cartStore.addToCart({
+          product_id: product.id,
+          quantity,
+          price: product.price,
+          name: product.name,
+          brand: product.brand,
+          image_url: product.images?.[0] || DEFAULT_IMAGE
+        }, authStore.token);
+        console.log(`FastBuy: добавляем товар с количеством ${quantity}`);
+        
+        // Принудительно обновляем корзину после добавления
+        setTimeout(() => {
+          cartStore.loadCart(authStore.token);
+        }, 500);
+      }
       
       navigation.navigate('Cart');
     } catch (error) {
@@ -493,7 +567,7 @@ useEffect(() => {
     </View>
   );
 
-  const renderStoreItem = ({ item }) => {
+  const renderStoreItem = ({ item, index }) => {
     const isSelected = selectedStore?.store_id === item.store_id;
     const inStock = item.quantity > 0;
     
@@ -504,7 +578,10 @@ useEffect(() => {
           isSelected && styles.selectedStoreCard,
           !inStock && styles.outOfStockCard
         ]}
-        onPress={() => setSelectedStore(isSelected ? null : item)}
+        onPress={() => {
+          Haptics.impact('light');
+          setSelectedStore(isSelected ? null : item);
+        }}
         activeOpacity={0.7}
       >
         <View style={styles.storeCardHeader}>
@@ -760,11 +837,6 @@ useEffect(() => {
           
           <View style={styles.brandContainer}>
             <Text style={styles.productBrand}>{product.brand}</Text>
-            <View style={styles.ratingContainer}>
-              <Ionicons name="" size={16} color="" />
-              <Text style={styles.ratingText}></Text>
-              <Text style={styles.reviewsText}></Text>
-            </View>
           </View>
           
           <Text style={styles.productName}>{product.name}</Text>
@@ -777,36 +849,11 @@ useEffect(() => {
               )}
             </View>
             {product.out_of_stock === 0 && (
-              <>
-            <View style={styles.availabilityBadge}>
-              <View style={styles.availabilityDot} />
-              <Text style={styles.availabilityText}>В наличии</Text>
-            </View>
-             </>
+              <View style={styles.availabilityBadge}>
+                <View style={styles.availabilityDot} />
+                <Text style={styles.availabilityText}>В наличии</Text>
+              </View>
             )}
-          </View>
-         
-          
-          {/* Быстрые действия */}
-          <View style={styles.quickActions}>
-            <TouchableOpacity style={styles.quickActionButton}>
-              <Ionicons name="analytics-outline" size={20} color="#006363" />
-              <Text style={styles.quickActionText}>Сравнить</Text>
-            </TouchableOpacity>
-            
-            <View style={styles.quickActionDivider} />
-            
-            <TouchableOpacity style={styles.quickActionButton}>
-              <Ionicons name="shield-checkmark-outline" size={20} color="#006363" />
-              <Text style={styles.quickActionText}>Гарантия</Text>
-            </TouchableOpacity>
-            
-            <View style={styles.quickActionDivider} />
-            
-            <TouchableOpacity style={styles.quickActionButton}>
-              <Ionicons name="cube-outline" size={20} color="#006363" />
-              <Text style={styles.quickActionText}>Доставка</Text>
-            </TouchableOpacity>
           </View>
         </Animated.View>
 
@@ -837,21 +884,145 @@ useEffect(() => {
             
             {product.category === 'Диски' && (
               <>
-                <SpecItem icon="disc-outline" title="Тип" value={product.rim_type} />
-                <SpecItem icon="resize-outline" title="Диаметр" value={`R${formatValue(product.diameter)}`} highlight />
-                <SpecItem icon="git-network-outline" title="PCD" value={`${product.hole}x${formatValue(product.pcd)}`} />
-                <SpecItem icon="arrow-forward-outline" title="Вылет" value={`ET${formatValue(product.et)}`} />
-                <SpecItem icon="disc-outline" title="DIA" value={formatValue(product.dia)} />
-                <SpecItem icon="color-palette-outline" title="Цвет" value={product.rim_color} />
+                <SpecItem 
+                  icon="disc-outline" 
+                  title="Тип" 
+                  value={product.rim_type || 'Литой'} 
+                />
+                <SpecItem 
+                  icon="resize-outline" 
+                  title="Диаметр" 
+                  value={`R${formatValue(product.diameter)}`} 
+                  highlight 
+                />
+                <SpecItem 
+                  icon="git-network-outline" 
+                  title="PCD" 
+                  value={product.pcd ? `${product.pcd}` : `${product.hole_count}x${product.bolt_pattern}`} 
+                />
+                <SpecItem 
+                  icon="arrow-forward-outline" 
+                  title="Вылет (ET)" 
+                  value={`ET${formatValue(product.et || product.offset)}`} 
+                />
+                <SpecItem 
+                  icon="radio-button-on-outline" 
+                  title="Центральное отверстие (DIA)" 
+                  value={`${formatValue(product.dia || product.center_bore)} мм`} 
+                />
+                <SpecItem 
+                  icon="resize-outline" 
+                  title="Ширина" 
+                  value={`${formatValue(product.width)} J`} 
+                />
+                {product.rim_color && (
+                  <SpecItem 
+                    icon="color-palette-outline" 
+                    title="Цвет" 
+                    value={product.rim_color} 
+                  />
+                )}
+                {product.material && (
+                  <SpecItem 
+                    icon="build-outline" 
+                    title="Материал" 
+                    value={product.material} 
+                  />
+                )}
               </>
             )}
             
             {product.category === 'Аккумуляторы' && (
               <>
-                <SpecItem icon="battery-full-outline" title="Емкость" value={`${product.capacity} А·ч`} highlight />
-                <SpecItem icon="flash-outline" title="Пусковой ток" value={`${product.starting_current} А`} />
-                <SpecItem icon="swap-horizontal-outline" title="Полярность" value={product.polarity} />
+                <SpecItem 
+                  icon="battery-full-outline" 
+                  title="Емкость" 
+                  value={`${product.capacity} А·ч`} 
+                  highlight 
+                />
+                <SpecItem 
+                  icon="flash-outline" 
+                  title="Пусковой ток" 
+                  value={`${product.starting_current} А`} 
+                />
+                <SpecItem 
+                  icon="swap-horizontal-outline" 
+                  title="Полярность" 
+                  value={product.polarity === '0' ? 'Прямая' : product.polarity === '1' ? 'Обратная' : product.polarity} 
+                />
+                <SpecItem 
+                  icon="cube-outline" 
+                  title="Размеры (Д×Ш×В)" 
+                  value={`${product.length}×${product.width}×${product.height} мм`} 
+                />
+                {product.terminal_type && (
+                  <SpecItem 
+                    icon="hardware-chip-outline" 
+                    title="Тип клемм" 
+                    value={product.terminal_type} 
+                  />
+                )}
               </>
+            )}
+            
+            {product.category === 'Моторные масла' && (
+              <>
+                <SpecItem 
+                  icon="water-outline" 
+                  title="Вязкость" 
+                  value={product.viscosity} 
+                  highlight 
+                />
+                <SpecItem 
+                  icon="car-outline" 
+                  title="Тип двигателя" 
+                  value={product.engine_type} 
+                />
+                <SpecItem 
+                  icon="flask-outline" 
+                  title="Объем" 
+                  value={`${product.volume} л`} 
+                />
+                {product.api_class && (
+                  <SpecItem 
+                    icon="ribbon-outline" 
+                    title="Класс API" 
+                    value={product.api_class} 
+                  />
+                )}
+                {product.acea_class && (
+                  <SpecItem 
+                    icon="medal-outline" 
+                    title="Класс ACEA" 
+                    value={product.acea_class} 
+                  />
+                )}
+              </>
+            )}
+            
+            {/* Общие характеристики для всех товаров */}
+            {product.brand && (
+              <SpecItem 
+                icon="business-outline" 
+                title="Бренд" 
+                value={product.brand} 
+              />
+            )}
+            
+            {product.country && (
+              <SpecItem 
+                icon="flag-outline" 
+                title="Страна производства" 
+                value={product.country} 
+              />
+            )}
+            
+            {product.warranty && (
+              <SpecItem 
+                icon="shield-checkmark-outline" 
+                title="Гарантия" 
+                value={product.warranty} 
+              />
             )}
           </View>
         </View>
@@ -874,8 +1045,20 @@ useEffect(() => {
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.storesList}
-                snapToInterval={width * 0.85 + 12}
+                snapToInterval={width * 0.75 + 12}
                 decelerationRate="fast"
+                removeClippedSubviews={false}
+                initialNumToRender={stores.length}
+                maxToRenderPerBatch={stores.length}
+                windowSize={stores.length}
+                getItemLayout={(data, index) => ({
+                  length: width * 0.75 + 12,
+                  offset: (width * 0.75 + 12) * index,
+                  index,
+                })}
+                maintainVisibleContentPosition={{
+                  minIndexForVisible: 0,
+                }}
               />
               
               {selectedStore && (
@@ -984,7 +1167,27 @@ useEffect(() => {
           </View>
         )}
 
-
+        {/* Товары той же модели (для шин) */}
+        {sameBrandProducts.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionIcon}>
+                <Ionicons name="layers-outline" size={22} color="#006363" />
+              </View>
+              <Text style={styles.sectionTitle}>Та же модель</Text>
+            </View>
+            <FlatList
+              data={sameBrandProducts}
+              renderItem={renderProductItem}
+              keyExtractor={(item) => item.id.toString()}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.productsList}
+              snapToInterval={width * 0.45 + 12}
+              decelerationRate="fast"
+            />
+          </View>
+        )}
 
         {/* Похожие товары */}
         {similarProducts.length > 0 && (
@@ -1009,7 +1212,7 @@ useEffect(() => {
         )}
       </ScrollView>
 
-  {/* Фиксированная панель покупки */}
+      {/* Фиксированная панель покупки */}
       <View style={[styles.bottomPanel, { paddingBottom: tabBarHeight }]}>
         <LinearGradient
           colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.8)', 'rgba(255,255,255,1)']}
@@ -1027,30 +1230,50 @@ useEffect(() => {
               <>
                 <View style={styles.quantitySection}>
                   <TouchableOpacity 
-                    style={[styles.quantityButton, quantity <= 1 && styles.quantityButtonDisabled]}
+                    style={[styles.quantityButton, (quantity <= 1 || isUpdatingQuantity) && styles.quantityButtonDisabled]}
                     onPress={() => handleQuantityChange(-1)}
-                    disabled={quantity <= 0}
+                    disabled={quantity <= 1 || isUpdatingQuantity}
                   >
-                    <Ionicons name="remove" size={20} color={quantity <= 0 ? "#D1D5DB" : "#374151"} />
+                    {isUpdatingQuantity ? (
+                      <ActivityIndicator size="small" color="#6B7280" />
+                    ) : (
+                      <Ionicons name="remove" size={20} color={quantity <= 1 ? "#D1D5DB" : "#374151"} />
+                    )}
                   </TouchableOpacity>
                   
                   <View style={styles.quantityValue}>
                     <Text style={styles.quantityText}>{quantity}</Text>
+                    {stores.length > 0 && (
+                      <Text style={styles.quantityAvailable}>
+                        из {getMaxAvailableQuantity()}
+                      </Text>
+                    )}
                   </View>
                   
                   <TouchableOpacity 
-                    style={[styles.quantityButton, quantity >= 20 && styles.quantityButtonDisabled]}
+                    style={[
+                      styles.quantityButton, 
+                      (quantity >= getMaxAvailableQuantity() || quantity >= 20 || isUpdatingQuantity) && styles.quantityButtonDisabled
+                    ]}
                     onPress={() => handleQuantityChange(1)}
-                    disabled={quantity >= 20}
+                    disabled={quantity >= getMaxAvailableQuantity() || quantity >= 20 || isUpdatingQuantity}
                   >
-                    <Ionicons name="add" size={20} color={quantity >= 20 ? "#D1D5DB" : "#374151"} />
+                    {isUpdatingQuantity ? (
+                      <ActivityIndicator size="small" color="#6B7280" />
+                    ) : (
+                      <Ionicons 
+                        name="add" 
+                        size={20} 
+                        color={(quantity >= getMaxAvailableQuantity() || quantity >= 20) ? "#D1D5DB" : "#374151"} 
+                      />
+                    )}
                   </TouchableOpacity>
                 </View>
                 
                 <TouchableOpacity 
                   style={styles.buyButton}
                   onPress={FastBuyCart}
-                  disabled={addingToCart}
+                  disabled={addingToCart || isUpdatingQuantity}
                 >
                   {addingToCart ? (
                     <View style={styles.buyButtonContent}>
@@ -1079,7 +1302,7 @@ useEffect(() => {
                 ) : (
                   <>
                     <Ionicons name="cart-outline" size={24} color="#006363" />
-                    <Text style={styles.addToCartButtonText}>В корзину</Text>
+                    <Text style={styles.addToCartButtonTextFull}>В корзину</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -1090,7 +1313,6 @@ useEffect(() => {
     </View>
   );
 });
-
 
 // Компонент для отображения характеристик
 const SpecItem = ({ icon, title, value, highlight }) => (
@@ -1258,21 +1480,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  ratingText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-    marginLeft: 4,
-  },
-  reviewsText: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginLeft: 4,
-  },
   productName: {
     fontSize: 28,
     fontWeight: '700',
@@ -1323,32 +1530,6 @@ const styles = StyleSheet.create({
     color: '#059669',
     fontWeight: '600',
   },
-  quickActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-  },
-  quickActionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-  },
-  quickActionText: {
-    fontSize: 14,
-    color: '#374151',
-    marginLeft: 6,
-    fontWeight: '500',
-  },
-  quickActionDivider: {
-    width: 1,
-    height: 20,
-    backgroundColor: '#E5E7EB',
-  },
   section: {
     backgroundColor: '#FFF',
     marginBottom: 12,
@@ -1381,16 +1562,6 @@ const styles = StyleSheet.create({
     color: '#111827',
     flex: 1,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
-  },
-  sectionAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  sectionActionText: {
-    fontSize: 14,
-    color: '#006363',
-    fontWeight: '500',
-    marginRight: 4,
   },
   specsContainer: {
     marginTop: -8,
@@ -1462,12 +1633,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 16,
     elevation: 4,
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   selectedStoreCard: {
     backgroundColor: '#F0FFFE',
+    borderWidth: 2,
+    borderColor: '#006363',
     shadowColor: '#006363',
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.15,
     elevation: 6,
+    transform: [{ scale: 1.02 }],
   },
   outOfStockCard: {
     opacity: 0.6,
@@ -1719,6 +1895,7 @@ const styles = StyleSheet.create({
   },
   quantityButtonDisabled: {
     backgroundColor: '#F9FAFB',
+    opacity: 0.6,
   },
   quantityValue: {
     paddingHorizontal: 20,
@@ -1731,21 +1908,11 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  addToCartButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    backgroundColor: '#FFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    borderWidth: 2,
-    borderColor: '#006363',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  quantityAvailable: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   buyButton: {
     flex: 1,
@@ -1864,74 +2031,23 @@ const styles = StyleSheet.create({
     color: '#006363',
     marginLeft: 6,
   },
-  addToCartButtonActive: {
-  backgroundColor: '#006363',
-  borderWidth: 0,
-},
-addToCartButtonText: {
-  color: '#FFF',
-  fontSize: 14,
-  fontWeight: '600',
-  marginLeft: 6,
-},
-addToCartButtonFull: {
-  flex: 1,
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'center',
-  height: 52,
-  borderRadius: 16,
-  backgroundColor: '#FFF',
-  borderWidth: 2,
-  borderColor: '#006363',
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.1,
-  shadowRadius: 4,
-  elevation: 3,
-},
-addToCartButtonText: {
-  fontSize: 16,
-  fontWeight: '600',
-  color: '#006363',
-  marginLeft: 8,
-},
-reviewsPreview: {
-    marginTop: 16,
-  },
-  reviewsStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  reviewsRating: {
+  addToCartButtonFull: {
     flex: 1,
-  },
-  reviewsRatingNumber: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  reviewsStars: {
-    flexDirection: 'row',
-    marginBottom: 4,
-  },
-  reviewsCount: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  writeReviewButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#E6F4F4',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: '#FFF',
+    borderWidth: 2,
+    borderColor: '#006363',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  writeReviewText: {
+  addToCartButtonTextFull: {
     fontSize: 16,
     fontWeight: '600',
     color: '#006363',
