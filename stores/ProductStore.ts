@@ -12,6 +12,7 @@ class ProductStore {
   carFilter = null;
   carParams = null;
   error = null;
+  yearsFullData = []; // Для хранения полных данных о годах
   
   filters = {
     inStockOnly: false,
@@ -26,7 +27,6 @@ class ProductStore {
   }
 
   get filteredProducts() {
-    // Здесь можно добавить логику фильтрации, если нужно
     return this.products;
   }
 
@@ -59,10 +59,7 @@ class ProductStore {
       
       this.loading = true;
 
-      
-
       const params = new URLSearchParams();
-      
       
       Object.entries(this.filters).forEach(([key, value]) => {
         if (value !== null && value !== undefined && value !== '') {
@@ -76,30 +73,23 @@ class ProductStore {
         }
       });
 
-      console.log('params car ' + this.carFilter);
       if (this.carFilter) {
         params.append('car_marka', this.carFilter.marka);
         params.append('car_model', this.carFilter.model);
-        params.append('car_year', this.carFilter.year);
+        params.append('car_kuzov', this.carFilter.kuzov);
+        params.append('car_beginyear', this.carFilter.beginyear);
+        params.append('car_endyear', this.carFilter.endyear);
         params.append('car_modification', this.carFilter.modification);
-
-        if (params.category === '') {
-          delete params.category;
+        // Добавляем carid если он есть
+        if (this.carFilter.carid) {
+          params.append('carid', this.carFilter.carid);
         }
-       // params.car_marka = this.carFilter.marka;
-        //params.car_model = this.carFilter.model;
-        //params.car_year = this.carFilter.year;
-        //params.car_modification = this.carFilter.modification;
       }
       
       params.append('page', currentPage);
       params.append('per_page', 16);
 
-
-     
-
       const response = await fetch(`https://api.koleso.app/api/filter_products.php?${params.toString()}`);
-      console.log(response);
       const data = await response.json();
 
       runInAction(() => {
@@ -134,12 +124,10 @@ class ProductStore {
     }
   }
 
-
-
   async fetchData(url, params = {}) {
     try {
       const queryString = new URLSearchParams(params).toString();
-      const response = await fetch(`${API_BASE_URL}/auto.php?action=${url}&${queryString}`);
+      const response = await fetch(`${API_BASE_URL}?action=${url}&${queryString}`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -149,7 +137,6 @@ class ProductStore {
       if (!data.success) {
         throw new Error(data.error || 'Unknown API error');
       }
-      
       return data.data;
     } catch (error) {
       console.error('Fetch error:', error);
@@ -165,62 +152,228 @@ class ProductStore {
     return this.fetchData('models', { marka });
   }
 
+  // Обновленный метод для получения данных о годах
   async fetchCarYears(marka, model) {
-    return this.fetchData('years', { marka, model });
+    const yearsData = await this.fetchData('years', { marka, model });
+    
+    runInAction(() => {
+      this.yearsFullData = yearsData || [];
+    });
+    
+    // Возвращаем массив строк для отображения
+    return this.yearsFullData.map(item => item.display || '');
   }
 
-  async fetchCarModifications(marka, model, year) {
-    return this.fetchData('modifications', { marka, model, year });
+  // Метод для получения полных данных по году
+  getYearFullData(displayString) {
+    if (!displayString || !this.yearsFullData) return null;
+    return this.yearsFullData.find(item => 
+      item?.display?.toString() === displayString.toString()
+    );
   }
 
-  async fetchCarParams(marka, model, modification) {
-    return this.fetchData('params', { marka, model, modification });
+  // Обновленный метод получения модификаций
+  async fetchCarModifications(marka, model, yearDisplay) {
+    try {
+      // Получаем полные данные о выбранном годе
+      const yearData = this.getYearFullData(yearDisplay);
+      if (!yearData) {
+        throw new Error('Данные о годе не найдены');
+      }
+
+      // Получаем модификации с учетом всех параметров
+      const modifications = await this.fetchData('modifications', {
+        marka,
+        model,
+        kuzov: yearData.kuzov,
+        beginyear: yearData.beginyear,
+        endyear: yearData.endyear
+      });
+
+      return modifications || [];
+    } catch (error) {
+      console.error('Ошибка при получении модификаций:', error);
+      throw error;
+    }
   }
 
+  // Дополнительный метод для получения модификаций по конкретному году
+  async fetchCarModificationsByYear(marka, model, kuzov, year) {
+    try {
+      const modifications = await this.fetchData('modifications_by_year', {
+        marka,
+        model,
+        kuzov,
+        year
+      });
+
+      return modifications || [];
+    } catch (error) {
+      console.error('Ошибка при получении модификаций по году:', error);
+      return [];
+    }
+  }
+
+  // Обновленный метод получения параметров автомобиля
+  async fetchCarParams(marka, model, modification, yearData = null) {
+    try {
+      const params = { marka, model, modification };
+      
+      // Добавляем параметры года если они есть
+      if (yearData) {
+        params.kuzov = yearData.kuzov;
+        params.beginyear = yearData.beginyear;
+        params.endyear = yearData.endyear;
+      }
+
+      const carData = await this.fetchData('params', params);
+      
+      if (!carData) {
+        throw new Error('Автомобиль не найден с указанными параметрами');
+      }
+
+      return carData;
+    } catch (error) {
+      console.error('Ошибка при получении параметров автомобиля:', error);
+      throw error;
+    }
+  }
+
+  // Метод для получения информации об автомобиле по ID
+  async fetchCarById(carid) {
+    try {
+      const carData = await this.fetchData('car_by_id', { carid });
+      
+      if (!carData) {
+        throw new Error('Автомобиль не найден');
+      }
+
+      return carData;
+    } catch (error) {
+      console.error('Ошибка при получении данных автомобиля по ID:', error);
+      throw error;
+    }
+  }
+
+  // Обновленный метод установки фильтра автомобиля
   async setCarFilter(filter) {
     this.loading = true;
+    this.error = null;
+    
     try {
-      this.carFilter = filter;
-      this.carParams = await this.fetchCarParams(filter.marka, filter.model, filter.modification);
-      console.log(this.carParams);
-      console.log(this.carFilter);
+      // Получаем данные о годе для точного поиска
+      const yearData = filter.yearData || this.getYearFullData(filter.yearDisplay);
+      
+      if (!yearData && filter.yearDisplay) {
+        throw new Error('Данные о годе не найдены');
+      }
+
+      // Получаем параметры автомобиля с учетом всех данных
+      const carParams = await this.fetchCarParams(
+        filter.marka, 
+        filter.model, 
+        filter.modification,
+        yearData
+      );
+
+      runInAction(() => {
+        // Сохраняем полный фильтр с ID автомобиля
+        this.carFilter = {
+          ...filter,
+          carid: carParams.carid,
+          kuzov: yearData?.kuzov || filter.kuzov,
+          beginyear: yearData?.beginyear || filter.beginyear,
+          endyear: yearData?.endyear || filter.endyear
+        };
+        
+        this.carParams = carParams;
+      });
+
+      // Загружаем продукты с новым фильтром
       await this.fetchProducts(true);
+      
     } catch (error) {
-      this.error = error.message;
+      runInAction(() => {
+        this.error = error.message;
+      });
+      console.error('Ошибка при установке фильтра автомобиля:', error);
     } finally {
-      this.loading = false;
+      runInAction(() => {
+        this.loading = false;
+      });
+    }
+  }
+
+  // Обновление фильтра автомобиля с сохранением существующих данных
+  updateCarFilter(updates) {
+    if (this.carFilter) {
+      runInAction(() => {
+        this.carFilter = { ...this.carFilter, ...updates };
+      });
     }
   }
 
   clearCarFilter() {
-    this.carFilter = null;
-    this.carParams = null;
+    runInAction(() => {
+      this.carFilter = null;
+      this.carParams = null;
+      this.error = null;
+    });
     this.fetchProducts(true);
   }
 
   reset() {
-    this.products = [];
-    this.loading = true;
-    this.page = 1;
-    this.hasMore = true;
-    this.isManualRefresh = false;
-    this.isInitialLoad = true;
-    this.isBackgroundLoad = false;
-    this.filters = {
-      inStockOnly: false,
-      season: null,
-      spiked: null,
-      runflat_tech: null,
-      sort: null
+    runInAction(() => {
+      this.products = [];
+      this.loading = true;
+      this.page = 1;
+      this.hasMore = true;
+      this.isManualRefresh = false;
+      this.isInitialLoad = true;
+      this.isBackgroundLoad = false;
+      this.carFilter = null;
+      this.carParams = null;
+      this.error = null;
+      this.yearsFullData = [];
+      this.filters = {
+        inStockOnly: false,
+        season: null,
+        spiked: null,
+        runflat_tech: null,
+        sort: null
+      };
+    });
+  }
+
+  // Вспомогательный метод для создания полного объекта фильтра
+  createCarFilter(marka, model, yearDisplay, modification) {
+    const yearData = this.getYearFullData(yearDisplay);
+    
+    if (!yearData) {
+      throw new Error('Данные о годе не найдены');
+    }
+
+    return {
+      marka,
+      model,
+      modification,
+      yearDisplay,
+      yearData,
+      kuzov: yearData.kuzov,
+      beginyear: yearData.beginyear,
+      endyear: yearData.endyear
     };
+  }
+
+  // Метод для валидации данных автомобиля
+  validateCarData(marka, model, yearDisplay, modification) {
+    if (!marka || !model || !yearDisplay || !modification) {
+      return false;
+    }
+
+    const yearData = this.getYearFullData(yearDisplay);
+    return yearData !== null;
   }
 }
 
-
-
-
-
-
-
- 
 export const productStore = new ProductStore();

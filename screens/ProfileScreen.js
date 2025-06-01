@@ -260,13 +260,25 @@ const toggleAdminMode = () => {
               <MenuItem 
                 icon="local-offer" 
                 title="Хранения" 
-                subtitle="Мои хранилища"
+                subtitle="Мои хранения"
                 onPress={() => {
                   if (!authStore.isLoggedIn) {
                     navigation.navigate('Auth');
                     return;
                   }
                   navigation.navigate('Storages');
+                }}
+              />
+               <MenuItem 
+                icon="local-offer" 
+                title="Гараж" 
+                subtitle="Мои автомобили"
+                onPress={() => {
+                  if (!authStore.isLoggedIn) {
+                    navigation.navigate('Auth');
+                    return;
+                  }
+                  navigation.navigate('Garage');
                 }}
               />
               <MenuItem 

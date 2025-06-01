@@ -16,9 +16,7 @@ import AuthScreen from "./screens/AuthScreen";
 import CodeVerificationScreen from "./screens/CodeVerificationScreen";
 import BookingScreen from "./screens/BookingScreen";
 import ServiceSelectionScreen from './screens/ServiceSelectionScreen';
-import StoreAndCarSelectionScreen from './screens/StoreAndCarSelectionScreen';
-import DateTimeSelectionScreen from './screens/DateTimeSelectionScreen';
-import CarSelectionScreen from './screens/CarSelectionScreen';
+
 import FilterAutoScreen from "./screens/FilterAutoScreen";
 import FilterScreen from "./screens/FilterScreen";
 import ProductListScreen from "./screens/ProductListScreen";
@@ -27,6 +25,8 @@ import ProductScreen from './screens/ProductScreen';
 import OrdersScreen from './screens/OrdersScreen';
 import OrderDetailScreen from './screens/OrderDetailScreen';
 import StorageScreen from './screens/StorageScreen';
+import GarageScreen from './screens/GarageScreen';
+import AddToGarageScreen from './screens/AddToGarageScreen';
 import StorageDetailScreen from './screens/StorageDetailScreen';
 import CartIconWithBadge from './components/CartIconWithBadge';
 import CheckoutScreen from './screens/CheckoutScreen';
@@ -128,6 +128,8 @@ const ProfileStack = () => {
         options={{ headerShown: false }}
       />
       <Stack.Screen name="Storages" component={StorageScreen} options={{ headerShown: false }}  />
+      <Stack.Screen name="Garage" component={GarageScreen} options={{ headerShown: false }}  />
+       <Stack.Screen name="AddToGarage" component={AddToGarageScreen} options={{ headerShown: false }}  />
       <Stack.Screen 
         name="StorageDetail" 
         component={StorageDetailScreen} 
@@ -191,21 +193,6 @@ const ServicePages = () => {
       <Stack.Screen 
         name="ServiceSelection" 
         component={ServiceSelectionScreen} 
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen 
-        name="StoreAndCarSelection" 
-        component={StoreAndCarSelectionScreen} 
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen 
-        name="CarSelection" 
-        component={CarSelectionScreen} 
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen 
-        name="DateTimeSelection" 
-        component={DateTimeSelectionScreen} 
         options={{ headerShown: false }}
       />
     </Stack.Navigator>

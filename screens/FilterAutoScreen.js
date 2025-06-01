@@ -12,7 +12,8 @@ import {
   ScrollView,
   ActivityIndicator,
   Platform,
-  StatusBar
+  StatusBar,
+  Alert
 } from 'react-native';
 import { useStores } from '../useStores';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -33,6 +34,7 @@ const FilterAutoScreen = ({ navigation }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [applying, setApplying] = useState(false);
   const tabBarHeight = useBottomTabBarHeight();
   
   const insets = useSafeAreaInsets();
@@ -44,9 +46,8 @@ const FilterAutoScreen = ({ navigation }) => {
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
 
-
-  // Установка цвета StatusBar (см. ниже)
-useEffect(() => {
+  // Установка цвета StatusBar
+  useEffect(() => {
     StatusBar.setBarStyle('light-content', true);
     if (Platform.OS === 'android') {
       StatusBar.setBackgroundColor('#006363', true);
@@ -89,6 +90,22 @@ useEffect(() => {
     }).start();
   }, [selectedMarka, selectedModel, selectedYear, selectedModification]);
 
+  // Сброс зависимых выборов при изменении родительских
+  useEffect(() => {
+    if (selectedMarka && selectedModel) {
+      // Сбрасываем год и модификацию только если марка или модель изменились
+      setSelectedYear(null);
+      setSelectedModification(null);
+    }
+  }, [selectedMarka, selectedModel]);
+
+  useEffect(() => {
+    if (selectedYear) {
+      // Сбрасываем модификацию при изменении года
+      setSelectedModification(null);
+    }
+  }, [selectedYear]);
+
   const openModal = (content) => {
     setModalContent(content);
     setModalVisible(true);
@@ -101,18 +118,27 @@ useEffect(() => {
 
   const applyAutoFilter = async () => {
     if (selectedMarka && selectedModel && selectedYear && selectedModification) {
+      setApplying(true);
       try {
-        await productStore.setCarFilter({
-          marka: selectedMarka,
-          model: selectedModel,
-          year: selectedYear,
-          modification: selectedModification
-        });
+        // Создаем фильтр с полными данными
+        const filter = productStore.createCarFilter(
+          selectedMarka,
+          selectedModel,
+          selectedYear,
+          selectedModification
+        );
         
-        await productStore.fetchProducts(true);
+        await productStore.setCarFilter(filter);
         navigation.navigate('ProductList');
       } catch (error) {
         console.error('Error applying car filter:', error);
+        Alert.alert(
+          'Ошибка',
+          'Не удалось применить фильтр. Попробуйте еще раз.',
+          [{ text: 'OK' }]
+        );
+      } finally {
+        setApplying(false);
       }
     }
   };
@@ -143,7 +169,12 @@ useEffect(() => {
       case 'marka':
         return (
           <MarkaModal 
-            onSelect={setSelectedMarka} 
+            onSelect={(marka) => {
+              setSelectedMarka(marka);
+              setSelectedModel(null);
+              setSelectedYear(null);
+              setSelectedModification(null);
+            }}
             onClose={closeModal} 
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
@@ -153,7 +184,11 @@ useEffect(() => {
         return (
           <ModelModal 
             marka={selectedMarka} 
-            onSelect={setSelectedModel} 
+            onSelect={(model) => {
+              setSelectedModel(model);
+              setSelectedYear(null);
+              setSelectedModification(null);
+            }}
             onClose={closeModal}
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
@@ -164,7 +199,10 @@ useEffect(() => {
           <YearModal 
             marka={selectedMarka} 
             model={selectedModel} 
-            onSelect={setSelectedYear} 
+            onSelect={(year) => {
+              setSelectedYear(year);
+              setSelectedModification(null);
+            }}
             onClose={closeModal}
           />
         );
@@ -174,7 +212,7 @@ useEffect(() => {
             marka={selectedMarka} 
             model={selectedModel} 
             year={selectedYear} 
-            onSelect={setSelectedModification} 
+            onSelect={setSelectedModification}
             onClose={closeModal}
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
@@ -193,11 +231,7 @@ useEffect(() => {
     return 0;
   };
 
- 
-  const [hidden, setHidden] = useState(false);
-  
   return (
-    
     <View style={{flex: 1, backgroundColor: '#fff'}}>
       {/* Зеленый фон для StatusBar на iOS */}
       {!!insets.top && (
@@ -316,22 +350,36 @@ useEffect(() => {
             enabled={!!selectedYear}
             icon="cog"
           />
+
+          {/* Error Display */}
+          {productStore.error && (
+            <View style={styles.errorCard}>
+              <MaterialCommunityIcons name="alert-circle" size={24} color="#FF6B6B" />
+              <Text style={styles.errorText}>{productStore.error}</Text>
+            </View>
+          )}
         </Animated.View>
       </ScrollView>
 
-     
-<View style={[styles.bottomContainer, { paddingBottom: tabBarHeight + 20 }]}>
-  <TouchableOpacity 
-    style={[
-      styles.applyButton, 
-      (!selectedMarka || !selectedModel || !selectedYear || !selectedModification) && styles.disabledButton
-    ]} 
-    onPress={applyAutoFilter}
-    disabled={!selectedMarka || !selectedModel || !selectedYear || !selectedModification}
-  >
-    <Text style={styles.applyButtonText}>Подобрать товары</Text>
-  </TouchableOpacity>
-</View>
+      <View style={[styles.bottomContainer, { paddingBottom: tabBarHeight + 20 }]}>
+        <TouchableOpacity 
+          style={[
+            styles.applyButton, 
+            (!selectedMarka || !selectedModel || !selectedYear || !selectedModification || applying) && styles.disabledButton
+          ]} 
+          onPress={applyAutoFilter}
+          disabled={!selectedMarka || !selectedModel || !selectedYear || !selectedModification || applying}
+        >
+          {applying ? (
+            <View style={styles.applyButtonContent}>
+              <ActivityIndicator size="small" color="#FFF" style={styles.applyButtonLoader} />
+              <Text style={styles.applyButtonText}>Применяем...</Text>
+            </View>
+          ) : (
+            <Text style={styles.applyButtonText}>Подобрать товары</Text>
+          )}
+        </TouchableOpacity>
+      </View>
 
       {/* Modal */}
       <Modal
@@ -410,15 +458,19 @@ const MarkaModal = ({ onSelect, onClose, searchQuery, setSearchQuery }) => {
   const { productStore } = useStores();
   const [marks, setMarks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
     const loadMarks = async () => {
       try {
+        setLoading(true);
+        setError(null);
         const data = await productStore.fetchCarMarks();
-        setMarks(data);
+        setMarks(data || []);
       } catch (error) {
         console.error('Error loading marks:', error);
+        setError('Ошибка загрузки марок');
       } finally {
         setLoading(false);
       }
@@ -442,6 +494,8 @@ const MarkaModal = ({ onSelect, onClose, searchQuery, setSearchQuery }) => {
 
       {loading ? (
         <LoadingState />
+      ) : error ? (
+        <ErrorState message={error} onRetry={() => loadMarks()} />
       ) : (
         <FlatList
           data={filteredMarks}
@@ -457,6 +511,7 @@ const MarkaModal = ({ onSelect, onClose, searchQuery, setSearchQuery }) => {
           )}
           contentContainerStyle={styles.modalList}
           showsVerticalScrollIndicator={false}
+          ListEmptyComponent={<EmptyState message="Марки не найдены" />}
         />
       )}
     </View>
@@ -467,16 +522,20 @@ const ModelModal = ({ marka, onSelect, onClose, searchQuery, setSearchQuery }) =
   const { productStore } = useStores();
   const [models, setModels] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
     const loadModels = async () => {
       if (marka) {
         try {
+          setLoading(true);
+          setError(null);
           const data = await productStore.fetchCarModels(marka);
-          setModels(data);
+          setModels(data || []);
         } catch (error) {
           console.error('Error loading models:', error);
+          setError('Ошибка загрузки моделей');
         } finally {
           setLoading(false);
         }
@@ -501,6 +560,8 @@ const ModelModal = ({ marka, onSelect, onClose, searchQuery, setSearchQuery }) =
 
       {loading ? (
         <LoadingState />
+      ) : error ? (
+        <ErrorState message={error} onRetry={() => loadModels()} />
       ) : (
         <FlatList
           data={filteredModels}
@@ -516,6 +577,7 @@ const ModelModal = ({ marka, onSelect, onClose, searchQuery, setSearchQuery }) =
           )}
           contentContainerStyle={styles.modalList}
           showsVerticalScrollIndicator={false}
+          ListEmptyComponent={<EmptyState message="Модели не найдены" />}
         />
       )}
     </View>
@@ -526,16 +588,20 @@ const YearModal = ({ marka, model, onSelect, onClose }) => {
   const { productStore } = useStores();
   const [years, setYears] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
     const loadYears = async () => {
       if (marka && model) {
         try {
+          setLoading(true);
+          setError(null);
           const data = await productStore.fetchCarYears(marka, model);
-          setYears(data);
+          setYears(data || []);
         } catch (error) {
           console.error('Error loading years:', error);
+          setError('Ошибка загрузки годов');
         } finally {
           setLoading(false);
         }
@@ -550,26 +616,25 @@ const YearModal = ({ marka, model, onSelect, onClose }) => {
 
       {loading ? (
         <LoadingState />
+      ) : error ? (
+        <ErrorState message={error} onRetry={() => loadYears()} />
       ) : (
         <FlatList
           data={years}
           keyExtractor={(item) => item.toString()}
-          numColumns={3}
-          columnWrapperStyle={styles.yearGrid}
+          numColumns={1}
           renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.yearItem}
+            <ModalItem
+              text={item}
               onPress={() => {
                 onSelect(item);
                 onClose();
               }}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.yearText}>{item}</Text>
-            </TouchableOpacity>
+            />
           )}
           contentContainerStyle={styles.modalList}
           showsVerticalScrollIndicator={false}
+          ListEmptyComponent={<EmptyState message="Годы не найдены" />}
         />
       )}
     </View>
@@ -580,16 +645,20 @@ const ModificationModal = ({ marka, model, year, onSelect, onClose, searchQuery,
   const { productStore } = useStores();
   const [modifications, setModifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
     const loadModifications = async () => {
       if (marka && model && year) {
         try {
+          setLoading(true);
+          setError(null);
           const data = await productStore.fetchCarModifications(marka, model, year);
-          setModifications(data);
+          setModifications(data || []);
         } catch (error) {
           console.error('Error loading modifications:', error);
+          setError('Ошибка загрузки модификаций');
         } finally {
           setLoading(false);
         }
@@ -614,6 +683,8 @@ const ModificationModal = ({ marka, model, year, onSelect, onClose, searchQuery,
 
       {loading ? (
         <LoadingState />
+      ) : error ? (
+        <ErrorState message={error} onRetry={() => loadModifications()} />
       ) : (
         <FlatList
           data={filteredModifications}
@@ -630,6 +701,7 @@ const ModificationModal = ({ marka, model, year, onSelect, onClose, searchQuery,
           )}
           contentContainerStyle={styles.modalList}
           showsVerticalScrollIndicator={false}
+          ListEmptyComponent={<EmptyState message="Модификации не найдены" />}
         />
       )}
     </View>
@@ -661,7 +733,7 @@ const SearchBar = ({ value, onChangeText, placeholder }) => (
         returnKeyType="search"
       />
       {value.length > 0 && (
-        <TouchableOpacity onPress={() => onChangeText('')} style={styles.clearButton}>
+        <TouchableOpacity onPress={() => onChangeText('')} style={styles.clearSearchButton}>
           <Ionicons name="close-circle" size={20} color="#999" />
         </TouchableOpacity>
       )}
@@ -686,6 +758,25 @@ const LoadingState = () => (
   <View style={styles.loadingContainer}>
     <ActivityIndicator size="large" color="#006363" />
     <Text style={styles.loadingText}>Загрузка...</Text>
+  </View>
+);
+
+const ErrorState = ({ message, onRetry }) => (
+  <View style={styles.errorContainer}>
+    <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#FF6B6B" />
+    <Text style={styles.errorText}>{message}</Text>
+    {onRetry && (
+      <TouchableOpacity style={styles.retryButton} onPress={onRetry}>
+        <Text style={styles.retryButtonText}>Повторить</Text>
+      </TouchableOpacity>
+    )}
+  </View>
+);
+
+const EmptyState = ({ message }) => (
+  <View style={styles.emptyContainer}>
+    <MaterialCommunityIcons name="car-off" size={48} color="#999" />
+    <Text style={styles.emptyText}>{message}</Text>
   </View>
 );
 
@@ -764,7 +855,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingBottom: 20, // Добавляем отступ снизу для TabBar
+    paddingBottom: 20,
   },
   scrollContent: {
     padding: 16,
@@ -864,7 +955,24 @@ const styles = StyleSheet.create({
   iconContainerActive: {
     backgroundColor: '#E6F4F4',
   },
-bottomContainer: {
+  errorCard: {
+    backgroundColor: '#FFF2F2',
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FFE6E6',
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#FF6B6B',
+    marginLeft: 12,
+    lineHeight: 20,
+  },
+  bottomContainer: {
     backgroundColor: '#FFF',
     paddingHorizontal: 16,
     paddingTop: 16,
@@ -877,12 +985,19 @@ bottomContainer: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
   },
-applyButton: {
+  applyButton: {
     backgroundColor: '#006363',
     borderRadius: 16,
     paddingVertical: 18,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  applyButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  applyButtonLoader: {
+    marginRight: 8,
   },
   applyButtonText: {
     color: '#fff',
@@ -943,7 +1058,7 @@ applyButton: {
     fontSize: 16,
     color: '#333',
   },
-  clearButton: {
+  clearSearchButton: {
     padding: 4,
   },
   modalList: {
@@ -1004,7 +1119,7 @@ applyButton: {
     alignItems: 'center',
     paddingVertical: 60,
   },
-loadingText: {
+  loadingText: {
     marginTop: 12,
     fontSize: 16,
     color: '#666',
@@ -1022,6 +1137,7 @@ loadingText: {
     color: '#666',
     textAlign: 'center',
     lineHeight: 24,
+    marginTop: 12,
   },
   errorContainer: {
     flex: 1,
@@ -1029,13 +1145,6 @@ loadingText: {
     alignItems: 'center',
     paddingVertical: 60,
     paddingHorizontal: 32,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#FF6B6B',
-    textAlign: 'center',
-    lineHeight: 24,
-    marginTop: 12,
   },
   retryButton: {
     marginTop: 16,
@@ -1116,6 +1225,5 @@ loadingText: {
     backgroundColor: '#FFF',
   },
 });
-
 
 export default FilterAutoScreen;
