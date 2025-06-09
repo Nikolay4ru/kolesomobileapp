@@ -15,6 +15,7 @@ import {
   Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useStores } from '../useStores';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
@@ -41,6 +42,7 @@ const AddToGarageScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState('marks'); // 'marks', 'models', 'years', 'modifications'
   const [error, setError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     loadMarks();
@@ -271,6 +273,7 @@ const AddToGarageScreen = ({ navigation }) => {
 
   const goBack = () => {
     setError(null);
+    setSearchQuery('');
     if (currentStep === 'models') {
       setCurrentStep('marks');
     } else if (currentStep === 'years') {
@@ -283,7 +286,7 @@ const AddToGarageScreen = ({ navigation }) => {
   const getCurrentStepTitle = () => {
     switch (currentStep) {
       case 'marks': return 'Выберите марку';
-      case 'models': return 'Выберите модель';
+      case 'models': return `Модели ${marka}`;
       case 'years': return 'Выберите год';
       case 'modifications': return 'Выберите модификацию';
       default: return 'Выбор автомобиля';
@@ -298,6 +301,16 @@ const AddToGarageScreen = ({ navigation }) => {
       case 'modifications': return modifications;
       default: return [];
     }
+  };
+
+  const getFilteredData = () => {
+    const data = getCurrentData();
+    if (!searchQuery.trim()) return data;
+    
+    return data.filter(item => {
+      const searchText = item.name || item.title || item.toString();
+      return searchText.toLowerCase().includes(searchQuery.toLowerCase());
+    });
   };
 
   const handleItemSelect = (item) => {
@@ -319,51 +332,14 @@ const AddToGarageScreen = ({ navigation }) => {
     }
   };
 
-  const renderStepItem = ({ item }) => {
-    const displayText = item.name || item.title || item.toString();
-    
-    return (
-      <TouchableOpacity
-        style={styles.modalItem}
-        onPress={() => handleItemSelect(item)}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.modalItemText} numberOfLines={2}>
-          {displayText}
-        </Text>
-        <Icon name="chevron-right" size={20} color="#9CA3AF" />
-      </TouchableOpacity>
-    );
+  const retryCurrentAction = () => {
+    switch (currentStep) {
+      case 'marks': loadMarks(); break;
+      case 'models': loadModels(); break;
+      case 'years': loadYears(); break;
+      case 'modifications': loadModifications(); break;
+    }
   };
-
-  const renderEmptyState = () => (
-    <View style={styles.emptyState}>
-      <Icon name="directions-car-filled" size={48} color="#D1D5DB" />
-      <Text style={styles.emptyStateText}>
-        {getCurrentData().length === 0 ? 'Данные не найдены' : 'Список пуст'}
-      </Text>
-    </View>
-  );
-
-  const renderErrorState = () => (
-    <View style={styles.errorState}>
-      <Icon name="error-outline" size={48} color="#EF4444" />
-      <Text style={styles.errorStateText}>{error}</Text>
-      <TouchableOpacity
-        style={styles.retryButton}
-        onPress={() => {
-          switch (currentStep) {
-            case 'marks': loadMarks(); break;
-            case 'models': loadModels(); break;
-            case 'years': loadYears(); break;
-            case 'modifications': loadModifications(); break;
-          }
-        }}
-      >
-        <Text style={styles.retryButtonText}>Повторить</Text>
-      </TouchableOpacity>
-    </View>
-  );
 
   const formatSelectedCarDisplay = () => {
     if (!selectedCar) return null;
@@ -384,6 +360,144 @@ const AddToGarageScreen = ({ navigation }) => {
       </View>
     );
   };
+
+  // Modal Components
+  const ModalHeader = ({ title, onClose, showBack = false, onBack }) => (
+    <View style={styles.modalHeader}>
+      <TouchableOpacity
+        style={styles.modalHeaderButton}
+        onPress={showBack ? onBack : onClose}
+      >
+        {showBack ? (
+          <Ionicons name="arrow-back" size={24} color="#3B82F6" />
+        ) : (
+          <Text style={styles.modalCancelText}>Отмена</Text>
+        )}
+      </TouchableOpacity>
+      <Text style={styles.modalTitle}>{title}</Text>
+      <View style={styles.modalSpacer} />
+    </View>
+  );
+
+  const SearchBar = ({ placeholder }) => {
+    const showSearch = currentStep === 'marks' || currentStep === 'models' || currentStep === 'modifications';
+    
+    if (!showSearch) return null;
+
+    return (
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputWrapper}>
+          <Ionicons name="search-outline" size={20} color="#9CA3AF" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder={placeholder}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor="#9CA3AF"
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity 
+              onPress={() => setSearchQuery('')} 
+              style={styles.clearSearchButton}
+            >
+              <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
+  };
+
+  const Breadcrumb = () => {
+    if (!marka && !model && !year) return null;
+
+    return (
+      <View style={styles.breadcrumb}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.breadcrumbContent}>
+            {marka && (
+              <View style={styles.breadcrumbItem}>
+                <Text style={styles.breadcrumbText}>{marka}</Text>
+              </View>
+            )}
+            {model && (
+              <>
+                <Icon name="chevron-right" size={16} color="#9CA3AF" style={styles.breadcrumbArrow} />
+                <View style={styles.breadcrumbItem}>
+                  <Text style={styles.breadcrumbText}>{model}</Text>
+                </View>
+              </>
+            )}
+            {year && (
+              <>
+                <Icon name="chevron-right" size={16} color="#9CA3AF" style={styles.breadcrumbArrow} />
+                <View style={styles.breadcrumbItem}>
+                  <Text style={styles.breadcrumbText}>{year}</Text>
+                </View>
+              </>
+            )}
+          </View>
+        </ScrollView>
+      </View>
+    );
+  };
+
+  const renderStepItem = ({ item }) => {
+    const displayText = item.name || item.title || item.toString();
+    const isMultiline = currentStep === 'modifications';
+    
+    return (
+      <TouchableOpacity
+        style={styles.modalItem}
+        onPress={() => handleItemSelect(item)}
+        activeOpacity={0.7}
+      >
+        <Text 
+          style={[styles.modalItemText, isMultiline && styles.modalItemTextMultiline]} 
+          numberOfLines={isMultiline ? 3 : 1}
+        >
+          {displayText}
+        </Text>
+        <Ionicons name="chevron-forward" size={20} color="#C7C7CC" />
+      </TouchableOpacity>
+    );
+  };
+
+  const LoadingState = () => (
+    <View style={styles.modalLoading}>
+      <ActivityIndicator size="large" color="#3B82F6" />
+      <Text style={styles.modalLoadingText}>Загрузка...</Text>
+    </View>
+  );
+
+  const ErrorState = () => (
+    <View style={styles.errorState}>
+      <Icon name="error-outline" size={48} color="#EF4444" />
+      <Text style={styles.errorStateText}>{error}</Text>
+      <TouchableOpacity
+        style={styles.retryButton}
+        onPress={retryCurrentAction}
+      >
+        <Text style={styles.retryButtonText}>Повторить</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const EmptyState = () => (
+    <View style={styles.emptyState}>
+      <Icon name="directions-car-filled" size={48} color="#D1D5DB" />
+      <Text style={styles.emptyStateText}>
+        {searchQuery ? 'Ничего не найдено' : 'Список пуст'}
+      </Text>
+      {searchQuery && (
+        <Text style={styles.emptyStateHint}>
+          Попробуйте изменить поисковый запрос
+        </Text>
+      )}
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -422,6 +536,7 @@ const AddToGarageScreen = ({ navigation }) => {
               setShowCarSelector(true);
               setCurrentStep('marks');
               setError(null);
+              setSearchQuery('');
             }}
             activeOpacity={0.7}
           >
@@ -542,74 +657,37 @@ const AddToGarageScreen = ({ navigation }) => {
           <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
           
           {/* Modal Header */}
-          <View style={styles.modalHeader}>
-            {currentStep !== 'marks' ? (
-              <TouchableOpacity
-                style={styles.modalHeaderButton}
-                onPress={goBack}
-              >
-                <Icon name="arrow-back" size={24} color="#3B82F6" />
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={styles.modalHeaderButton}
-                onPress={() => setShowCarSelector(false)}
-              >
-                <Text style={styles.modalCancelText}>Отмена</Text>
-              </TouchableOpacity>
-            )}
-            <Text style={styles.modalTitle}>{getCurrentStepTitle()}</Text>
-            <View style={styles.modalSpacer} />
-          </View>
+          <ModalHeader
+            title={getCurrentStepTitle()}
+            onClose={() => setShowCarSelector(false)}
+            showBack={currentStep !== 'marks'}
+            onBack={goBack}
+          />
+
+          {/* Search Bar */}
+          <SearchBar
+            placeholder={currentStep === 'marks' ? 'Поиск марки...' : 
+                        currentStep === 'models' ? 'Поиск модели...' : 
+                        'Поиск модификации...'}
+          />
 
           {/* Breadcrumb */}
-          {(marka || model || year) && (
-            <View style={styles.breadcrumb}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={styles.breadcrumbContent}>
-                  {marka && (
-                    <View style={styles.breadcrumbItem}>
-                      <Text style={styles.breadcrumbText}>{marka}</Text>
-                    </View>
-                  )}
-                  {model && (
-                    <>
-                      <Icon name="chevron-right" size={16} color="#9CA3AF" style={styles.breadcrumbArrow} />
-                      <View style={styles.breadcrumbItem}>
-                        <Text style={styles.breadcrumbText}>{model}</Text>
-                      </View>
-                    </>
-                  )}
-                  {year && (
-                    <>
-                      <Icon name="chevron-right" size={16} color="#9CA3AF" style={styles.breadcrumbArrow} />
-                      <View style={styles.breadcrumbItem}>
-                        <Text style={styles.breadcrumbText}>{year}</Text>
-                      </View>
-                    </>
-                  )}
-                </View>
-              </ScrollView>
-            </View>
-          )}
+          <Breadcrumb />
 
           {/* Content */}
           {loading ? (
-            <View style={styles.modalLoading}>
-              <ActivityIndicator size="large" color="#3B82F6" />
-              <Text style={styles.modalLoadingText}>Загрузка...</Text>
-            </View>
+            <LoadingState />
           ) : error ? (
-            renderErrorState()
+            <ErrorState />
           ) : (
             <FlatList
-              data={getCurrentData()}
+              data={getFilteredData()}
               renderItem={renderStepItem}
               keyExtractor={(item, index) => (item.id || item.name || item.title || item || index).toString()}
               style={styles.modalList}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.modalListContent}
-              ListEmptyComponent={renderEmptyState}
+              ListEmptyComponent={<EmptyState />}
             />
           )}
         </SafeAreaView>
@@ -905,6 +983,37 @@ const styles = StyleSheet.create({
     width: 40,
   },
   
+  // Search Bar
+  searchContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 44,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    height: 44,
+    fontSize: 16,
+    color: '#1F2937',
+  },
+  clearSearchButton: {
+    padding: 4,
+  },
+  
   // Breadcrumb
   breadcrumb: {
     backgroundColor: '#FFFFFF',
@@ -962,6 +1071,9 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 12,
   },
+  modalItemTextMultiline: {
+    lineHeight: 22,
+  },
   
   // Modal Loading
   modalLoading: {
@@ -989,6 +1101,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 16,
     lineHeight: 24,
+  },
+  emptyStateHint: {
+    fontSize: 14,
+    color: '#D1D5DB',
+    textAlign: 'center',
+    marginTop: 8,
   },
   
   // Error State

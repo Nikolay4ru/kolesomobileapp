@@ -597,7 +597,7 @@ const CartScreen = observer(({ navigation }) => {
     if (!item) return null;
     
     const isSelected = selectedItems.includes(item.id);
-    const isAvailable = stores.length > 0 ? checkAvailability(item.product_id, item.quantity) : true;
+    const isAvailable = checkAvailability(item.product_id, item.quantity);
     const maxAvailable = getAvailableQuantity(item.product_id);
     const deliveryStatus = getDeliveryStatus(item.product_id, item.quantity);
     const discountedPrice = calculateItemDiscountPrice(item);

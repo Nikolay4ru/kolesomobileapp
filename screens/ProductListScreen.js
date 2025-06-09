@@ -20,6 +20,7 @@ import { observer } from 'mobx-react-lite';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import CustomLoader from '../components/CustomLoader';
+import Tooltip from '../components/Tooltip'; 
 import BottomSheet, { BottomSheetView, BottomSheetBackdrop } from "@gorhom/bottom-sheet";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStores } from '../useStores';
@@ -48,6 +49,95 @@ const ProductListScreen = observer(() => {
   const flatListRef = useRef(null);
   const sheetRef = useRef(null);
   const cardScaleAnims = useRef({}).current;
+
+const [tooltip, setTooltip] = useState({
+  visible: false,
+  title: '',
+  description: '',
+  position: { x: 0, y: 0 },
+});
+
+// Создаем refs на уровне компонента для хранения ссылок на элементы
+const badgeRefs = useRef({}).current;
+
+// Функция для получения или создания ref для элемента
+const getBadgeRef = useCallback((itemId, badgeType) => {
+  const key = `${itemId}-${badgeType}`;
+  if (!badgeRefs[key]) {
+    badgeRefs[key] = React.createRef();
+  }
+  return badgeRefs[key];
+}, [badgeRefs]);
+
+// Функция для показа tooltip
+const showTooltip = useCallback((title, description, elementRef) => {
+  if (elementRef && elementRef.current) {
+    elementRef.current.measureInWindow((x, y, width, height) => {
+      setTooltip({
+        visible: true,
+        title,
+        description,
+        position: {
+          x: x + width / 2, // центр элемента
+          y: y + height, // под элементом
+        },
+      });
+    });
+  }
+}, []);
+
+// Функция для скрытия tooltip
+const hideTooltip = useCallback(() => {
+  setTooltip(prev => ({ ...prev, visible: false }));
+}, []);
+
+// Функции для разных типов tooltip
+const showDiscountTooltip = useCallback((discount, itemId) => {
+  const ref = getBadgeRef(itemId, 'discount');
+  showTooltip(
+    'Скидка', 
+    `На этот товар действует скидка ${discount}%. Цена уже указана с учетом скидки. Экономия составляет значительную сумму от первоначальной стоимости.`,
+    ref
+  );
+}, [showTooltip, getBadgeRef]);
+
+const showCashbackTooltip = useCallback((cashback, itemId) => {
+  const ref = getBadgeRef(itemId, 'cashback');
+  showTooltip(
+    'Кешбек', 
+    `Вы получите ${cashback.toLocaleString('ru-RU')} ₽ кешбека при покупке этого товара. Кешбек начисляется на ваш счет после получения и подтверждения заказа. Средства можно использовать для следующих покупок.`,
+    ref
+  );
+}, [showTooltip, getBadgeRef]);
+
+const showSpecTooltip = useCallback((specType, value, itemId) => {
+  const ref = getBadgeRef(itemId, specType);
+  let title = '';
+  let description = '';
+  
+  switch (specType) {
+    case 'size':
+      title = 'Размер шины';
+      description = `${value} - это размер шины в международном обозначении. Первое число (${value.split('/')[0]}) обозначает ширину профиля в миллиметрах, второе число (${value.split('/')[1]}) - высоту профиля в процентах от ширины, а R${value.split(' R')[1]} указывает на радиальную конструкцию и диаметр диска в дюймах.`;
+      break;
+    case 'season':
+      title = 'Сезонность шин';
+      if (value.toLowerCase().includes('лет')) {
+        description = 'Летние шины разработаны для использования при температуре выше +7°C. Они обеспечивают отличное сцепление с дорогой на сухом и мокром асфальте, имеют оптимальный тормозной путь и управляемость в теплую погоду.';
+      } else if (value.toLowerCase().includes('зим')) {
+        description = 'Зимние шины предназначены для эксплуатации при температуре ниже +7°C. Специальный состав резиновой смеси сохраняет эластичность в мороз и обеспечивает надежное сцепление на снегу, льду и слякоти.';
+      } else {
+        description = 'Всесезонные шины представляют собой компромиссное решение для круглогодичного использования. Они подходят для регионов с мягким климатом, но уступают специализированным шинам в экстремальных условиях.';
+      }
+      break;
+    case 'spikes':
+      title = 'Шипованные шины';
+      description = 'Шипы из твердосплавных материалов обеспечивают дополнительное сцепление на обледенелых участках дороги и укатанном снегу. Использование шипованных шин имеет сезонные ограничения и регулируется местным законодательством.';
+      break;
+  }
+  
+  showTooltip(title, description, ref);
+}, [showTooltip, getBadgeRef]);
   
   const insets = useSafeAreaInsets();
   const statusBarHeight = insets.top || 20; // Минимальный отступ 20 для старых устройств
@@ -60,24 +150,12 @@ const ProductListScreen = observer(() => {
     return cardScaleAnims[itemId];
   }, [cardScaleAnims]);
 
-  // Анимации для фильтров с более плавным эффектом
-  const filterTranslateY = scrollY.interpolate({
-    inputRange: [-100, 0, 100],
-    outputRange: [0, 0, -60],
-    extrapolate: 'clamp',
-  });
-  
-  const filterOpacity = scrollY.interpolate({
-    inputRange: [-50, 0, 50],
-    outputRange: [1, 1, 0.3],
-    extrapolate: 'clamp',
-  });
 
-  const filterScale = scrollY.interpolate({
-    inputRange: [-50, 0, 100],
-    outputRange: [1, 1, 0.95],
-    extrapolate: 'clamp',
-  });
+
+
+
+
+
 
   // Обработка скролла с определением направления
   const handleScroll = useCallback((event) => {
@@ -252,114 +330,204 @@ const snapPoints = useMemo(() => {
     }).start();
   }, [getCardAnimation]);
 
-  const renderItem = useCallback(({ item, index }) => {
-    const animatedStyle = {
-      transform: [{ scale: getCardAnimation(item.id) }],
-      opacity: fadeAnim,
-    };
+  // Вычисление цены с учетом cashback
+  const calculatePriceWithCashback = useCallback((price, cashback) => {
+    const numPrice = parseFloat(price) || 0;
+    const numCashback = parseFloat(cashback) || 0;
+    
+    if (numCashback > 0) {
+      return numPrice - numCashback;
+    }
+    return numPrice;
+  }, []);
 
-     const discount = item.old_price && item.old_price > item.price 
-      ? Math.round(((item.old_price - item.price) / item.old_price) * 100)
-      : 0;
 
 
-    return (
+const renderItem = useCallback(({ item, index }) => {
+  const animatedStyle = {
+    transform: [{ scale: getCardAnimation(item.id) }],
+    opacity: fadeAnim,
+  };
 
-      <AnimatedTouchableOpacity 
-        style={[styles.itemContainer, animatedStyle]}
-        onPress={() => navigation.navigate('Product', { productId: item.id })}
-        onPressIn={() => handleCardPressIn(item.id)}
-        onPressOut={() => handleCardPressOut(item.id)}
-        activeOpacity={1}
-      >
-        <View style={styles.imageContainer}>
-          <FastImage
-            style={styles.productImage}
-            source={{ uri: item.image_url || DEFAULT_IMAGE }}
-            resizeMode="contain"
-          />
-          <TouchableOpacity 
-            style={styles.favoriteButton}
+  const discount = item.old_price && item.old_price > item.price
+    ? Math.round(((item.old_price - item.price) / item.old_price) * 100)
+    : 0;
+
+  const cashback = parseFloat(item.cashback) || 0;
+  const hasCashback = cashback > 0;
+  const finalPrice = calculatePriceWithCashback(item.price, cashback);
+
+  return (
+    <AnimatedTouchableOpacity
+      style={[styles.itemContainer, animatedStyle]}
+      onPress={() => navigation.navigate('Product', { productId: item.id })}
+      onPressIn={() => handleCardPressIn(item.id)}
+      onPressOut={() => handleCardPressOut(item.id)}
+      activeOpacity={1}
+    >
+      <View style={styles.badgesWrapper}>
+        {discount > 0 && (
+          <TouchableOpacity
+            ref={getBadgeRef(item.id, 'discount')}
+            style={[styles.discountBadge, { top: 8 }]}
             onPress={(e) => {
               e.stopPropagation();
-              toggleFavorite(item);
+              showDiscountTooltip(discount, item.id);
             }}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            activeOpacity={0.8}
           >
-            <View style={styles.favoriteIconContainer}>
-              <Ionicons
-                name={isFavorite(item.id) ? "heart" : "heart-outline"}
-                size={20}
-                color={isFavorite(item.id) ? "#FF3B30" : "#3C3C43"}
-              />
-            </View>
+            <Text style={styles.discountText}>-{discount}%</Text>
           </TouchableOpacity>
-          {discount > 0 && (
-            <View style={styles.discountBadge}>
-              <Text style={styles.discountText}>-{discount}%</Text>
-            </View>
-          )}
-          {item.out_of_stock && (
-            <View style={styles.outOfStockOverlay}>
-              <Text style={styles.outOfStockText}>Нет в наличии</Text>
-            </View>
-          )}
-        </View>
-        
-        <View style={styles.productInfo}>
-          <View style={styles.productHeader}>
-            <Text style={styles.productBrand} numberOfLines={1}>
-  {item.brand || ''}{item.model ? ` • ${item.model}` : ''}
-</Text>
+        )}
+
+        {hasCashback && (
+          <TouchableOpacity
+            ref={getBadgeRef(item.id, 'cashback')}
+            style={[styles.cashbackBadge, { top: discount > 0 ? 34 : 8 }]}
+            onPress={(e) => {
+              e.stopPropagation();
+              showCashbackTooltip(cashback, item.id);
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="refresh-circle" size={14} color="#FFFFFF" />
+            <Text style={styles.cashbackBadgeText}>-{cashback.toLocaleString('ru-RU')} ₽</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={styles.imageContainer}>
+        <FastImage
+          style={styles.productImage}
+          source={{ uri: item.image_url || DEFAULT_IMAGE }}
+          resizeMode="contain"
+        />
+        <TouchableOpacity
+          style={styles.favoriteButton}
+          onPress={(e) => {
+            e.stopPropagation();
+            toggleFavorite(item);
+          }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <View style={styles.favoriteIconContainer}>
+            <Ionicons
+              name={isFavorite(item.id) ? "heart" : "heart-outline"}
+              size={20}
+              color={isFavorite(item.id) ? "#FF3B30" : "#3C3C43"}
+            />
           </View>
-          
-          <Text style={styles.productName} numberOfLines={3}>
-  {item.name || ''}
-</Text>
-          
-          <View style={styles.priceRow}>
-            <View style={styles.priceContainer}>
-              <Text style={styles.productPrice}>
-                {item.price ? parseFloat(item.price).toLocaleString('ru-RU') + ' ₽' : 'Цена не указана'}
+        </TouchableOpacity>
+
+        {item.out_of_stock && (
+          <View style={styles.outOfStockOverlay}>
+            <Text style={styles.outOfStockText}>Нет в наличии</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.productInfo}>
+        <View style={styles.productHeader}>
+          <Text style={styles.productBrand} numberOfLines={1}>
+            {item.brand || ''}{item.model ? ` • ${item.model}` : ''}
+          </Text>
+        </View>
+
+        <Text style={styles.productName} numberOfLines={3}>
+          {item.name || ''}
+        </Text>
+
+        <View style={styles.priceRow}>
+          <View style={styles.priceContainer}>
+            <Text style={styles.productPrice}>
+              {item.price ? parseFloat(item.price).toLocaleString('ru-RU') + ' ₽' : 'Цена не указана'}
+            </Text>
+            {item.old_price && item.old_price > item.price && (
+              <Text style={styles.productOldPrice}>
+                {parseFloat(item.old_price).toLocaleString('ru-RU')} ₽
               </Text>
-              {item.old_price && item.old_price > item.price && (
-                <Text style={styles.productOldPrice}>
-                  {parseFloat(item.old_price).toLocaleString('ru-RU')} ₽
-                </Text>
-              )}
-            </View>
-            {!item.out_of_stock && (
-              <View style={styles.stockIndicator}>
-                <View style={styles.stockDot} />
-              </View>
             )}
           </View>
-          
-          {item.category === 'Автошины' && (
-            <View style={styles.specsContainer}>
-              <View style={styles.specBadge}>
-                <Text style={styles.specText}>
-                   {formatTireSize(item.width || 0, item.profile || 0, item.diameter || 0)}
-                </Text>
-              </View>
-              {item.season && (
-                <View style={styles.specBadge}>
-                  {renderSeasonIcon(item.season)}
-                  <Text style={styles.specText}>{item.season || ''}</Text>
-                </View>
-              )}
-              {item.spiked === 1 && (
-                <View style={styles.specBadge}>
-                  <Text style={styles.specText}>Шипы</Text>
-                </View>
-              )}
+          {!item.out_of_stock && (
+            <View style={styles.stockIndicator}>
+              <View style={styles.stockDot} />
             </View>
           )}
         </View>
-      </AnimatedTouchableOpacity>
-    );
-  }, [toggleFavorite, getCardAnimation, handleCardPressIn, handleCardPressOut, 
-      formatTireSize, renderSeasonIcon, navigation, fadeAnim]);
+
+        {hasCashback && (
+          <View style={styles.cashbackInfo}>
+            <Ionicons name="refresh-circle-outline" size={14} color="#34C759" />
+            <Text style={styles.cashbackText}>
+              Цена с кешбеком: {finalPrice.toLocaleString('ru-RU')} ₽
+            </Text>
+          </View>
+        )}
+
+        {item.category === 'Автошины' && (
+          <View style={styles.specsContainer}>
+            <TouchableOpacity
+              ref={getBadgeRef(item.id, 'size')}
+              style={styles.specBadge}
+              onPress={(e) => {
+                e.stopPropagation();
+                showSpecTooltip('size', formatTireSize(item.width || 0, item.profile || 0, item.diameter || 0), item.id);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.specText}>
+                {formatTireSize(item.width || 0, item.profile || 0, item.diameter || 0)}
+              </Text>
+            </TouchableOpacity>
+            
+            {item.season && (
+              <TouchableOpacity
+                ref={getBadgeRef(item.id, 'season')}
+                style={styles.specBadge}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  showSpecTooltip('season', item.season, item.id);
+                }}
+                activeOpacity={0.8}
+              >
+                {renderSeasonIcon(item.season)}
+                <Text style={styles.specText}>{item.season || ''}</Text>
+              </TouchableOpacity>
+            )}
+            
+            {item.spiked === 1 && (
+              <TouchableOpacity
+                ref={getBadgeRef(item.id, 'spikes')}
+                style={styles.specBadge}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  showSpecTooltip('spikes', 'Шипы', item.id);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.specText}>Шипы</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </View>
+    </AnimatedTouchableOpacity>
+  );
+}, [
+  toggleFavorite, 
+  getCardAnimation, 
+  handleCardPressIn, 
+  handleCardPressOut,
+  formatTireSize, 
+  renderSeasonIcon, 
+  navigation, 
+  fadeAnim, 
+  calculatePriceWithCashback,
+  getBadgeRef,
+  showDiscountTooltip,
+  showCashbackTooltip,
+  showSpecTooltip
+]);
 
   const keyExtractor = useCallback((item) => `product-${item.id}-${item.sku}`, []);
 
@@ -421,7 +589,9 @@ const snapPoints = useMemo(() => {
 
   return (
     <GestureHandlerRootView style={styles.rootContainer}>
-      <View style={[styles.container, { paddingTop: statusBarHeight }]}>
+      <View 
+      style={[styles.container, { paddingTop: statusBarHeight }]}
+    >
         {/* Современный заголовок с фильтрами */}
         <Animated.View style={[
           styles.filterWrapper,
@@ -583,6 +753,15 @@ const snapPoints = useMemo(() => {
             ))}
           </BottomSheetView>
         </BottomSheet>
+         {tooltip.visible && (
+        <Tooltip
+          visible={tooltip.visible}
+          onClose={hideTooltip}
+          title={tooltip.title}
+          description={tooltip.description}
+          position={tooltip.position}
+        />
+      )}
       </View>
     </GestureHandlerRootView>
   );
@@ -691,7 +870,6 @@ const styles = StyleSheet.create({
     width: CARD_WIDTH,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    overflow: 'hidden',
     marginBottom: CARD_MARGIN,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -705,6 +883,7 @@ const styles = StyleSheet.create({
     height: CARD_WIDTH * 0.85,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'visible',
   },
   productImage: {
     width: '85%',
@@ -767,10 +946,31 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 6,
   },
+  priceContainer: {
+    flex: 1,
+  },
+  priceWithCashback: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
   productPrice: {
     fontSize: 17,
     fontWeight: '700',
     color: '#000000',
+  },
+  originalPrice: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#8E8E93',
+    textDecorationLine: 'line-through',
+    marginLeft: 6,
+  },
+  productOldPrice: {
+    fontSize: 13,
+    color: '#8E8E93',
+    textDecorationLine: 'line-through',
+    marginTop: 2,
   },
   stockIndicator: {
     flexDirection: 'row',
@@ -781,6 +981,54 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: '#34C759',
+  },
+  cashbackBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: '#34C759',
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  cashbackBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginLeft: 2,
+  },
+  cashbackInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+    backgroundColor: '#F0F9F0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  cashbackText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#34C759',
+    marginLeft: 4,
+  },
+  discountBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: '#FF3B30',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    zIndex: 1,
+  },
+  discountText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   specsContainer: {
     flexDirection: 'row',
@@ -891,33 +1139,6 @@ const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
   },
-  productOldPrice: {
-  fontSize: 13,
-  color: '#8E8E93',
-  textDecorationLine: 'line-through',
-  marginTop: 2,
-},
-
-discountBadge: {
-  position: 'absolute',
-  top: 8,
-  left: 8,
-  backgroundColor: '#FF3B30',
-  paddingHorizontal: 8,
-  paddingVertical: 4,
-  borderRadius: 8,
-  zIndex: 1,
-},
-
-discountText: {
-  fontSize: 12,
-  fontWeight: '600',
-  color: '#FFFFFF',
-},
-
-priceContainer: {
-  flex: 1,
-},
 });
 
 export default React.memo(ProductListScreen);
