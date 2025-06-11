@@ -312,6 +312,13 @@ const ProfileScreen = observer(() => {
               icon="settings" 
               title="Настройки" 
               subtitle="Параметры приложения"
+              onPress={() => {
+                  if (!authStore.isLoggedIn) {
+                    navigation.navigate('Auth');
+                    return;
+                  }
+                  navigation.navigate('Settings');
+                }}
               isLast
             />
           </View>

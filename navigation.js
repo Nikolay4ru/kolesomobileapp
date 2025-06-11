@@ -34,6 +34,7 @@ import OrderSuccessScreen from './screens/OrderSuccessScreen';
 import DeepLinkHandler from './components/DeepLinkHandler';
 import ShareHelper from './components/Share';
 import { Linking } from 'react-native';
+import SettingsScreen from "./screens/SettingsScreen";
 
 // Админские экраны
 import ScanProductsScreen from './screens/AdminOrdersScreen';
@@ -135,6 +136,14 @@ const ProfileStack = () => {
         component={StorageDetailScreen} 
         options={{ headerShown: false }}
       />
+      <Stack.Screen 
+  name="Settings" 
+  component={SettingsScreen}
+  options={{
+    headerShown: false,
+    animation: 'slide_from_right' // для iOS
+  }}
+/>
       <Stack.Screen 
         name="Admin" 
         component={AdminStack} 
