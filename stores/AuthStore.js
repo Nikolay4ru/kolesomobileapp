@@ -2,9 +2,17 @@
 import { makeAutoObservable } from "mobx";
 import { MMKV } from "react-native-mmkv";
 import { createApi, ApiInstance } from "../api";
-import { OneSignal }  from 'react-native-onesignal';
+import { OneSignal } from 'react-native-onesignal';
 
 const storage = new MMKV();
+const ONESIGNAL_APP_ID = "77c64a7c-678f-4de8-811f-9cac6c1b58e1";
+
+// Константы для ключей хранилища
+const STORAGE_KEYS = {
+  TOKEN: "token",
+  USER: "user",
+  NOTIFICATION_PERMISSION: "hasNotificationPermission"
+};
 
 type UserProfile = {
   id: string;
@@ -17,56 +25,100 @@ type UserProfile = {
   gender?: 'male' | 'female' | 'other';
 };
 
+type AdminProfile = {
+  id: string;
+  userId: string;
+  storeId: number | null;
+  role: 'admin' | 'manager';
+};
+
 class AuthStore {
+  // Основные поля
   phoneNumber = "";
   isLoggedIn = false;
   isLoading = false;
   error = "";
   token = "";
-  isAdmin = false;
   user: UserProfile | null = null;
-  api: ApiInstance;
+  
+  // Админ поля
+  isAdmin = false;
+  admin: AdminProfile | null = null;
+  
+  // OneSignal поля
   oneSignalId: string | null = null;
-  _hasNotificationPermission: boolean = false;
-  isNotificationPermissionRequested: boolean = false;
-oneSignalInitialized = false;
+  pushSubscriptionId: string | null = null;
+  oneSignalInitialized = false;
+  isNotificationPermissionRequested = false;
+  
+  // Приватные поля
+  _hasNotificationPermission = false;
+  api;
 
   constructor() {
     makeAutoObservable(this);
     this.api = createApi(this);
     this.loadAuthState();
-   
   }
 
+  // Геттер и сеттер для уведомлений
+  get hasNotificationPermission() {
+    return this._hasNotificationPermission;
+  }
 
+  set hasNotificationPermission(value) {
+    // Приводим к boolean и проверяем валидность
+    const boolValue = Boolean(value);
+    
+    this._hasNotificationPermission = boolValue;
+    
+    try {
+      storage.set(STORAGE_KEYS.NOTIFICATION_PERMISSION, boolValue);
+    } catch (error) {
+      console.error('Error saving notification permission to storage:', error);
+      console.log('Attempted to save value:', value, 'Type:', typeof value);
+    }
+    
+    this.syncNotificationStatus();
+  }
 
-
-
+  // === ONESIGNAL МЕТОДЫ ===
+  
   async initializeOneSignal() {
     if (this.oneSignalInitialized) return;
 
     try {
-      // Инициализация OneSignal
-       OneSignal.initialize("77c64a7c-678f-4de8-811f-9cac6c1b58e1");
-      this.oneSignalInitialized = true;
-
-      // Запрос разрешений на уведомления
-      await this.setupNotificationPermissions();
+      console.log('Starting OneSignal initialization...');
       
-      // Установка слушателей
+      OneSignal.initialize(ONESIGNAL_APP_ID);
+      this.oneSignalInitialized = true;
+      console.log('OneSignal initialized successfully');
+
+      // Сначала устанавливаем слушатели
       this.setupOneSignalListeners();
       
-      // Получение OneSignal ID
-      await this.fetchOneSignalId();
+      // Затем настраиваем разрешения
+      await this.setupNotificationPermissions();
+      
+      // Пытаемся получить ID сразу после инициализации
+      await this.fetchOneSignalIds();
+      
+      // Если OneSignal ID все еще null, пытаемся через некоторое время
+      if (!this.oneSignalId) {
+        console.log('OneSignal ID not available immediately, retrying...');
+        setTimeout(() => this.retryFetchOneSignalId(), 2000);
+        setTimeout(() => this.retryFetchOneSignalId(), 5000);
+        setTimeout(() => this.retryFetchOneSignalId(), 10000);
+      }
     } catch (error) {
       console.error('OneSignal initialization error:', error);
     }
   }
 
-   async setupNotificationPermissions() {
-    const savedPermission = storage.getBoolean("hasNotificationPermission");
+  async setupNotificationPermissions() {
+    const savedPermission = storage.getBoolean(STORAGE_KEYS.NOTIFICATION_PERMISSION);
     if (savedPermission !== undefined) {
-      this._hasNotificationPermission = savedPermission;
+      this._hasNotificationPermission = Boolean(savedPermission);
     }
 
     if (!this.isNotificationPermissionRequested) {
@@ -75,160 +127,274 @@ oneSignalInitialized = false;
 
     const currentPermission = await this.checkNotificationPermission();
     if (savedPermission !== undefined && savedPermission !== currentPermission) {
-      this._hasNotificationPermission = currentPermission;
+      this._hasNotificationPermission = Boolean(currentPermission);
     }
   }
 
-  async setupOneSignalListeners() {
+  setupOneSignalListeners() {
+    console.log('Setting up OneSignal listeners...');
+    
     OneSignal.Notifications.addEventListener('permissionChange', (event) => {
-      this._hasNotificationPermission = event.hasPermission;
-      storage.set("hasNotificationPermission", event.hasPermission);
-      this.syncNotificationStatus();
+      console.log('Permission changed:', event.hasPermission, 'Type:', typeof event.hasPermission);
+      this.hasNotificationPermission = Boolean(event.hasPermission);
+      
+      // Если разрешение получено, пытаемся получить OneSignal ID
+      if (event.hasPermission && !this.oneSignalId) {
+        console.log('Permission granted, attempting to fetch OneSignal ID...');
+        setTimeout(() => this.retryFetchOneSignalId(), 1000);
+      }
     });
 
     OneSignal.User.addEventListener('stateChange', async (changes) => {
+      console.log('OneSignal state changed:', JSON.stringify(changes, null, 2));
+      let shouldSync = false;
+
       if (changes.onesignalId?.current) {
+        console.log('OneSignal ID received from listener:', changes.onesignalId.current);
         this.oneSignalId = changes.onesignalId.current;
+        shouldSync = true;
+      }
+      
+      if (changes.pushSubscriptionId?.current) {
+        console.log('Push Subscription ID received from listener:', changes.pushSubscriptionId.current);
+        this.pushSubscriptionId = changes.pushSubscriptionId.current;
+        shouldSync = true;
+      }
+
+      if (shouldSync) {
         await this.syncOneSignalIdWithServer();
       }
     });
+
+    // Добавляем дополнительный слушатель для отслеживания изменений пользователя
+    OneSignal.User.addEventListener('change', (event) => {
+      console.log('OneSignal user changed:', JSON.stringify(event, null, 2));
+    });
   }
 
-  async checkNotificationPermission(): Promise<boolean> {
+  async checkNotificationPermission() {
     if (!this.oneSignalInitialized) return false;
     
     try {
       const permission = await OneSignal.Notifications.getPermissionAsync();
-      this._hasNotificationPermission = permission;
-      return permission;
+      const boolPermission = Boolean(permission);
+      this._hasNotificationPermission = boolPermission;
+      return boolPermission;
     } catch (error) {
       console.error('Error checking notification permission:', error);
       return false;
     }
   }
 
-  async requestNotificationPermission(): Promise<boolean> {
+  async requestNotificationPermission() {
     if (!this.oneSignalInitialized) return false;
     
     try {
+      console.log('Requesting notification permission...');
       this.isNotificationPermissionRequested = true;
-      const result = await OneSignal.Notifications.requestPermission(true);
-      this._hasNotificationPermission = result;
-      storage.set("hasNotificationPermission", result);
       
-      if (result) {
-        await this.fetchOneSignalId();
+      const result = await OneSignal.Notifications.requestPermission(true);
+      console.log('Permission request result:', result, 'Type:', typeof result);
+      
+      const boolResult = Boolean(result);
+      this.hasNotificationPermission = boolResult;
+      
+      if (boolResult) {
+        console.log('Permission granted, fetching IDs...');
+        
+        // Ждем немного, чтобы OneSignal обработал разрешение
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        await this.fetchOneSignalIds();
+        
+        // Если OneSignal ID все еще не получен, повторяем попытки
+        if (!this.oneSignalId) {
+          console.log('OneSignal ID not received immediately after permission, scheduling retries...');
+          setTimeout(() => this.retryFetchOneSignalId(), 2000);
+          setTimeout(() => this.retryFetchOneSignalId(), 5000);
+        }
       }
       
-      return result;
+      return boolResult;
     } catch (error) {
       console.error('Error requesting notification permission:', error);
       return false;
     }
   }
 
-  async fetchOneSignalId(): Promise<void> {
+  async fetchOneSignalIds() {
     if (!this.oneSignalInitialized) return;
     
+    console.log('Attempting to fetch OneSignal IDs...');
+    
     try {
-      const id = await OneSignal.User.getOnesignalId();
-      if (id) {
-        this.oneSignalId = id;
+      // Получаем оба ID параллельно
+      const [oneSignalId, pushSubscriptionId] = await Promise.all([
+        OneSignal.User.getOnesignalId().catch(error => {
+          console.warn('OneSignal ID not available yet:', error.message);
+          return null;
+        }),
+        OneSignal.User.pushSubscription.getIdAsync().catch(error => {
+          console.warn('Push Subscription ID not available yet:', error.message);
+          return null;
+        })
+      ]);
+
+      console.log('Fetched OneSignal IDs:', { oneSignalId, pushSubscriptionId });
+
+      let shouldSync = false;
+
+      if (oneSignalId && oneSignalId !== this.oneSignalId) {
+        console.log('OneSignal ID updated:', oneSignalId);
+        this.oneSignalId = oneSignalId;
+        shouldSync = true;
+      }
+
+      if (pushSubscriptionId && pushSubscriptionId !== this.pushSubscriptionId) {
+        console.log('Push Subscription ID updated:', pushSubscriptionId);
+        this.pushSubscriptionId = pushSubscriptionId;
+        shouldSync = true;
+      }
+
+      // Синхронизируем с сервером если есть хотя бы один ID или если есть изменения
+      if (shouldSync || (this.oneSignalId || this.pushSubscriptionId)) {
         await this.syncOneSignalIdWithServer();
       }
+
+      return { oneSignalId, pushSubscriptionId };
     } catch (error) {
-      console.error('Error fetching OneSignal ID:', error);
+      console.error('Error fetching OneSignal IDs:', error);
+      return { oneSignalId: null, pushSubscriptionId: null };
     }
   }
 
-  async syncOneSignalIdWithServer(): Promise<void> {
-    if (!this.oneSignalId || !this.user?.id) return;
+  async retryFetchOneSignalId() {
+    if (this.oneSignalId) return; // Уже получили
+    
+    console.log('Retrying to fetch OneSignal ID...');
+    
+    try {
+      // Проверяем состояние разрешений
+      const hasPermission = await this.checkNotificationPermission();
+      console.log('Current notification permission:', hasPermission);
+      
+      // Пытаемся получить OneSignal ID разными способами
+      const oneSignalId = await OneSignal.User.getOnesignalId();
+      
+      if (oneSignalId) {
+        console.log('OneSignal ID finally obtained:', oneSignalId);
+        this.oneSignalId = oneSignalId;
+        await this.syncOneSignalIdWithServer();
+      } else {
+        console.log('OneSignal ID still not available');
+        
+        // Попробуем через альтернативный способ
+        try {
+          const deviceState = await OneSignal.User.getUser();
+          console.log('OneSignal device state:', deviceState);
+        } catch (e) {
+          console.log('Could not get device state:', e.message);
+        }
+      }
+    } catch (error) {
+      console.error('Error in retry fetch OneSignal ID:', error);
+    }
+  }
+
+  async syncOneSignalIdWithServer() {
+    // Изменили условие - отправляем если есть хотя бы один из ID
+    if ((!this.oneSignalId && !this.pushSubscriptionId) || !this.user?.id) return;
 
     try {
-      await this.api.post('/update_user_devices.php', {
-        userId: this.user.id,
-        oneSignalId: this.oneSignalId,
-        pushEnabled: this.hasNotificationPermission ? 1 : 0
-      });
-      
-      if (this.user.phone) {
-        await OneSignal.User.addTag('phone', this.user.phone);
-        await OneSignal.User.addTag('userId', this.user.id);
-        await OneSignal.User.addTag('pushEnabled', this.hasNotificationPermission ? 'true' : 'false');
-      }
+      await Promise.all([
+        this.api.post('/update_user_devices.php', {
+          userId: this.user.id,
+          oneSignalId: this.oneSignalId,
+          pushSubscriptionId: this.pushSubscriptionId,
+          pushEnabled: this.hasNotificationPermission ? 1 : 0
+        }),
+        this.setOneSignalTags()
+      ]);
     } catch (error) {
       console.error('Error syncing OneSignal ID:', error);
     }
   }
 
-  async syncNotificationStatus(): Promise<void> {
+  async setOneSignalTags() {
+    if (!this.user?.phone) return;
+
+    try {
+      await Promise.all([
+        OneSignal.User.addAlias("PHONE", this.user.phone),
+        OneSignal.User.addTag('phone', this.user.phone),
+        OneSignal.User.addTag('userId', this.user.id),
+        OneSignal.User.addTag('pushEnabled', this.hasNotificationPermission ? 'true' : 'false')
+      ]);
+    } catch (error) {
+      console.error('Error setting OneSignal tags:', error);
+    }
+  }
+
+  async syncNotificationStatus() {
     if (!this.user?.id || !this.oneSignalInitialized) return;
     
     try {
+      // Устанавливаем теги если есть телефон
       if (this.user.phone) {
-        await OneSignal.User.addTag('phone', this.user.phone);
-        await OneSignal.User.addTag('userId', this.user.id);
-        await OneSignal.User.addTag('pushEnabled', this.hasNotificationPermission ? 'true' : 'false');
+        await this.setOneSignalTags();
       }
       
-      if (!this.oneSignalId) {
-        await this.fetchOneSignalId();
+      // Получаем ID если они отсутствуют
+      if (!this.oneSignalId || !this.pushSubscriptionId) {
+        await this.fetchOneSignalIds();
       }
 
-      await this.api.post('/update_user_devices.php', {
-        userId: this.user.id,
-        oneSignalId: this.oneSignalId,
-        pushEnabled: this.hasNotificationPermission ? 1 : 0
-      });
+      // Синхронизируем с сервером если есть хотя бы один ID
+      if (this.oneSignalId || this.pushSubscriptionId) {
+        await this.api.post('/update_user_devices.php', {
+          userId: this.user.id,
+          oneSignalId: this.oneSignalId,
+          pushSubscriptionId: this.pushSubscriptionId,
+          pushEnabled: this.hasNotificationPermission ? 1 : 0
+        });
+      }
     } catch (error) {
       console.error('Error syncing notification status:', error);
     }
   }
 
+  // === АВТОРИЗАЦИЯ ===
 
-
-  // Вызывать после успешной авторизации
-  async handleLoginSuccess(userData: any) {
-    //this.user = userData;
-    await this.syncNotificationStatus();
-    await this.syncOneSignalIdWithServer();
-  }
-
-
-
-  // Загрузка сохраненного состояния при инициализации
   async loadAuthState() {
     try {
-      const token = storage.getString("token");
-      const userJson = storage.getString("user");
-      const notificationPermission = storage.getBoolean("hasNotificationPermission");
-      
-      //this.handleLoginSuccess();
+      const token = storage.getString(STORAGE_KEYS.TOKEN);
+      const userJson = storage.getString(STORAGE_KEYS.USER);
+      const notificationPermission = storage.getBoolean(STORAGE_KEYS.NOTIFICATION_PERMISSION);
       
       if (token && userJson) {
         this.token = token;
         this.user = JSON.parse(userJson);
         this.phoneNumber = this.user.phone;
         this.isLoggedIn = true;
-        await this.checkAdminStatus();
+        
         if (notificationPermission !== undefined) {
-          this.hasNotificationPermission = notificationPermission;
+          this._hasNotificationPermission = Boolean(notificationPermission);
         }
         
-        // Проверяем валидность токена
-        await this.checkAuth();
+        await Promise.all([
+          this.checkAdminStatus(),
+          this.checkAuth()
+        ]);
       }
     } catch (error) {
       console.error("Failed to load auth state:", error);
     }
   }
 
-  // Отправка кода подтверждения
   async sendVerificationCode(phoneNumber: string) {
-    this.isLoading = true;
-    this.error = "";
+    this.setLoadingState(true);
     this.phoneNumber = phoneNumber;
-    console.log(this.phoneNumber);
+    
     try {
       const response = await this.api.post("/auth.php", {
         action: "request_code",
@@ -236,9 +402,7 @@ oneSignalInitialized = false;
       });
 
       if (!response.data.success) {
-        
         throw new Error(response.data.message || "Failed to send verification code");
-        
       }
 
       return response.data;
@@ -246,15 +410,12 @@ oneSignalInitialized = false;
       this.error = error.message;
       throw error;
     } finally {
-      this.isLoading = false;
+      this.setLoadingState(false);
     }
   }
 
-  // Проверка кода подтверждения
-  async verifyCode(code) {
-    this.isLoading = true;
-    this.error = "";
-   
+  async verifyCode(code: string) {
+    this.setLoadingState(true);
 
     try {
       const response = await this.api.post("/auth.php", {
@@ -267,7 +428,7 @@ oneSignalInitialized = false;
         throw new Error(response.data.message || "Invalid verification code");
       }
 
-      // Сохраняем данные авторизации
+      // Устанавливаем базовые данные
       this.token = response.data.token;
       this.user = {
         id: response.data.user_id,
@@ -275,32 +436,27 @@ oneSignalInitialized = false;
       };
       this.isLoggedIn = true;
 
-      // Загружаем полный профиль
-      await this.fetchProfile();
+      // Выполняем дополнительные операции параллельно
+      await Promise.all([
+        this.fetchProfile(),
+        this.checkAdminStatus(),
+        this.syncOneSignalIdWithServer(),
+        this.syncNotificationStatus()
+      ]);
 
-       // Проверяем, является ли пользователь администратором
-      await this.checkAdminStatus();
-
-      // Сохраняем в хранилище
       this.persistAuthState();
-      await this.syncOneSignalIdWithServer();
-      await this.syncNotificationStatus();
       
       return response.data;
     } catch (error) {
       this.error = error.message || "Failed to verify code";
       throw error;
     } finally {
-      this.isLoading = false;
+      this.setLoadingState(false);
     }
   }
 
-  // Получение профиля пользователя
   async fetchProfile() {
     if (!this.user) return;
-
-    this.isLoading = true;
-    this.error = "";
 
     try {
       const response = await this.api.get("/get_profile.php");
@@ -323,14 +479,9 @@ oneSignalInitialized = false;
     } catch (error) {
       this.error = error.message;
       throw error;
-    } finally {
-      this.isLoading = false;
     }
   }
 
-
-
-   // Проверка статуса администратора
   async checkAdminStatus() {
     if (!this.user) return;
 
@@ -356,77 +507,16 @@ oneSignalInitialized = false;
     }
   }
 
-
-
-   // Обновление профиля администратора
-  async updateAdminProfile(storeId: number | null, role: 'admin' | 'manager') {
-    if (!this.isAdmin || !this.admin) return;
-
-    this.isLoading = true;
-    this.error = "";
-    
-    try {
-      const response = await this.api.patch("/update_admin.php", {
-        storeId,
-        role
-      });
-      
-      if (response.data.success) {
-        this.admin = {
-          ...this.admin,
-          storeId,
-          role
-        };
-      }
-
-      return response.data;
-    } catch (error) {
-      this.error = error.message;
-      throw error;
-    } finally {
-      this.isLoading = false;
-    }
-  }
-
-
-  set hasNotificationPermission(value: boolean) {
-   
-    this._hasNotificationPermission = value;
-    storage.set("hasNotificationPermission", value);
-    this.syncNotificationStatus();
-  }
-
-  get hasNotificationPermission() {
-    return this._hasNotificationPermission;
-  }
-
-  
-
-  // Обновление профиля пользователя
-  async updateProfile(profileData: {
-    firstName?: string;
-    lastName?: string;
-    middleName?: string;
-    email?: string;
-    birthDate?: string;
-    gender?: 'male' | 'female' | 'other';
-  })
-  {
-    
+  async updateProfile(profileData) {
     if (!this.user) return;
 
-    this.isLoading = true;
-    this.error = "";
+    this.setLoadingState(true);
     
     try {
       const response = await this.api.patch("/update_profile.php", profileData);
       
       if (response.data.success) {
-        this.user = {
-          ...this.user,
-          ...profileData
-        };
-        
+        this.user = { ...this.user, ...profileData };
         this.persistAuthState();
       }
 
@@ -435,14 +525,37 @@ oneSignalInitialized = false;
       this.error = error.message;
       throw error;
     } finally {
-      this.isLoading = false;
+      this.setLoadingState(false);
     }
   }
 
+  async updateAdminProfile(storeId: number | null, role: 'admin' | 'manager') {
+    if (!this.isAdmin || !this.admin) return;
 
-  // Выход из системы
+    this.setLoadingState(true);
+    
+    try {
+      const response = await this.api.patch("/update_admin.php", {
+        storeId,
+        role
+      });
+      
+      if (response.data.success) {
+        this.admin = { ...this.admin, storeId, role };
+      }
+
+      return response.data;
+    } catch (error) {
+      this.error = error.message;
+      throw error;
+    } finally {
+      this.setLoadingState(false);
+    }
+  }
+
   logout() {
-   this.token = "";
+    // Сбрасываем состояние
+    this.token = "";
     this.phoneNumber = "";
     this.user = null;
     this.admin = null;
@@ -450,66 +563,81 @@ oneSignalInitialized = false;
     this.isLoggedIn = false;
     this.error = "";
 
-
     // Очищаем хранилище
-    storage.delete("token");
-    storage.delete("user");
+    storage.delete(STORAGE_KEYS.TOKEN);
+    storage.delete(STORAGE_KEYS.USER);
   }
 
-  // Проверка авторизации
   async checkAuth() {
-  if (!this.token) return false;
+    if (!this.token) return false;
 
-  try {
-    // Проверяем наличие соединения перед запросом
-    const isConnected = await this.checkInternetConnection();
-    if (!isConnected) {
-      // Если нет интернета, считаем токен валидным (не разлогиниваем)
+    try {
+      const isConnected = await this.checkInternetConnection();
+      if (!isConnected) {
+        return true; // Считаем токен валидным при отсутствии соединения
+      }
+
+      const response = await this.api.get("/validate_token.php", {
+        headers: { Authorization: `Bearer ${this.token}` },
+      });
+
+      if (!response.data.valid) {
+        this.logout();
+        return false;
+      }
+
       return true;
-    }
-
-    const response = await this.api.get("/validate_token.php", {
-      headers: { Authorization: `Bearer ${this.token}` },
-    });
-
-    if (!response.data.valid) {
+    } catch (error) {
+      // Не разлогиниваем при проблемах с сетью
+      if (this.isNetworkError(error)) {
+        return true;
+      }
+      
       this.logout();
       return false;
     }
+  }
 
-    return true;
-  } catch (error) {
-    // Если ошибка связана с отсутствием интернета, не разлогиниваем
-    if (error.message.includes('Network Error') || error.message.includes('offline')) {
-      return true;
+  // === ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ===
+
+  setLoadingState(loading) {
+    this.isLoading = loading;
+    if (loading) {
+      this.error = "";
     }
-    
-    // Для других ошибок выполняем логаут
-    this.logout();
-    return false;
   }
-}
 
-
-// Добавляем новый метод для проверки соединения
-async checkInternetConnection(): Promise<boolean> {
-  try {
-    const response = await fetch('https://www.google.com', { 
-      method: 'HEAD',
-      cache: 'no-store'
-    });
-    return response.ok;
-  } catch (error) {
-    return false;
+  async checkInternetConnection() {
+    try {
+      const response = await fetch('https://www.google.com', { 
+        method: 'HEAD',
+        cache: 'no-store'
+      });
+      return response.ok;
+    } catch (error) {
+      return false;
+    }
   }
-}
 
-  // Сохранение состояния в хранилище
- persistAuthState() {
+  isNetworkError(error) {
+    return error.message?.includes('Network Error') || 
+           error.message?.includes('offline') ||
+           !navigator.onLine;
+  }
+
+  persistAuthState() {
     if (this.token && this.user) {
-      storage.set("token", this.token);
-      storage.set("user", JSON.stringify(this.user));
+      storage.set(STORAGE_KEYS.TOKEN, this.token);
+      storage.set(STORAGE_KEYS.USER, JSON.stringify(this.user));
     }
+  }
+
+  // Обработчик успешного логина (для обратной совместимости)
+  async handleLoginSuccess(userData) {
+    await Promise.all([
+      this.syncNotificationStatus(),
+      this.syncOneSignalIdWithServer()
+    ]);
   }
 }
 

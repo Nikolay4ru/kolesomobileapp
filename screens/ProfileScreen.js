@@ -13,11 +13,12 @@ const rnBiometrics = new ReactNativeBiometrics();
 const ProfileScreen = observer(() => {
   const insets = useSafeAreaInsets();
   const statusBarHeight = insets.top;
+  const bottomInsets = insets.bottom; // Получаем отступ снизу
   const navigation = useNavigation();
   const [adminMode, setAdminMode] = useState(false);
- const [biometryType, setBiometryType] = useState(null);
+  const [biometryType, setBiometryType] = useState(null);
 
- // Проверяем доступность биометрии при монтировании компонента
+  // Проверяем доступность биометрии при монтировании компонента
   useEffect(() => {
     checkBiometrics();
   }, []);
@@ -32,7 +33,6 @@ const ProfileScreen = observer(() => {
       console.log('Biometrics check error:', error);
     }
   };
-
 
   const handleAuthPress = () => {
     navigation.navigate('Auth');
@@ -58,92 +58,91 @@ const ProfileScreen = observer(() => {
     navigation.navigate('Admin', { screen: 'AdminOrders' });
   };
 
-const authenticateWithDeviceCredentials = async () => {
-  try {
-    // Сохраняем временные данные (если их нет)
-    const options = {
-      accessControl: Keychain.ACCESS_CONTROL.DEVICE_PASSCODE, // Требует пароль/PIN/графический ключ
-      accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED,
-      authenticationType: Keychain.AUTHENTICATION_TYPE.DEVICE_PASSCODE,
-      securityLevel: Keychain.SECURITY_LEVEL.SECURE_SOFTWARE, // На случай, если биометрия недоступна
-    };
+  const authenticateWithDeviceCredentials = async () => {
+    try {
+      // Сохраняем временные данные (если их нет)
+      const options = {
+        accessControl: Keychain.ACCESS_CONTROL.DEVICE_PASSCODE, // Требует пароль/PIN/графический ключ
+        accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED,
+        authenticationType: Keychain.AUTHENTICATION_TYPE.DEVICE_PASSCODE,
+        securityLevel: Keychain.SECURITY_LEVEL.SECURE_SOFTWARE, // На случай, если биометрия недоступна
+      };
 
-    // Пытаемся прочитать данные (если они есть)
-    const credentials = await Keychain.getGenericPassword(options);
-    
-    if (credentials) {
-      return true; // Аутентификация успешна
+      // Пытаемся прочитать данные (если они есть)
+      const credentials = await Keychain.getGenericPassword(options);
+      
+      if (credentials) {
+        return true; // Аутентификация успешна
+      }
+
+      // Если данных нет, сохраняем временные данные, чтобы вызвать системный запрос
+      await Keychain.setGenericPassword(
+        'auth_temp_username',
+        'auth_temp_password',
+        options
+      );
+
+      // Теперь запрашиваем их, чтобы вызвать системную аутентификацию
+      const result = await Keychain.getGenericPassword(options);
+      
+      // Удаляем временные данные
+      await Keychain.resetGenericPassword();
+
+      return result !== false;
+    } catch (error) {
+      console.log('Device credentials auth error:', error);
+      return false;
     }
+  };
 
-    // Если данных нет, сохраняем временные данные, чтобы вызвать системный запрос
-    await Keychain.setGenericPassword(
-      'auth_temp_username',
-      'auth_temp_password',
-      options
-    );
+  const authenticateWithBiometrics = async () => {
+    try {
+      // Сначала проверяем доступность биометрии
+      const { available, biometryType } = await rnBiometrics.isSensorAvailable();
+      
+      if (!available) {
+        // Если биометрия недоступна, запрашиваем системные учетные данные
+        const authenticated = await authenticateWithDeviceCredentials();
+        if (authenticated) {
+          setAdminMode(!adminMode);
+        } else {
+          setAdminMode(!adminMode);
+        }
+        return;
+      }
 
-    // Теперь запрашиваем их, чтобы вызвать системную аутентификацию
-    const result = await Keychain.getGenericPassword(options);
-    
-    // Удаляем временные данные
-    await Keychain.resetGenericPassword();
+      // Если биометрия доступна, запрашиваем аутентификацию
+      const { success } = await rnBiometrics.simplePrompt({
+        promptMessage: 'Аутентификация для доступа к админ-панели',
+        cancelButtonText: 'Отмена',
+      });
 
-    return result !== false;
-  } catch (error) {
-    console.log('Device credentials auth error:', error);
-    return false;
-  }
-};
-
-
-const authenticateWithBiometrics = async () => {
-  try {
-    // Сначала проверяем доступность биометрии
-    const { available, biometryType } = await rnBiometrics.isSensorAvailable();
-    
-    if (!available) {
-      // Если биометрия недоступна, запрашиваем системные учетные данные
-      const authenticated = await authenticateWithDeviceCredentials();
-      if (authenticated) {
+      if (success) {
         setAdminMode(!adminMode);
       } else {
-        setAdminMode(!adminMode);
+        Alert.alert('Ошибка', 'Аутентификация не удалась');
       }
-      return;
+    } catch (error) {
+      console.log('Auth error:', error);
+      Alert.alert('Ошибка', 'Не удалось выполнить аутентификацию');
     }
+  };
 
-    // Если биометрия доступна, запрашиваем аутентификацию
-    const { success } = await rnBiometrics.simplePrompt({
-      promptMessage: 'Аутентификация для доступа к админ-панели',
-      cancelButtonText: 'Отмена',
-    });
-
-    if (success) {
-      setAdminMode(!adminMode);
-    } else {
-      Alert.alert('Ошибка', 'Аутентификация не удалась');
-    }
-  } catch (error) {
-    console.log('Auth error:', error);
-    Alert.alert('Ошибка', 'Не удалось выполнить аутентификацию');
-  }
-};
-
-const toggleAdminMode = () => {
-  if (authStore.isAdmin) {
-    // На Android всегда требуем аутентификацию (биометрию или системные учетные данные)
-    if (Platform.OS === 'android') {
-      authenticateWithBiometrics();
-    } else {
-      // На iOS используем биометрию при первом включении
-      if (biometryType && !adminMode) {
+  const toggleAdminMode = () => {
+    if (authStore.isAdmin) {
+      // На Android всегда требуем аутентификацию (биометрию или системные учетные данные)
+      if (Platform.OS === 'android') {
         authenticateWithBiometrics();
       } else {
-        setAdminMode(!adminMode);
+        // На iOS используем биометрию при первом включении
+        if (biometryType && !adminMode) {
+          authenticateWithBiometrics();
+        } else {
+          setAdminMode(!adminMode);
+        }
       }
     }
-  }
-};
+  };
 
   const getUserName = () => {
     if (!authStore.user) return "Гость";
@@ -172,7 +171,12 @@ const toggleAdminMode = () => {
       <ScrollView 
         style={styles.scrollView} 
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { 
+            paddingBottom: Math.max(bottomInsets, 20) + 60 // 60px для TabBar + отступ для безопасной зоны
+          }
+        ]}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -393,7 +397,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 40,
+    // Убираем статичный paddingBottom, теперь он динамический
   },
   header: {
     flexDirection: 'row',

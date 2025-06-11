@@ -15,6 +15,7 @@ export const createApi = (authStore: AuthStore) => {
   api.interceptors.request.use((config) => {
     const token = authStore.token;
     console.log('token '+ token);
+    console.log(config.data);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
