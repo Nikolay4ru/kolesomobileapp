@@ -23,8 +23,9 @@ const { width: screenWidth } = Dimensions.get('window');
 const HomeScreen = () => {
   const [activeSlide, setActiveSlide] = useState(0);
   const scrollX = useRef(new Animated.Value(0)).current;
-   const [popularProducts, setPopularProducts] = useState([]);
-   const [error, setError] = useState(null);
+  const [popularProducts, setPopularProducts] = useState([]);
+  const [error, setError] = useState(null);
+  const [userBooking, setUserBooking] = useState(null);
   const slidesRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const navigation = useNavigation();
@@ -34,28 +35,47 @@ const HomeScreen = () => {
   const slides = [
     {
       id: '1',
-      title: '🔥 Сезонная распродажа',
+      title: 'Сезонная распродажа',
       subtitle: 'Премиум шины со скидкой до 40%',
-      image: 'https://www.koleso-russia.ru/upload/resize_cache/iblock/359/449_476_0/e6p4btxrzy26h2dzjys7f4n6jb7i3ilt.jpg',
-      backgroundColor: '#262A56'
+      image: 'https://images.unsplash.com/photo-1621839673705-6617adf9e890?w=800',
+      backgroundColor: '#1a1a1a'
     },
     {
       id: '2',
-      title: '🛠 Комплексное ТО',
+      title: 'Комплексное ТО',
       subtitle: 'Полная диагностика + замена масла',
-      image: 'https://www.koleso-russia.ru/upload/resize_cache/iblock/359/449_476_0/e6p4btxrzy26h2dzjys7f4n6jb7i3ilt.jpg',
-      backgroundColor: '#3B8EA5'
+      image: 'https://images.unsplash.com/photo-1625047509168-a7026f36de04?w=800',
+      backgroundColor: '#1a1a1a'
     },
     {
       id: '3',
-      title: '✨ Автоаксессуары',
-      subtitle: 'Новинки сезона, которые вы искали',
-      image: 'https://www.koleso-russia.ru/upload/resize_cache/iblock/359/449_476_0/e6p4btxrzy26h2dzjys7f4n6jb7i3ilt.jpg',
-      backgroundColor: '#272640'
+      title: 'Автоаксессуары',
+      subtitle: 'Новинки сезона',
+      image: 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?w=800',
+      backgroundColor: '#1a1a1a'
     }
   ];
 
- // Загрузка популярных товаров
+  // Загрузка данных пользователя и записей
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        // Загрузка записи пользователя
+        const bookingResponse = await fetch(`${API_URL}/user_booking.php`);
+        const bookingData = await bookingResponse.json();
+        
+        if (bookingData.success && bookingData.data) {
+          setUserBooking(bookingData.data);
+        }
+      } catch (err) {
+        console.error('Error fetching user booking:', err);
+      }
+    };
+    
+    fetchUserData();
+  }, []);
+
+  // Загрузка популярных товаров
   useEffect(() => {
     const fetchPopularProducts = async () => {
       try {
@@ -67,13 +87,15 @@ const HomeScreen = () => {
           setPopularProducts(data.data);
         } else {
           setError(data.message || 'Failed to load popular products');
-          // Fallback to local data if API fails
-          setPopularProducts(fallbackProducts);
+          // Fallback data
+          setPopularProducts([
+            { id: '1', name: 'Шина Michelin Pilot Sport 4', price: 12500, image: 'https://www.koleso-russia.ru/upload/resize_cache/iblock/359/449_476_0/e6p4btxrzy26h2dzjys7f4n6jb7i3ilt.jpg', inStock: true },
+            { id: '2', name: 'Диск Replica B125', price: 8900, image: 'https://www.koleso-russia.ru/upload/resize_cache/iblock/359/449_476_0/e6p4btxrzy26h2dzjys7f4n6jb7i3ilt.jpg', inStock: true, discount: 15 },
+          ]);
         }
       } catch (err) {
         setError(err.message);
-        // Fallback to local data if API fails
-        setPopularProducts(fallbackProducts);
+        setPopularProducts([]);
       } finally {
         setLoading(false);
       }
@@ -82,9 +104,7 @@ const HomeScreen = () => {
     fetchPopularProducts();
   }, []);
 
-
-
-   // Обработчик нажатия на товар (для обновления статистики просмотров)
+  // Обработчик нажатия на товар
   const handleProductPress = async (productId) => {
     try {
       await fetch(`${API_URL}/update_product_stats.php`, {
@@ -99,69 +119,53 @@ const HomeScreen = () => {
       });
       
       navigation.navigate('Home', {
-                    screen: 'Product',
-                    params: {
-                      productId: productId,
-                      fromCart: false,
-                       modal: false
-                    }
-                  });
+        screen: 'Product',
+        params: {
+          productId: productId,
+          fromCart: false,
+          modal: false
+        }
+      });
     } catch (err) {
       console.error('Error updating product stats:', err);
       navigation.navigate('Home', {
-                    screen: 'Product',
-                    params: {
-                      productId: productId,
-                      fromCart: false,
-                      modal: false
-                    }
-                  });
+        screen: 'Product',
+        params: {
+          productId: productId,
+          fromCart: false,
+          modal: false
+        }
+      });
     }
   };
 
-
-
   const categories = [
-    { id: '1', name: 'Шины', icon: 'car-sport', color: '#3AB795', bgColor: '#E7FAF3' },
-    { id: '2', name: 'Диски', icon: 'disc', color: '#4ECDC4', bgColor: '#E3F9F6' },
-    { id: '3', name: 'Масла', icon: 'water', color: '#FFD447', bgColor: '#FFF9E3' },
-    { id: '4', name: 'Батареи', icon: 'battery-full', color: '#277DA1', bgColor: '#E8F5E8' },
-    { id: '5', name: 'Химия', icon: 'flask', color: '#FF6B6B', bgColor: '#FFE3E6' },
-    { id: '6', name: 'Сервис', icon: 'build', color: '#B3D9FF', bgColor: '#E3F0FF' }
+    { id: '1', name: 'Шины', icon: 'car-sport', color: '#007AFF' },
+    { id: '2', name: 'Диски', icon: 'disc', color: '#34C759' },
+    { id: '3', name: 'Масла', icon: 'water', color: '#FF9500' },
+    { id: '4', name: 'АКБ', icon: 'battery-full', color: '#5856D6' },
+    { id: '5', name: 'Химия', icon: 'flask', color: '#FF3B30' },
+    { id: '6', name: 'Сервис', icon: 'build', color: '#007AFF' }
   ];
 
   const quickActions = [
     {
       id: '1',
-      title: 'Подобрать по авто',
-      icon: 'car-sport-outline',
-      backgroundColor: '#E7FAF3',
-      color: '#34D399',
+      title: 'Подбор по авто',
+      subtitle: 'Найдем подходящие товары',
+      icon: 'car-sport',
+      color: '#007AFF',
+      bgColor: '#E3F2FF',
       route: 'FilterAuto'
     },
     {
       id: '2',
-      title: 'Каталог',
-      icon: 'search-outline',
-      backgroundColor: '#F0F4FF',
-      color: '#6366F1',
-      route: 'ProductList'
-    },
-    {
-      id: '3',
-      title: 'Сервис',
-      icon: 'calendar-outline',
-      backgroundColor: '#FFF4E3',
-      color: '#FBBF24',
+      title: 'Записаться',
+      subtitle: 'На сервис и шиномонтаж',
+      icon: 'calendar',
+      color: '#34C759',
+      bgColor: '#E8F5E8',
       route: 'Booking'
-    },
-    {
-      id: '4',
-      title: 'Скидки',
-      icon: 'card-outline',
-      backgroundColor: '#FDF2F8',
-      color: '#EC4899',
-      route: 'DiscountCard'
     }
   ];
 
@@ -177,30 +181,29 @@ const HomeScreen = () => {
   }, [activeSlide]);
 
   const renderSlide = ({ item }) => (
-    <View style={styles.slide}>
-      <ImageBackground
-        source={{ uri: item.image }}
+    <TouchableOpacity style={styles.slide} activeOpacity={0.95}>
+      <Image 
+        source={{ uri: item.image }} 
         style={styles.slideImage}
-        imageStyle={{ borderRadius: 20 }}
-      >
-        <View style={[styles.slideOverlay, { backgroundColor: item.backgroundColor + "CC" }]} />
-        <View style={styles.slideTextWrap}>
-          <Text style={styles.slideTitle}>{item.title}</Text>
-          <Text style={styles.slideSubtitle}>{item.subtitle}</Text>
-          <TouchableOpacity style={styles.slideButton}>
-            <Text style={styles.slideButtonText}>Подробнее</Text>
-            <Ionicons name="arrow-forward" size={18} color="#fff" />
-          </TouchableOpacity>
+        resizeMode="cover"
+      />
+      <View style={styles.slideGradient} />
+      <View style={styles.slideTextWrap}>
+        <Text style={styles.slideTitle}>{item.title}</Text>
+        <Text style={styles.slideSubtitle}>{item.subtitle}</Text>
+        <View style={styles.slideButton}>
+          <Text style={styles.slideButtonText}>Подробнее</Text>
+          <Ionicons name="arrow-forward" size={16} color="#000" />
         </View>
-      </ImageBackground>
-    </View>
+      </View>
+    </TouchableOpacity>
   );
 
   const renderProduct = (item) => (
     <TouchableOpacity 
       key={item.id} 
       style={styles.productCard} 
-      activeOpacity={0.88}
+      activeOpacity={0.7}
       onPress={() => handleProductPress(item.id)}
     >
       {item.discount && (
@@ -210,29 +213,68 @@ const HomeScreen = () => {
       )}
       <View style={styles.productImageContainer}>
         <Image source={{ uri: item.image }} style={styles.productImage} />
-        {!item.inStock && <View style={styles.outOfStockOverlay} />}
       </View>
       <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
-      <View style={styles.priceBlock}>
+      <View style={styles.productBottom}>
         <Text style={styles.productPrice}>{item.price.toLocaleString()} ₽</Text>
         {item.originalPrice && (
           <Text style={styles.originalPrice}>{item.originalPrice.toLocaleString()} ₽</Text>
         )}
       </View>
-      <View style={styles.productMeta}>
-        <View style={[styles.stockDot, { backgroundColor: item.inStock ? "#22C55E" : "#F87171" }]} />
-        <Text style={[styles.stockText, { color: item.inStock ? "#22C55E" : "#F87171" }]}>
-          {item.inStock ? "В наличии" : "Разобрали"}
+      <View style={styles.stockIndicator}>
+        <View style={[styles.stockDot, { backgroundColor: item.inStock ? "#34C759" : "#FF9500" }]} />
+        <Text style={[styles.stockText, { color: item.inStock ? "#34C759" : "#FF9500" }]}>
+          {item.inStock ? "В наличии" : "Под заказ"}
         </Text>
       </View>
     </TouchableOpacity>
   );
 
-
   return (
     <View style={[styles.container, { paddingTop: statusBarHeight }]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F7F9FB" />
-      <ScrollView showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic">
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      
+      {/* Header */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.headerGreeting}>Добро пожаловать</Text>
+          <Text style={styles.headerTitle}>Главная</Text>
+        </View>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.headerButton}>
+            <Ionicons name="search-outline" size={24} color="#000" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerButton}>
+            <Ionicons name="notifications-outline" size={24} color="#000" />
+            <View style={styles.notificationDot} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentInsetAdjustmentBehavior="automatic"
+        style={styles.scrollView}
+      >
+        {/* User Booking Card */}
+        {userBooking && (
+          <TouchableOpacity 
+            style={styles.bookingCard}
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate('BookingDetails', { bookingId: userBooking.id })}
+          >
+            <View style={styles.bookingIconContainer}>
+              <Ionicons name="calendar-outline" size={24} color="#FFFFFF" />
+            </View>
+            <View style={styles.bookingInfo}>
+              <Text style={styles.bookingTitle}>Ваша запись</Text>
+              <Text style={styles.bookingDate}>{userBooking.date} в {userBooking.time}</Text>
+              <Text style={styles.bookingService}>{userBooking.service}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#FFFFFF" style={{ opacity: 0.7 }} />
+          </TouchableOpacity>
+        )}
+
         {/* Slider */}
         <View style={styles.sliderContainer}>
           <Animated.FlatList
@@ -253,10 +295,12 @@ const HomeScreen = () => {
             }}
             viewabilityConfig={viewConfigRef}
             keyExtractor={item => item.id}
+            snapToInterval={screenWidth - 40}
+            decelerationRate="fast"
           />
           <View style={styles.pagination}>
             {slides.map((_, i) => (
-              <Animated.View
+              <View
                 key={i}
                 style={[
                   styles.paginationDot,
@@ -272,78 +316,220 @@ const HomeScreen = () => {
           {quickActions.map(action => (
             <TouchableOpacity
               key={action.id}
-              style={[styles.quickActionCard, { backgroundColor: action.backgroundColor }]}
+              style={[styles.quickActionCard, { backgroundColor: action.bgColor }]}
               onPress={() => navigation.navigate(action.route)}
-              activeOpacity={0.85}
+              activeOpacity={0.7}
             >
-              <Ionicons name={action.icon} size={28} color={action.color} style={{ marginBottom: 8 }} />
-              <Text style={styles.quickActionTitle}>{action.title}</Text>
+              <Ionicons name={action.icon} size={32} color={action.color} />
+              <View style={styles.quickActionText}>
+                <Text style={styles.quickActionTitle}>{action.title}</Text>
+                <Text style={styles.quickActionSubtitle}>{action.subtitle}</Text>
+              </View>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Секция популярных товаров */}
+        {/* Popular Products */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionMainTitle}>Популярные товары</Text>
+            <Text style={styles.sectionTitle}>Популярные товары</Text>
             <TouchableOpacity
-              style={styles.seeAllButton}
               onPress={() => navigation.navigate("ProductList")}
+              activeOpacity={0.7}
             >
-              <Ionicons name="chevron-forward" size={18} color="#6366F1" />
+              <Text style={styles.seeAllText}>Все</Text>
             </TouchableOpacity>
           </View>
           
           {loading ? (
-            <ActivityIndicator size="large" color="#6366F1" style={styles.loader} />
+            <ActivityIndicator size="small" color="#007AFF" style={styles.loader} />
           ) : error ? (
-            <Text style={styles.errorText}>{error}</Text>
+            <Text style={styles.errorText}>Ошибка загрузки</Text>
           ) : (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingVertical: 2, paddingRight: 20 }}
+              contentContainerStyle={styles.productsScrollView}
             >
               {popularProducts.map(renderProduct)}
             </ScrollView>
           )}
         </View>
 
-        {/* Categories */}
+        {/* Recent Orders */}
         <View style={styles.section}>
-          <Text style={styles.sectionMainTitle}>Категории</Text>
-          <View style={styles.categoriesGrid}>
-            {categories.map(category => (
-              <TouchableOpacity key={category.id} style={styles.categoryCard} activeOpacity={0.88}>
-                <View style={[styles.categoryIconContainer, { backgroundColor: category.bgColor }]}>
-                  <Ionicons name={category.icon} size={24} color={category.color} />
-                </View>
-                <Text style={styles.categoryName}>{category.name}</Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Последние заказы</Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate("Orders")}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.seeAllText}>История</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.recentOrdersContainer}>
+            <TouchableOpacity style={styles.orderCard} activeOpacity={0.7}>
+              <View style={styles.orderStatus}>
+                <View style={[styles.orderStatusDot, { backgroundColor: '#34C759' }]} />
+                <Text style={styles.orderStatusText}>Доставлен</Text>
+              </View>
+              <Text style={styles.orderNumber}>Заказ #12345</Text>
+              <Text style={styles.orderDate}>15 июня, 14:30</Text>
+              <Text style={styles.orderItems}>Шины Michelin x4</Text>
+              <Text style={styles.orderPrice}>48 900 ₽</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.orderCard} activeOpacity={0.7}>
+              <View style={styles.orderStatus}>
+                <View style={[styles.orderStatusDot, { backgroundColor: '#FF9500' }]} />
+                <Text style={styles.orderStatusText}>В пути</Text>
+              </View>
+              <Text style={styles.orderNumber}>Заказ #12346</Text>
+              <Text style={styles.orderDate}>16 июня, 10:00</Text>
+              <Text style={styles.orderItems}>Моторное масло 5W30</Text>
+              <Text style={styles.orderPrice}>3 200 ₽</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Service Banner */}
-        <View style={styles.serviceBanner}>
-          <ImageBackground
-            source={{ uri: 'https://i.imgur.com/4QfKuz1.jpg' }}
-            style={styles.bannerImage}
-            imageStyle={{ borderRadius: 20 }}
+        {/* Special Offers */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Специальные предложения</Text>
+          </View>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.offersScrollView}
           >
-            <View style={styles.bannerOverlay} />
-            <View style={styles.bannerContent}>
-              <Ionicons name="build-outline" size={34} color="#fff" style={styles.bannerIcon} />
-              <Text style={styles.bannerTitle}>Профессиональный шиномонтаж</Text>
-              <Text style={styles.bannerText}>Скидка 10% при онлайн записи</Text>
-              <TouchableOpacity
-                style={styles.bannerButton}
-                onPress={() => navigation.navigate("Booking")}
-              >
-                <Text style={styles.bannerButtonText}>Записаться</Text>
-              </TouchableOpacity>
+            <TouchableOpacity style={styles.offerCard} activeOpacity={0.9}>
+              <View style={[styles.offerBadge, { backgroundColor: '#FF3B30' }]}>
+                <Text style={styles.offerBadgeText}>-30%</Text>
+              </View>
+              <Image 
+                source={{ uri: 'https://images.unsplash.com/photo-1565043666747-69f6646db940?w=400' }} 
+                style={styles.offerImage}
+              />
+              <View style={styles.offerContent}>
+                <Text style={styles.offerTitle}>Летние шины</Text>
+                <Text style={styles.offerDescription}>Скидка на весь ассортимент</Text>
+                <Text style={styles.offerExpiry}>До 30 июня</Text>
+              </View>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.offerCard} activeOpacity={0.9}>
+              <View style={[styles.offerBadge, { backgroundColor: '#5856D6' }]}>
+                <Text style={styles.offerBadgeText}>Акция</Text>
+              </View>
+              <Image 
+                source={{ uri: 'https://images.unsplash.com/photo-1487754180451-c456f719a1fc?w=400' }} 
+                style={styles.offerImage}
+              />
+              <View style={styles.offerContent}>
+                <Text style={styles.offerTitle}>Бесплатная диагностика</Text>
+                <Text style={styles.offerDescription}>При покупке от 10 000 ₽</Text>
+                <Text style={styles.offerExpiry}>Постоянно</Text>
+              </View>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+
+        {/* Services */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Наши услуги</Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate("Services")}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.seeAllText}>Все услуги</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.servicesContainer}>
+            <TouchableOpacity style={styles.serviceCard} activeOpacity={0.7}>
+              <View style={[styles.serviceIcon, { backgroundColor: '#007AFF15' }]}>
+                <Ionicons name="build" size={24} color="#007AFF" />
+              </View>
+              <Text style={styles.serviceName}>Шиномонтаж</Text>
+              <Text style={styles.servicePrice}>от 1 200 ₽</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.serviceCard} activeOpacity={0.7}>
+              <View style={[styles.serviceIcon, { backgroundColor: '#34C75915' }]}>
+                <Ionicons name="color-fill" size={24} color="#34C759" />
+              </View>
+              <Text style={styles.serviceName}>Замена масла</Text>
+              <Text style={styles.servicePrice}>от 800 ₽</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.serviceCard} activeOpacity={0.7}>
+              <View style={[styles.serviceIcon, { backgroundColor: '#FF950015' }]}>
+                <Ionicons name="car" size={24} color="#FF9500" />
+              </View>
+              <Text style={styles.serviceName}>Диагностика</Text>
+              <Text style={styles.servicePrice}>от 1 500 ₽</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.serviceCard} activeOpacity={0.7}>
+              <View style={[styles.serviceIcon, { backgroundColor: '#5856D615' }]}>
+                <Ionicons name="snow" size={24} color="#5856D6" />
+              </View>
+              <Text style={styles.serviceName}>Развал-схождение</Text>
+              <Text style={styles.servicePrice}>от 2 000 ₽</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Info Cards */}
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.infoCardsContainer}
+        >
+          <View style={[styles.infoCard, { backgroundColor: '#007AFF' }]}>
+            <Ionicons name="shield-checkmark" size={24} color="#FFFFFF" />
+            <Text style={styles.infoCardTitle}>Гарантия качества</Text>
+            <Text style={styles.infoCardText}>На все товары и услуги</Text>
+          </View>
+          <View style={[styles.infoCard, { backgroundColor: '#34C759' }]}>
+            <Ionicons name="time" size={24} color="#FFFFFF" />
+            <Text style={styles.infoCardTitle}>Быстрая доставка</Text>
+            <Text style={styles.infoCardText}>От 2 часов по городу</Text>
+          </View>
+          <View style={[styles.infoCard, { backgroundColor: '#FF9500' }]}>
+            <Ionicons name="card" size={24} color="#FFFFFF" />
+            <Text style={styles.infoCardTitle}>Рассрочка 0%</Text>
+            <Text style={styles.infoCardText}>До 12 месяцев</Text>
+          </View>
+        </ScrollView>
+
+        {/* Loyalty Program */}
+        <View style={styles.loyaltyCard}>
+          <View style={styles.loyaltyHeader}>
+            <View>
+              <Text style={styles.loyaltyTitle}>Ваша карта лояльности</Text>
+              <Text style={styles.loyaltyLevel}>Золотой уровень</Text>
             </View>
-          </ImageBackground>
+            <TouchableOpacity style={styles.loyaltyButton}>
+              <Ionicons name="qr-code" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.loyaltyStats}>
+            <View style={styles.loyaltyStat}>
+              <Text style={styles.loyaltyStatValue}>12 450</Text>
+              <Text style={styles.loyaltyStatLabel}>баллов</Text>
+            </View>
+            <View style={styles.loyaltyStatDivider} />
+            <View style={styles.loyaltyStat}>
+              <Text style={styles.loyaltyStatValue}>7%</Text>
+              <Text style={styles.loyaltyStatLabel}>скидка</Text>
+            </View>
+            <View style={styles.loyaltyStatDivider} />
+            <View style={styles.loyaltyStat}>
+              <Text style={styles.loyaltyStatValue}>3</Text>
+              <Text style={styles.loyaltyStatLabel}>до следующего</Text>
+            </View>
+          </View>
         </View>
 
         <View style={{ height: 40 }} />
@@ -353,226 +539,514 @@ const HomeScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F7F9FB' },
-  sliderContainer: { height: 210, marginVertical: 10 },
-  slide: { width: screenWidth - 40, marginHorizontal: 20 },
-  slideImage: { flex: 1, borderRadius: 20, overflow: 'hidden' },
-  slideOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 20,
-    backgroundColor: '#18181bBB'
+  container: {
+    flex: 1,
+    backgroundColor: '#F2F2F7',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+  },
+  headerGreeting: {
+    fontSize: 13,
+    color: '#8E8E93',
+    marginBottom: 2,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#000000',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerButton: {
+    padding: 8,
+    marginLeft: 8,
+    position: 'relative',
+  },
+  notificationDot: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    backgroundColor: '#FF3B30',
+    borderRadius: 4,
+  },
+  
+  // Booking Card
+  bookingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#007AFF',
+    margin: 20,
+    marginBottom: 0,
+    padding: 16,
+    borderRadius: 16,
+  },
+  bookingIconContainer: {
+    width: 48,
+    height: 48,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  bookingInfo: {
+    flex: 1,
+  },
+  bookingTitle: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.8)',
+    marginBottom: 2,
+  },
+  bookingDate: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  bookingService: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.9)',
+  },
+  
+  // Slider
+  sliderContainer: {
+    height: 200,
+    marginTop: 20,
+  },
+  slide: {
+    width: screenWidth - 40,
+    marginHorizontal: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+  },
+  slideImage: {
+    width: '100%',
+    height: '100%',
+  },
+  slideGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 120,
+    backgroundColor: 'transparent',
+    backgroundImage: 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.8))',
   },
   slideTextWrap: {
     position: 'absolute',
-    left: 24, bottom: 28, right: 24,
-    zIndex: 3
+    left: 20,
+    bottom: 20,
+    right: 20,
   },
   slideTitle: {
     fontSize: 22,
-    fontWeight: '800',
-    color: '#fff',
+    fontWeight: '700',
+    color: '#FFFFFF',
     marginBottom: 4,
-    letterSpacing: 0.5
   },
   slideSubtitle: {
     fontSize: 15,
-    color: '#fff',
-    fontWeight: '500',
-    opacity: 0.94,
-    marginBottom: 16
+    color: 'rgba(255,255,255,0.9)',
+    marginBottom: 12,
   },
   slideButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 16,
-    backgroundColor: 'rgba(99,102,241,0.9)',
+    borderRadius: 100,
     alignSelf: 'flex-start',
-    marginTop: 8
   },
   slideButtonText: {
-    color: 'white',
-    fontWeight: '700',
-    marginRight: 8,
-    fontSize: 15
+    color: '#000000',
+    fontWeight: '600',
+    fontSize: 14,
+    marginRight: 4,
   },
   pagination: {
-    position: 'absolute',
-    bottom: 14,
-    left: 0, right: 0,
     flexDirection: 'row',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    marginTop: 12,
   },
   paginationDot: {
-    width: 8, height: 8, borderRadius: 4,
-    backgroundColor: '#fff',
-    opacity: 0.18,
-    margin: 3
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#C7C7CC',
+    marginHorizontal: 3,
   },
   activeDot: {
-    opacity: 0.95,
-    width: 24
+    backgroundColor: '#000000',
+    width: 18,
   },
+  
+  // Quick Actions
   quickActionsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     gap: 12,
-    marginTop: 16,
-    marginBottom: 30,
-    paddingHorizontal: 20
+    marginTop: 24,
+    marginBottom: 24,
+    paddingHorizontal: 20,
   },
   quickActionCard: {
     flex: 1,
-    alignItems: 'center',
-    paddingVertical: 18,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 6,
-    elevation: 2
-  },
-  quickActionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#22223B',
-    textAlign: 'center'
-  },
-  section: { marginBottom: 32, paddingHorizontal: 20 },
-  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 14,
-    justifyContent: 'space-between'
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
   },
-  sectionMainTitle: {
-    fontSize: 20, fontWeight: '700', color: '#272640'
+  quickActionText: {
+    marginLeft: 12,
+    flex: 1,
   },
-  seeAllButton: {
-    paddingHorizontal: 12, paddingVertical: 10, borderRadius: 30,
-    backgroundColor: '#F0F4FF'
+  quickActionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000000',
+    marginBottom: 2,
+  },
+  quickActionSubtitle: {
+    fontSize: 13,
+    color: '#8E8E93',
+  },
+  
+  // Sections
+  section: {
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000000',
+  },
+  seeAllText: {
+    fontSize: 16,
+    color: '#007AFF',
+    fontWeight: '400',
+  },
+  
+  // Products
+  productsScrollView: {
+    paddingHorizontal: 20,
   },
   productCard: {
-    width: 156,
-    backgroundColor: '#fff',
+    width: 160,
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 14,
-    marginRight: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 2,
-    position: 'relative',
-    marginBottom: 2
+    padding: 12,
+    marginRight: 12,
   },
-  productImageContainer: { position: 'relative', marginBottom: 10 },
-  productImage: { width: '100%', height: 75, resizeMode: 'contain', borderRadius: 10 },
-  outOfStockOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.83)',
-    borderRadius: 10
+  productImageContainer: {
+    backgroundColor: '#F2F2F7',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    height: 140,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  productImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
   },
   discountBadge: {
-    position: 'absolute', top: 5, right: 5,
-    backgroundColor: '#EF4444',
-    paddingVertical: 2, paddingHorizontal: 8,
-    borderRadius: 12, zIndex: 1
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: '#FF3B30',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    zIndex: 1,
   },
-  discountText: { fontSize: 12, color: '#fff', fontWeight: '700' },
+  discountText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
   productName: {
-    fontSize: 14, color: '#1E293B', fontWeight: '600',
-    marginBottom: 6, lineHeight: 18
+    fontSize: 14,
+    color: '#000000',
+    marginBottom: 8,
+    lineHeight: 18,
+    minHeight: 36,
   },
-  priceBlock: {
-    flexDirection: 'row', alignItems: 'center', marginBottom: 7
+  productBottom: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 6,
   },
   productPrice: {
-    fontSize: 15, fontWeight: '700', color: '#1E293B'
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#000000',
   },
   originalPrice: {
-    fontSize: 13,
-    color: '#94A3B8',
+    fontSize: 14,
+    color: '#8E8E93',
     textDecorationLine: 'line-through',
-    marginLeft: 7
+    marginLeft: 6,
   },
-  productMeta: {
-    flexDirection: 'row', alignItems: 'center'
+  stockIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   stockDot: {
-    width: 7, height: 7, borderRadius: 4, marginRight: 7
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
   },
   stockText: {
-    fontSize: 11, fontWeight: '500'
+    fontSize: 12,
+    fontWeight: '500',
   },
-  ratingText: {
-    fontSize: 12, color: '#64748B', fontWeight: '500', marginLeft: 3
+  
+  // Recent Orders
+  recentOrdersContainer: {
+    paddingHorizontal: 20,
+    gap: 12,
   },
-
-  // Categories
-  categoriesGrid: {
-    flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 12
-  },
-  categoryCard: {
-    width: '30%',
-    backgroundColor: '#fff',
+  orderCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 16,
     borderRadius: 16,
-    paddingVertical: 20,
-    marginBottom: 18,
+    marginBottom: 12,
+  },
+  orderStatus: {
+    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 1
+    marginBottom: 8,
   },
-  categoryIconContainer: {
-    width: 46, height: 46, borderRadius: 23,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 9
+  orderStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
   },
-  categoryName: {
-    fontSize: 13, color: '#475569', fontWeight: '600', textAlign: 'center'
+  orderStatusText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#000000',
   },
-
-  // Service Banner
-  serviceBanner: {
-    marginHorizontal: 20, borderRadius: 20, overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12, shadowRadius: 20, elevation: 8, marginBottom: 15
+  orderNumber: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000000',
+    marginBottom: 4,
   },
-  bannerImage: { width: '100%', height: 170, justifyContent: 'flex-end' },
-  bannerOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(24,24,27,0.55)',
-    borderRadius: 20
+  orderDate: {
+    fontSize: 13,
+    color: '#8E8E93',
+    marginBottom: 8,
   },
-  bannerContent: {
-    padding: 22, alignItems: 'center'
+  orderItems: {
+    fontSize: 14,
+    color: '#000000',
+    marginBottom: 4,
   },
-  bannerIcon: { marginBottom: 13 },
-  bannerTitle: {
-    fontSize: 19, fontWeight: '700', color: '#fff', marginBottom: 5, textAlign: 'center'
+  orderPrice: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#000000',
+    marginTop: 4,
   },
-  bannerText: {
-    fontSize: 15, color: '#fff', fontWeight: '500', opacity: 0.95,
-    textAlign: 'center', marginBottom: 18, lineHeight: 20
+  
+  // Special Offers
+  offersScrollView: {
+    paddingHorizontal: 20,
   },
-  bannerButton: {
-    backgroundColor: '#6366F1',
-    paddingHorizontal: 30, paddingVertical: 10,
-    borderRadius: 16
+  offerCard: {
+    width: 280,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginRight: 12,
+    overflow: 'hidden',
   },
-  bannerButtonText: {
-    color: 'white', fontWeight: '700', fontSize: 15, letterSpacing: 0.2
+  offerBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    zIndex: 1,
   },
+  offerBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  offerImage: {
+    width: '100%',
+    height: 140,
+    backgroundColor: '#F2F2F7',
+  },
+  offerContent: {
+    padding: 16,
+  },
+  offerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#000000',
+    marginBottom: 4,
+  },
+  offerDescription: {
+    fontSize: 14,
+    color: '#8E8E93',
+    marginBottom: 8,
+  },
+  offerExpiry: {
+    fontSize: 13,
+    color: '#007AFF',
+    fontWeight: '500',
+  },
+  
+  // Services
+  servicesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  serviceCard: {
+    width: (screenWidth - 40 - 12) / 2,
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  serviceIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  serviceName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#000000',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  servicePrice: {
+    fontSize: 14,
+    color: '#8E8E93',
+    fontWeight: '500',
+  },
+  
+  // Info Cards
+  infoCardsContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  infoCard: {
+    width: 140,
+    padding: 16,
+    borderRadius: 16,
+    marginRight: 12,
+  },
+  infoCardTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  infoCardText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  
+  // Loyalty Card
+  loyaltyCard: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    backgroundColor: '#000000',
+    borderRadius: 16,
+    padding: 20,
+  },
+  loyaltyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 20,
+  },
+  loyaltyTitle: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.7)',
+    marginBottom: 4,
+  },
+  loyaltyLevel: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#FFD700',
+  },
+  loyaltyButton: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    padding: 10,
+    borderRadius: 12,
+  },
+  loyaltyStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  loyaltyStat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  loyaltyStatValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  loyaltyStatLabel: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.6)',
+  },
+  loyaltyStatDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  
+  // Others
   loader: {
-    paddingVertical: 40
+    paddingVertical: 40,
   },
   errorText: {
-    color: '#EF4444',
+    color: '#FF3B30',
     textAlign: 'center',
-    paddingVertical: 20
+    paddingVertical: 20,
+    fontSize: 15,
   },
 });
 

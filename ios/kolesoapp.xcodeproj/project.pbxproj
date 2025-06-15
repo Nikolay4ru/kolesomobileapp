@@ -279,7 +279,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 28;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = NLC7F4RZS6;
 				ENABLE_BITCODE = NO;
@@ -322,7 +322,7 @@
 				CODE_SIGN_ENTITLEMENTS = kolesoapp/kolesoapp.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 28;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_TEAM = NLC7F4RZS6;
 				INFOPLIST_FILE = kolesoapp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "КОЛЕСО";
