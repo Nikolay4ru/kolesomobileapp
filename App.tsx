@@ -1,5 +1,6 @@
+// App.tsx - Версия с отладкой для поиска проблемы
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Platform, StatusBar, SafeAreaView } from "react-native";
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Navigation from "./navigation";
@@ -11,34 +12,90 @@ import { ordersStore } from "./stores/OrdersStore";
 import { storagesStore } from "./stores/StoragesStore";
 import { productStore } from "./stores/ProductStore";
 import { StoreProvider } from "./StoreContext";
+import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import AppMetrica from '@appmetrica/react-native-analytics';
-import { BottomSheet } from 'react-native-btr';
-import { Linking } from 'react-native';
-import { ActivityIndicator } from 'react-native-paper';
-import DeviceInfo from 'react-native-device-info';
-import axios from 'axios';
 
-interface VersionResponse {
-  android: {
-    version: string;
-    versionCode: number;
-    mandatory: boolean;
-    apkUrl: string;
-  };
-}
+// Простой компонент для тестирования
+const TestComponent = () => {
+  const { colors, theme } = useTheme();
+  
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+      <StatusBar 
+        barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.background}
+      />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: colors.text, fontSize: 20 }}>
+          Тема работает!
+        </Text>
+        <Text style={{ color: colors.textSecondary, fontSize: 16 }}>
+          Текущая тема: {theme}
+        </Text>
+      </View>
+    </SafeAreaView>
+  );
+};
 
+// Компонент для проверки StoreProvider
+const StoreTestComponent = () => {
+  const { authStore: auth } = useStores();
+  
+  return (
+    <View style={{ padding: 20 }}>
+      <Text>Store работает!</Text>
+      <Text>Auth store доступен: {auth ? 'Да' : 'Нет'}</Text>
+    </View>
+  );
+};
+
+// Импортируем useStores
+import { useStores } from "./useStores";
+
+// Основной компонент приложения с полной функциональностью
+const FullApp = () => {
+  const { colors } = useTheme();
+  const [appReady, setAppReady] = useState(false);
+
+  useEffect(() => {
+    // Инициализация AppMetrica
+    try {
+      AppMetrica.activate({
+        apiKey: 'fd80c859-f747-42dd-a512-5ef0b48fd129',
+        sessionTimeout: 120,
+        logs: true
+      });
+      
+      AppMetrica.reportEvent('Запуск');
+      authStore.initializeOneSignal();
+      setAppReady(true);
+    } catch (error) {
+      console.error('Ошибка инициализации:', error);
+      setAppReady(true); // Продолжаем даже при ошибке
+    }
+  }, []);
+
+  if (!appReady) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+        <Text style={{ color: colors.text }}>Загрузка...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
+      <PaperProvider>
+        <Navigation />
+      </PaperProvider>
+    </GestureHandlerRootView>
+  );
+};
+
+// Главный компонент с поэтапной загрузкой для отладки
 const App = () => {
-  const [visible, setVisible] = useState(false);
-  const [updateInfo, setUpdateInfo] = useState({
-    isNeeded: false,
-    latestVersion: '',
-    latestVersionCode: '',
-    currentVersion: '',
-    currentVersionCode: '',
-    apkUrl: '',
-    mandatory: false
-  });
-  const [loading, setLoading] = useState(false);
+  const [debugMode] = useState(false); // Измените на true для отладки
+  const [testStep, setTestStep] = useState(0);
 
   const stores = {
     authStore,
@@ -49,187 +106,58 @@ const App = () => {
     storagesStore
   };
 
-  useEffect(() => {
-    // Инициализация AppMetrica
-    AppMetrica.activate({
-      apiKey: 'fd80c859-f747-42dd-a512-5ef0b48fd129',
-      sessionTimeout: 120,
-      logs: true
-    });
-    
-    AppMetrica.reportEvent('Запуск');
-    authStore.initializeOneSignal();
-
-    // Проверка версии только на Android
-    if (Platform.OS === 'android') {
-      checkAppVersion();
-    }
-  }, []);
-
-  const checkAppVersion = async () => {
-    try {
-      setLoading(true);
-      const currentVersion = DeviceInfo.getVersion();
-      const versionCode = await DeviceInfo.getBuildNumber();
-      
-      const response = await axios.get<VersionResponse>('https://api.koleso.app/version.json');
-      const androidVersion = response.data.android;
-      const isNeeded = compareVersions(
-        `${currentVersion}.${versionCode}`,
-        `${androidVersion.version}.${androidVersion.versionCode}`
-      );
-
-      if (isNeeded) {
-        setUpdateInfo({
-          isNeeded: true,
-          latestVersion: androidVersion.version,
-          latestVersionCode: androidVersion.versionCode,
-          currentVersion: currentVersion,
-          currentVersionCode: versionCode,
-          apkUrl: androidVersion.apkUrl,
-          mandatory: androidVersion.mandatory
-        });
-        setVisible(true);
-      }
-    } catch (error) {
-      console.error('Ошибка при проверке версии:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Функция для сравнения версий (формат "1.2.3.456")
-  const compareVersions = (current: string, latest: string): boolean => {
-    const currentParts = current.split('.').map(Number);
-    const latestParts = latest.split('.').map(Number);
-    
-    for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i++) {
-      const currentPart = currentParts[i] || 0;
-      const latestPart = latestParts[i] || 0;
-      
-      if (latestPart > currentPart) return true;
-      if (latestPart < currentPart) return false;
-    }
-    
-    return false;
-  };
-
-  const handleUpdate = () => {
-    if (updateInfo.apkUrl) {
-      Linking.openURL(updateInfo.apkUrl);
-    }
-    if (!updateInfo.mandatory) {
-      setVisible(false);
-    }
-  };
-
-  const toggleBottomSheet = () => {
-    if (!updateInfo.mandatory) {
-      setVisible(!visible);
-    }
-  };
-
-  return (
-    <PaperProvider>
-      <StoreProvider stores={stores}>
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <Navigation />
-          
-          {loading && (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#0000ff" />
-            </View>
-          )}
-
-          <BottomSheet
-            visible={visible}
-            onBackButtonPress={toggleBottomSheet}
-            onBackdropPress={toggleBottomSheet}
-          >
-            <View style={styles.bottomSheet}>
-              <Text style={styles.title}>
-                {updateInfo.mandatory ? 'Требуется обновление' : 'Доступно обновление'}
-              </Text>
-              <Text style={styles.versionText}>
-                Текущая версия: {updateInfo.currentVersion+' build '+ updateInfo.currentVersionCode}
-              </Text>
-              <Text style={styles.versionText}>
-                Новая версия: {updateInfo.latestVersion+' build '+updateInfo.latestVersionCode} 
+  // Режим отладки - поэтапная проверка
+  if (debugMode) {
+    return (
+      <StoreProvider value={stores}>
+        <ThemeProvider>
+          <SafeAreaView style={{ flex: 1 }}>
+            <View style={{ padding: 20 }}>
+              <Text style={{ fontSize: 18, marginBottom: 20 }}>
+                Тестирование компонентов:
               </Text>
               
               <TouchableOpacity 
-                style={styles.updateButton} 
-                onPress={handleUpdate}
+                onPress={() => setTestStep(0)}
+                style={{ padding: 10, backgroundColor: testStep === 0 ? '#007AFF' : '#ccc', marginBottom: 10 }}
               >
-                <Text style={styles.buttonText}>Обновить</Text>
+                <Text style={{ color: 'white' }}>1. Тест темы</Text>
               </TouchableOpacity>
               
-              {!updateInfo.mandatory && (
-                <TouchableOpacity 
-                  style={styles.cancelButton} 
-                  onPress={toggleBottomSheet}
-                >
-                  <Text style={styles.buttonText}>Позже</Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity 
+                onPress={() => setTestStep(1)}
+                style={{ padding: 10, backgroundColor: testStep === 1 ? '#007AFF' : '#ccc', marginBottom: 10 }}
+              >
+                <Text style={{ color: 'white' }}>2. Тест Store</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                onPress={() => setTestStep(2)}
+                style={{ padding: 10, backgroundColor: testStep === 2 ? '#007AFF' : '#ccc', marginBottom: 10 }}
+              >
+                <Text style={{ color: 'white' }}>3. Полное приложение</Text>
+              </TouchableOpacity>
             </View>
-          </BottomSheet>
-        </GestureHandlerRootView>
+            
+            <View style={{ flex: 1 }}>
+              {testStep === 0 && <TestComponent />}
+              {testStep === 1 && <StoreTestComponent />}
+              {testStep === 2 && <FullApp />}
+            </View>
+          </SafeAreaView>
+        </ThemeProvider>
       </StoreProvider>
-    </PaperProvider>
+    );
+  }
+
+  // Обычный режим
+  return (
+    <StoreProvider value={stores}>
+      <ThemeProvider>
+        <FullApp />
+      </ThemeProvider>
+    </StoreProvider>
   );
 };
-
-const styles = StyleSheet.create({
-  bottomSheet: {
-    backgroundColor: 'white',
-    padding: 20,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    alignItems: 'center'
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 15,
-    color: '#333'
-  },
-  versionText: {
-    fontSize: 16,
-    marginBottom: 10,
-    color: '#666'
-  },
-  updateButton: {
-    backgroundColor: '#007AFF',
-    padding: 15,
-    borderRadius: 10,
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 10
-  },
-  cancelButton: {
-    backgroundColor: '#FF3B30',
-    padding: 15,
-    borderRadius: 10,
-    width: '100%',
-    alignItems: 'center'
-  },
-  buttonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold'
-  },
-  loadingContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    zIndex: 1000
-  }
-});
 
 export default App;

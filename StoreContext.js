@@ -1,13 +1,6 @@
-import React from "react";
+// StoreContext.js
+import React from 'react';
 
-// Создаем контекст для хранилищ
-export const StoreContext = React.createContext();
+export const StoreContext = React.createContext(null);
 
-// Создаем провайдер для хранилищ
-export const StoreProvider = ({ children, stores }) => {
-  return (
-    <StoreContext.Provider value={stores}>
-      {children}
-    </StoreContext.Provider>
-  );
-};
+export const StoreProvider = StoreContext.Provider;

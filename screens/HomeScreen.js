@@ -10,17 +10,21 @@ import {
   ActivityIndicator,
   Animated,
   StatusBar,
-  ImageBackground,
   Platform,
 } from 'react-native';
 import { useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useTheme } from '../contexts/ThemeContext';
+import { useThemedStyles } from '../hooks/useThemedStyles';
+import SearchModal from '../components/SearchModal';
 
 const API_URL = 'https://api.koleso.app/api';
 const { width: screenWidth } = Dimensions.get('window');
 
 const HomeScreen = () => {
+  const { colors, theme } = useTheme();
+  const styles = useThemedStyles(themedStyles);
   const [activeSlide, setActiveSlide] = useState(0);
   const scrollX = useRef(new Animated.Value(0)).current;
   const [popularProducts, setPopularProducts] = useState([]);
@@ -28,9 +32,9 @@ const HomeScreen = () => {
   const [userBooking, setUserBooking] = useState(null);
   const slidesRef = useRef(null);
   const [loading, setLoading] = useState(true);
+  const [searchModalVisible, setSearchModalVisible] = useState(false);
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const statusBarHeight = insets.top;
 
   const slides = [
     {
@@ -38,21 +42,21 @@ const HomeScreen = () => {
       title: 'Сезонная распродажа',
       subtitle: 'Премиум шины со скидкой до 40%',
       image: 'https://images.unsplash.com/photo-1621839673705-6617adf9e890?w=800',
-      backgroundColor: '#1a1a1a'
+      backgroundColor: theme === 'dark' ? '#2C2C2E' : '#1a1a1a'
     },
     {
       id: '2',
       title: 'Комплексное ТО',
       subtitle: 'Полная диагностика + замена масла',
       image: 'https://images.unsplash.com/photo-1625047509168-a7026f36de04?w=800',
-      backgroundColor: '#1a1a1a'
+      backgroundColor: theme === 'dark' ? '#2C2C2E' : '#1a1a1a'
     },
     {
       id: '3',
       title: 'Автоаксессуары',
       subtitle: 'Новинки сезона',
       image: 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?w=800',
-      backgroundColor: '#1a1a1a'
+      backgroundColor: theme === 'dark' ? '#2C2C2E' : '#1a1a1a'
     }
   ];
 
@@ -60,7 +64,6 @@ const HomeScreen = () => {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        // Загрузка записи пользователя
         const bookingResponse = await fetch(`${API_URL}/user_booking.php`);
         const bookingData = await bookingResponse.json();
         
@@ -88,10 +91,7 @@ const HomeScreen = () => {
         } else {
           setError(data.message || 'Failed to load popular products');
           // Fallback data
-          setPopularProducts([
-            { id: '1', name: 'Шина Michelin Pilot Sport 4', price: 12500, image: 'https://www.koleso-russia.ru/upload/resize_cache/iblock/359/449_476_0/e6p4btxrzy26h2dzjys7f4n6jb7i3ilt.jpg', inStock: true },
-            { id: '2', name: 'Диск Replica B125', price: 8900, image: 'https://www.koleso-russia.ru/upload/resize_cache/iblock/359/449_476_0/e6p4btxrzy26h2dzjys7f4n6jb7i3ilt.jpg', inStock: true, discount: 15 },
-          ]);
+          
         }
       } catch (err) {
         setError(err.message);
@@ -104,7 +104,6 @@ const HomeScreen = () => {
     fetchPopularProducts();
   }, []);
 
-  // Обработчик нажатия на товар
   const handleProductPress = async (productId) => {
     try {
       await fetch(`${API_URL}/update_product_stats.php`, {
@@ -139,23 +138,14 @@ const HomeScreen = () => {
     }
   };
 
-  const categories = [
-    { id: '1', name: 'Шины', icon: 'car-sport', color: '#007AFF' },
-    { id: '2', name: 'Диски', icon: 'disc', color: '#34C759' },
-    { id: '3', name: 'Масла', icon: 'water', color: '#FF9500' },
-    { id: '4', name: 'АКБ', icon: 'battery-full', color: '#5856D6' },
-    { id: '5', name: 'Химия', icon: 'flask', color: '#FF3B30' },
-    { id: '6', name: 'Сервис', icon: 'build', color: '#007AFF' }
-  ];
-
   const quickActions = [
     {
       id: '1',
       title: 'Подбор по авто',
       subtitle: 'Найдем подходящие товары',
       icon: 'car-sport',
-      color: '#007AFF',
-      bgColor: '#E3F2FF',
+      color: colors.primary,
+      bgColor: theme === 'dark' ? colors.surface : '#E3F2FF',
       route: 'FilterAuto'
     },
     {
@@ -163,8 +153,8 @@ const HomeScreen = () => {
       title: 'Записаться',
       subtitle: 'На сервис и шиномонтаж',
       icon: 'calendar',
-      color: '#34C759',
-      bgColor: '#E8F5E8',
+      color: colors.success,
+      bgColor: theme === 'dark' ? colors.surface : '#E8F5E8',
       route: 'Booking'
     }
   ];
@@ -193,7 +183,7 @@ const HomeScreen = () => {
         <Text style={styles.slideSubtitle}>{item.subtitle}</Text>
         <View style={styles.slideButton}>
           <Text style={styles.slideButtonText}>Подробнее</Text>
-          <Ionicons name="arrow-forward" size={16} color="#000" />
+          <Ionicons name="arrow-forward" size={16} color={theme === 'dark' ? '#000' : '#000'} />
         </View>
       </View>
     </TouchableOpacity>
@@ -222,8 +212,8 @@ const HomeScreen = () => {
         )}
       </View>
       <View style={styles.stockIndicator}>
-        <View style={[styles.stockDot, { backgroundColor: item.inStock ? "#34C759" : "#FF9500" }]} />
-        <Text style={[styles.stockText, { color: item.inStock ? "#34C759" : "#FF9500" }]}>
+        <View style={[styles.stockDot, { backgroundColor: item.inStock ? colors.success : colors.warning }]} />
+        <Text style={[styles.stockText, { color: item.inStock ? colors.success : colors.warning }]}>
           {item.inStock ? "В наличии" : "Под заказ"}
         </Text>
       </View>
@@ -231,21 +221,23 @@ const HomeScreen = () => {
   );
 
   return (
-    <View style={[styles.container, { paddingTop: statusBarHeight }]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar 
+        barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.background}
+      />
       
       {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerGreeting}>Добро пожаловать</Text>
-          <Text style={styles.headerTitle}>Главная</Text>
-        </View>
         <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.headerButton}>
-            <Ionicons name="search-outline" size={24} color="#000" />
+          <TouchableOpacity 
+            style={styles.headerButton}
+            onPress={() => setSearchModalVisible(true)}
+          >
+            <Ionicons name="search-outline" size={24} color={colors.text} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.headerButton}>
-            <Ionicons name="notifications-outline" size={24} color="#000" />
+            <Ionicons name="notifications-outline" size={24} color={colors.text} />
             <View style={styles.notificationDot} />
           </TouchableOpacity>
         </View>
@@ -256,25 +248,7 @@ const HomeScreen = () => {
         contentInsetAdjustmentBehavior="automatic"
         style={styles.scrollView}
       >
-        {/* User Booking Card */}
-        {userBooking && (
-          <TouchableOpacity 
-            style={styles.bookingCard}
-            activeOpacity={0.9}
-            onPress={() => navigation.navigate('BookingDetails', { bookingId: userBooking.id })}
-          >
-            <View style={styles.bookingIconContainer}>
-              <Ionicons name="calendar-outline" size={24} color="#FFFFFF" />
-            </View>
-            <View style={styles.bookingInfo}>
-              <Text style={styles.bookingTitle}>Ваша запись</Text>
-              <Text style={styles.bookingDate}>{userBooking.date} в {userBooking.time}</Text>
-              <Text style={styles.bookingService}>{userBooking.service}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#FFFFFF" style={{ opacity: 0.7 }} />
-          </TouchableOpacity>
-        )}
-
+  
         {/* Slider */}
         <View style={styles.sliderContainer}>
           <Animated.FlatList
@@ -311,6 +285,56 @@ const HomeScreen = () => {
           </View>
         </View>
 
+
+        <View style={styles.loyaltyCard}>
+  <View style={styles.loyaltyHeader}>
+    <View>
+      <Text style={styles.loyaltyTitle}>Ваша карта лояльности</Text>
+      <Text style={[styles.loyaltyStatValue, { fontSize: 20, marginTop: 4 }]}>12 450 <Text style={styles.loyaltyStatLabel}>баллов</Text></Text>
+    </View>
+    <TouchableOpacity style={styles.loyaltyButton}>
+      <Ionicons name="qr-code" size={24} color="#FFFFFF" />
+    </TouchableOpacity>
+  </View>
+  <View style={styles.loyaltyStats}>
+    <View style={styles.loyaltyStat}>
+      <Text style={styles.loyaltyStatValue}>3%</Text>
+      <Text style={styles.loyaltyStatLabel}>Оплата баллами</Text>
+    </View>
+    <View style={styles.loyaltyStatDivider} />
+    <View style={styles.loyaltyStat}>
+      <Text style={styles.loyaltyStatValue}>500</Text>
+      <Text style={styles.loyaltyStatLabel}>Приветственные баллы</Text>
+    </View>
+    <View style={styles.loyaltyStatDivider} />
+    <View style={styles.loyaltyStat}>
+      <Text style={styles.loyaltyStatValue}>-30%</Text>
+      <Text style={styles.loyaltyStatLabel}>на шиномонтаж</Text>
+    </View>
+  </View>
+</View>
+
+
+         {/* User Booking Card */}
+        {userBooking && (
+          <TouchableOpacity 
+            style={styles.bookingCard}
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate('BookingDetails', { bookingId: userBooking.id })}
+          >
+            <View style={styles.bookingIconContainer}>
+              <Ionicons name="calendar-outline" size={24} color="#FFFFFF" />
+            </View>
+            <View style={styles.bookingInfo}>
+              <Text style={styles.bookingTitle}>Ваша запись</Text>
+              <Text style={styles.bookingDate}>{userBooking.date} в {userBooking.time}</Text>
+              <Text style={styles.bookingService}>{userBooking.service}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#FFFFFF" style={{ opacity: 0.7 }} />
+          </TouchableOpacity>
+        )}
+
+
         {/* Quick Actions */}
         <View style={styles.quickActionsContainer}>
           {quickActions.map(action => (
@@ -342,7 +366,7 @@ const HomeScreen = () => {
           </View>
           
           {loading ? (
-            <ActivityIndicator size="small" color="#007AFF" style={styles.loader} />
+            <ActivityIndicator size="small" color={colors.primary} style={styles.loader} />
           ) : error ? (
             <Text style={styles.errorText}>Ошибка загрузки</Text>
           ) : (
@@ -370,7 +394,7 @@ const HomeScreen = () => {
           <View style={styles.recentOrdersContainer}>
             <TouchableOpacity style={styles.orderCard} activeOpacity={0.7}>
               <View style={styles.orderStatus}>
-                <View style={[styles.orderStatusDot, { backgroundColor: '#34C759' }]} />
+                <View style={[styles.orderStatusDot, { backgroundColor: colors.success }]} />
                 <Text style={styles.orderStatusText}>Доставлен</Text>
               </View>
               <Text style={styles.orderNumber}>Заказ #12345</Text>
@@ -381,7 +405,7 @@ const HomeScreen = () => {
             
             <TouchableOpacity style={styles.orderCard} activeOpacity={0.7}>
               <View style={styles.orderStatus}>
-                <View style={[styles.orderStatusDot, { backgroundColor: '#FF9500' }]} />
+                <View style={[styles.orderStatusDot, { backgroundColor: colors.warning }]} />
                 <Text style={styles.orderStatusText}>В пути</Text>
               </View>
               <Text style={styles.orderNumber}>Заказ #12346</Text>
@@ -403,7 +427,7 @@ const HomeScreen = () => {
             contentContainerStyle={styles.offersScrollView}
           >
             <TouchableOpacity style={styles.offerCard} activeOpacity={0.9}>
-              <View style={[styles.offerBadge, { backgroundColor: '#FF3B30' }]}>
+              <View style={[styles.offerBadge, { backgroundColor: colors.error }]}>
                 <Text style={styles.offerBadgeText}>-30%</Text>
               </View>
               <Image 
@@ -439,43 +463,47 @@ const HomeScreen = () => {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Наши услуги</Text>
             <TouchableOpacity
-              onPress={() => navigation.navigate("Services")}
+              onPress={() => navigation.navigate("Booking")}
               activeOpacity={0.7}
             >
-              <Text style={styles.seeAllText}>Все услуги</Text>
+              <Text style={styles.seeAllText}>Записаться</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.servicesContainer}>
-            <TouchableOpacity style={styles.serviceCard} activeOpacity={0.7}>
-              <View style={[styles.serviceIcon, { backgroundColor: '#007AFF15' }]}>
-                <Ionicons name="build" size={24} color="#007AFF" />
+            <TouchableOpacity 
+              style={styles.serviceCard} 
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate("Booking")}
+            >
+              <View style={[styles.serviceIcon, { backgroundColor: colors.primary + '15' }]}>
+                <Ionicons name="build" size={24} color={colors.primary} />
               </View>
               <Text style={styles.serviceName}>Шиномонтаж</Text>
               <Text style={styles.servicePrice}>от 1 200 ₽</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.serviceCard} activeOpacity={0.7}>
-              <View style={[styles.serviceIcon, { backgroundColor: '#34C75915' }]}>
-                <Ionicons name="color-fill" size={24} color="#34C759" />
+            <TouchableOpacity 
+              style={styles.serviceCard} 
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate("Storages")}
+            >
+              <View style={[styles.serviceIcon, { backgroundColor: colors.success + '15' }]}>
+                <Ionicons name="archive" size={24} color={colors.success} />
               </View>
-              <Text style={styles.serviceName}>Замена масла</Text>
-              <Text style={styles.servicePrice}>от 800 ₽</Text>
+              <Text style={styles.serviceName}>Хранение</Text>
+              <Text style={styles.servicePrice}>от 2 500 ₽</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.serviceCard} activeOpacity={0.7}>
-              <View style={[styles.serviceIcon, { backgroundColor: '#FF950015' }]}>
-                <Ionicons name="car" size={24} color="#FF9500" />
+            <TouchableOpacity 
+              style={styles.serviceCard} 
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate("Booking")}
+            >
+              <View style={[styles.serviceIcon, { backgroundColor: colors.warning + '15' }]}>
+                <Ionicons name="disc" size={24} color={colors.warning} />
               </View>
-              <Text style={styles.serviceName}>Диагностика</Text>
+              <Text style={styles.serviceName}>Правка дисков</Text>
               <Text style={styles.servicePrice}>от 1 500 ₽</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.serviceCard} activeOpacity={0.7}>
-              <View style={[styles.serviceIcon, { backgroundColor: '#5856D615' }]}>
-                <Ionicons name="snow" size={24} color="#5856D6" />
-              </View>
-              <Text style={styles.serviceName}>Развал-схождение</Text>
-              <Text style={styles.servicePrice}>от 2 000 ₽</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -486,83 +514,50 @@ const HomeScreen = () => {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.infoCardsContainer}
         >
-          <View style={[styles.infoCard, { backgroundColor: '#007AFF' }]}>
+          <View style={[styles.infoCard, { backgroundColor: colors.primary }]}>
             <Ionicons name="shield-checkmark" size={24} color="#FFFFFF" />
             <Text style={styles.infoCardTitle}>Гарантия качества</Text>
             <Text style={styles.infoCardText}>На все товары и услуги</Text>
           </View>
-          <View style={[styles.infoCard, { backgroundColor: '#34C759' }]}>
+          <View style={[styles.infoCard, { backgroundColor: colors.success }]}>
             <Ionicons name="time" size={24} color="#FFFFFF" />
             <Text style={styles.infoCardTitle}>Быстрая доставка</Text>
             <Text style={styles.infoCardText}>От 2 часов по городу</Text>
           </View>
-          <View style={[styles.infoCard, { backgroundColor: '#FF9500' }]}>
+          <View style={[styles.infoCard, { backgroundColor: colors.warning }]}>
             <Ionicons name="card" size={24} color="#FFFFFF" />
             <Text style={styles.infoCardTitle}>Рассрочка 0%</Text>
             <Text style={styles.infoCardText}>До 12 месяцев</Text>
           </View>
         </ScrollView>
 
-        {/* Loyalty Program */}
-        <View style={styles.loyaltyCard}>
-          <View style={styles.loyaltyHeader}>
-            <View>
-              <Text style={styles.loyaltyTitle}>Ваша карта лояльности</Text>
-              <Text style={styles.loyaltyLevel}>Золотой уровень</Text>
-            </View>
-            <TouchableOpacity style={styles.loyaltyButton}>
-              <Ionicons name="qr-code" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.loyaltyStats}>
-            <View style={styles.loyaltyStat}>
-              <Text style={styles.loyaltyStatValue}>12 450</Text>
-              <Text style={styles.loyaltyStatLabel}>баллов</Text>
-            </View>
-            <View style={styles.loyaltyStatDivider} />
-            <View style={styles.loyaltyStat}>
-              <Text style={styles.loyaltyStatValue}>7%</Text>
-              <Text style={styles.loyaltyStatLabel}>скидка</Text>
-            </View>
-            <View style={styles.loyaltyStatDivider} />
-            <View style={styles.loyaltyStat}>
-              <Text style={styles.loyaltyStatValue}>3</Text>
-              <Text style={styles.loyaltyStatLabel}>до следующего</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={{ height: 40 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Search Modal */}
+      <SearchModal 
+        visible={searchModalVisible}
+        onClose={() => setSearchModalVisible(false)}
+      />
     </View>
   );
 };
 
-const styles = StyleSheet.create({
+const themedStyles = (colors, theme) => ({
   container: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: colors.background,
   },
   scrollView: {
     flex: 1,
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-  },
-  headerGreeting: {
-    fontSize: 13,
-    color: '#8E8E93',
-    marginBottom: 2,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#000000',
+    backgroundColor: colors.card,
   },
   headerActions: {
     flexDirection: 'row',
@@ -579,20 +574,62 @@ const styles = StyleSheet.create({
     right: 8,
     width: 8,
     height: 8,
-    backgroundColor: '#FF3B30',
+    backgroundColor: colors.error,
     borderRadius: 4,
   },
   
-  // Booking Card
-  bookingCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#007AFF',
-    margin: 20,
+  // Loyalty Card
+  loyaltyCard: {
+    marginHorizontal: 20,
+    marginTop: 20,
     marginBottom: 0,
-    padding: 16,
+    backgroundColor: theme === 'dark' ? colors.primary : '#000000',
     borderRadius: 16,
+    padding: 20,
   },
+  loyaltyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 20,
+  },
+  loyaltyTitle: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.7)',
+    marginBottom: 4,
+  },
+  loyaltyButton: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    padding: 10,
+    borderRadius: 12,
+  },
+  loyaltyStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  loyaltyStat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  loyaltyStatValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  loyaltyStatLabel: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.6)',
+    textAlign: 'center',
+  },
+  loyaltyStatDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  
+  // Booking Card
   bookingIconContainer: {
     width: 48,
     height: 48,
@@ -631,7 +668,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#000',
+    backgroundColor: theme === 'dark' ? colors.surface : '#000',
   },
   slideImage: {
     width: '100%',
@@ -687,11 +724,11 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#C7C7CC',
+    backgroundColor: colors.textTertiary,
     marginHorizontal: 3,
   },
   activeDot: {
-    backgroundColor: '#000000',
+    backgroundColor: theme === 'dark' ? colors.primary : colors.text,
     width: 18,
   },
   
@@ -709,7 +746,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderRadius: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: theme === 'dark' ? 0.2 : 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   quickActionText: {
     marginLeft: 12,
@@ -718,12 +760,12 @@ const styles = StyleSheet.create({
   quickActionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#000000',
+    color: colors.text,
     marginBottom: 2,
   },
   quickActionSubtitle: {
     fontSize: 13,
-    color: '#8E8E93',
+    color: colors.textSecondary,
   },
   
   // Sections
@@ -740,11 +782,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#000000',
+    color: colors.text,
   },
   seeAllText: {
     fontSize: 16,
-    color: '#007AFF',
+    color: colors.primary,
     fontWeight: '400',
   },
   
@@ -754,13 +796,18 @@ const styles = StyleSheet.create({
   },
   productCard: {
     width: 160,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 16,
     padding: 12,
     marginRight: 12,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: theme === 'dark' ? 0.2 : 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   productImageContainer: {
-    backgroundColor: '#F2F2F7',
+    backgroundColor: colors.surface,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -777,7 +824,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 12,
     right: 12,
-    backgroundColor: '#FF3B30',
+    backgroundColor: colors.error,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
@@ -790,7 +837,7 @@ const styles = StyleSheet.create({
   },
   productName: {
     fontSize: 14,
-    color: '#000000',
+    color: colors.text,
     marginBottom: 8,
     lineHeight: 18,
     minHeight: 36,
@@ -803,11 +850,11 @@ const styles = StyleSheet.create({
   productPrice: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#000000',
+    color: colors.text,
   },
   originalPrice: {
     fontSize: 14,
-    color: '#8E8E93',
+    color: colors.textSecondary,
     textDecorationLine: 'line-through',
     marginLeft: 6,
   },
@@ -832,10 +879,15 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   orderCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     padding: 16,
     borderRadius: 16,
     marginBottom: 12,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: theme === 'dark' ? 0.2 : 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   orderStatus: {
     flexDirection: 'row',
@@ -851,28 +903,28 @@ const styles = StyleSheet.create({
   orderStatusText: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#000000',
+    color: colors.text,
   },
   orderNumber: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#000000',
+    color: colors.text,
     marginBottom: 4,
   },
   orderDate: {
     fontSize: 13,
-    color: '#8E8E93',
+    color: colors.textSecondary,
     marginBottom: 8,
   },
   orderItems: {
     fontSize: 14,
-    color: '#000000',
+    color: colors.text,
     marginBottom: 4,
   },
   orderPrice: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#000000',
+    color: colors.text,
     marginTop: 4,
   },
   
@@ -882,10 +934,15 @@ const styles = StyleSheet.create({
   },
   offerCard: {
     width: 280,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 16,
     marginRight: 12,
     overflow: 'hidden',
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: theme === 'dark' ? 0.2 : 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   offerBadge: {
     position: 'absolute',
@@ -904,7 +961,7 @@ const styles = StyleSheet.create({
   offerImage: {
     width: '100%',
     height: 140,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: colors.surface,
   },
   offerContent: {
     padding: 16,
@@ -912,17 +969,17 @@ const styles = StyleSheet.create({
   offerTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#000000',
+    color: colors.text,
     marginBottom: 4,
   },
   offerDescription: {
     fontSize: 14,
-    color: '#8E8E93',
+    color: colors.textSecondary,
     marginBottom: 8,
   },
   offerExpiry: {
     fontSize: 13,
-    color: '#007AFF',
+    color: colors.primary,
     fontWeight: '500',
   },
   
@@ -932,13 +989,19 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     paddingHorizontal: 20,
     gap: 12,
+    justifyContent: 'space-between',
   },
   serviceCard: {
-    width: (screenWidth - 40 - 12) / 2,
-    backgroundColor: '#FFFFFF',
+    width: (screenWidth - 40 - 24) / 3,
+    backgroundColor: colors.card,
     padding: 16,
     borderRadius: 16,
     alignItems: 'center',
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: theme === 'dark' ? 0.2 : 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   serviceIcon: {
     width: 48,
@@ -951,13 +1014,13 @@ const styles = StyleSheet.create({
   serviceName: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#000000',
+    color: colors.text,
     marginBottom: 4,
     textAlign: 'center',
   },
   servicePrice: {
     fontSize: 14,
-    color: '#8E8E93',
+    color: colors.textSecondary,
     fontWeight: '500',
   },
   
@@ -984,66 +1047,12 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.8)',
   },
   
-  // Loyalty Card
-  loyaltyCard: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-    backgroundColor: '#000000',
-    borderRadius: 16,
-    padding: 20,
-  },
-  loyaltyHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 20,
-  },
-  loyaltyTitle: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.7)',
-    marginBottom: 4,
-  },
-  loyaltyLevel: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#FFD700',
-  },
-  loyaltyButton: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    padding: 10,
-    borderRadius: 12,
-  },
-  loyaltyStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  loyaltyStat: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  loyaltyStatValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  loyaltyStatLabel: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.6)',
-  },
-  loyaltyStatDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-  },
-  
   // Others
   loader: {
     paddingVertical: 40,
   },
   errorText: {
-    color: '#FF3B30',
+    color: colors.error,
     textAlign: 'center',
     paddingVertical: 20,
     fontSize: 15,

@@ -8,7 +8,9 @@ import {
   Switch,
   Alert,
   Platform,
-  StatusBar
+  StatusBar,
+  Modal,
+  SafeAreaView
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -16,143 +18,211 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { observer } from 'mobx-react-lite';
 import { MMKV } from 'react-native-mmkv';
-import { authStore } from '../stores/AuthStore';
+import { useStores } from '../useStores';
+import { useTheme } from '../contexts/ThemeContext';
+import { useThemedStyles } from '../hooks/useThemedStyles';
 
 const storage = new MMKV();
+
+// Компонент модального окна выбора темы
+const ThemeSelector = ({ visible, onClose }) => {
+  const { themeMode, changeTheme, colors } = useTheme();
+  const styles = useThemedStyles(themeModalStyles);
+
+  const themeOptions = [
+    { label: 'Системная', value: 'system', icon: 'phone-iphone' },
+    { label: 'Светлая', value: 'light', icon: 'light-mode' },
+    { label: 'Темная', value: 'dark', icon: 'dark-mode' },
+  ];
+
+  const handleThemeChange = (value) => {
+    changeTheme(value);
+    onClose();
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity 
+        style={styles.overlay} 
+        activeOpacity={1} 
+        onPress={onClose}
+      >
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Выберите тему</Text>
+            
+            {themeOptions.map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.themeOption,
+                  themeMode === option.value && styles.selectedThemeOption
+                ]}
+                onPress={() => handleThemeChange(option.value)}
+              >
+                <Icon 
+                  name={option.icon} 
+                  size={24} 
+                  color={themeMode === option.value ? colors.primary : colors.text} 
+                />
+                <Text style={[
+                  styles.themeOptionText,
+                  themeMode === option.value && styles.selectedThemeText
+                ]}>
+                  {option.label}
+                </Text>
+                {themeMode === option.value && (
+                  <Icon name="check" size={20} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+            
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={onClose}
+            >
+              <Text style={styles.closeButtonText}>Закрыть</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
 
 const SettingsScreen = observer(() => {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const statusBarHeight = insets.top;
+  const { authStore } = useStores();
+  const { colors, theme, themeMode } = useTheme();
+  const styles = useThemedStyles(themedStyles);
+  const [themeModalVisible, setThemeModalVisible] = useState(false);
 
   // Состояния для настроек
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [adminNotificationsEnabled, setAdminNotificationsEnabled] = useState(true);
-  const [isDarkTheme, setIsDarkTheme] = useState(false);
 
   // Загрузка сохраненных настроек при монтировании
-useEffect(() => {
-  loadSettings();   
-  loadServerSettings(); 
-}, []);
+  useEffect(() => {
+    loadSettings();   
+    loadServerSettings(); 
+  }, []);
 
-const loadSettings = () => {
-  try {
-    const notifications = storage.getBoolean('notifications');
-    if (typeof notifications === 'boolean') setNotificationsEnabled(notifications);
+  const loadSettings = () => {
+    try {
+      const notifications = storage.getBoolean('notifications');
+      if (typeof notifications === 'boolean') setNotificationsEnabled(notifications);
 
-    const adminNotifications = storage.getBoolean('adminNotifications');
-    if (typeof adminNotifications === 'boolean') setAdminNotificationsEnabled(adminNotifications);
-
-    const darkTheme = storage.getBoolean('darkTheme');
-    if (typeof darkTheme === 'boolean') setIsDarkTheme(darkTheme);
-  } catch (error) {
-    console.error('Error loading settings:', error);
-  }
-};
-
-
-const saveSetting = (key, value) => {
-  try {
-    storage.set(key, value);
-  } catch (error) {
-    console.error('Error saving setting:', error);
-  }
-};
-
-const loadServerSettings = async () => {
-  if (!authStore.isLoggedIn) return;
-  try {
-    const response = await fetch('https://api.koleso.app/api/update_push_settings.php', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${authStore.token}`
-      }
-    });
-    const data = await response.json();
-    if (data.success && data.settings) {
-      if (typeof data.settings.push_enabled === 'boolean') {
-        setNotificationsEnabled(data.settings.push_enabled);
-        saveSetting('notifications', data.settings.push_enabled);
-      }
-      if (authStore.isAdmin && typeof data.settings.admin_push_enabled === 'boolean') {
-        setAdminNotificationsEnabled(data.settings.admin_push_enabled);
-        saveSetting('adminNotifications', data.settings.admin_push_enabled);
-      }
+      const adminNotifications = storage.getBoolean('adminNotifications');
+      if (typeof adminNotifications === 'boolean') setAdminNotificationsEnabled(adminNotifications);
+    } catch (error) {
+      console.error('Error loading settings:', error);
     }
-  } catch (error) {
-    console.error('Error loading server settings:', error);
-  }
-};
+  };
 
-const handleNotificationToggle = async (value) => {
-  setNotificationsEnabled(value); // UI сразу обновится
-  saveSetting('notifications', value);
+  const saveSetting = (key, value) => {
+    try {
+      storage.set(key, value);
+    } catch (error) {
+      console.error('Error saving setting:', error);
+    }
+  };
 
-  try {
-    const response = await fetch('https://api.koleso.app/api/update_push_settings.php', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${authStore.token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        push_enabled: value,
-        notification_type: 'general'
-      })
-    });
-    const data = await response.json();
-    if (!data.success) {
+  const loadServerSettings = async () => {
+    if (!authStore.isLoggedIn) return;
+    try {
+      const response = await fetch('https://api.koleso.app/api/update_push_settings.php', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${authStore.token}`
+        }
+      });
+      const data = await response.json();
+      if (data.success && data.settings) {
+        if (typeof data.settings.push_enabled === 'boolean') {
+          setNotificationsEnabled(data.settings.push_enabled);
+          saveSetting('notifications', data.settings.push_enabled);
+        }
+        if (authStore.isAdmin && typeof data.settings.admin_push_enabled === 'boolean') {
+          setAdminNotificationsEnabled(data.settings.admin_push_enabled);
+          saveSetting('adminNotifications', data.settings.admin_push_enabled);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading server settings:', error);
+    }
+  };
+
+  const handleNotificationToggle = async (value) => {
+    setNotificationsEnabled(value);
+    saveSetting('notifications', value);
+
+    try {
+      const response = await fetch('https://api.koleso.app/api/update_push_settings.php', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authStore.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          push_enabled: value,
+          notification_type: 'general'
+        })
+      });
+      const data = await response.json();
+      if (!data.success) {
+        Alert.alert('Ошибка', 'Не удалось обновить настройки уведомлений');
+        setNotificationsEnabled(!value);
+        saveSetting('notifications', !value);
+      }
+    } catch (error) {
       Alert.alert('Ошибка', 'Не удалось обновить настройки уведомлений');
       setNotificationsEnabled(!value);
       saveSetting('notifications', !value);
     }
-    // В ЭТОМ МОМЕНТЕ НЕ НАДО ВЫЗЫВАТЬ loadServerSettings и loadSettings!
-  } catch (error) {
-    Alert.alert('Ошибка', 'Не удалось обновить настройки уведомлений');
-    setNotificationsEnabled(!value);
-    saveSetting('notifications', !value);
-  }
-};
+  };
 
-const handleAdminNotificationToggle = async (value) => {
-  setAdminNotificationsEnabled(value);
-  saveSetting('adminNotifications', value);
+  const handleAdminNotificationToggle = async (value) => {
+    setAdminNotificationsEnabled(value);
+    saveSetting('adminNotifications', value);
 
-  try {
-    const response = await fetch('https://api.koleso.app/api/update_push_settings.php', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${authStore.token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        push_enabled: value,
-        notification_type: 'admin'
-      })
-    });
-    const data = await response.json();
-    if (!data.success) {
+    try {
+      const response = await fetch('https://api.koleso.app/api/update_push_settings.php', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authStore.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          push_enabled: value,
+          notification_type: 'admin'
+        })
+      });
+      const data = await response.json();
+      if (!data.success) {
+        Alert.alert('Ошибка', 'Не удалось обновить настройки уведомлений');
+        setAdminNotificationsEnabled(!value);
+        saveSetting('adminNotifications', !value);
+      }
+    } catch (error) {
       Alert.alert('Ошибка', 'Не удалось обновить настройки уведомлений');
       setAdminNotificationsEnabled(!value);
       saveSetting('adminNotifications', !value);
     }
-  } catch (error) {
-    Alert.alert('Ошибка', 'Не удалось обновить настройки уведомлений');
-    setAdminNotificationsEnabled(!value);
-    saveSetting('adminNotifications', !value);
-  }
-};
+  };
 
-
-  const handleThemeToggle = (value) => {
-    setIsDarkTheme(value);
-    // Здесь можно добавить логику смены темы приложения
-    Alert.alert(
-      'Изменение темы',
-      `Тема изменена на ${value ? 'темную' : 'светлую'}. Изменения вступят в силу после перезапуска приложения.`,
-      [{ text: 'OK' }]
-    );
+  const getThemeLabel = () => {
+    switch (themeMode) {
+      case 'system': return 'Системная';
+      case 'light': return 'Светлая';
+      case 'dark': return 'Темная';
+      default: return 'Системная';
+    }
   };
 
   const handleLogout = () => {
@@ -187,7 +257,7 @@ const handleAdminNotificationToggle = async (value) => {
     <View style={[styles.settingItem, isLast && styles.settingItemLast]}>
       <View style={styles.settingItemLeft}>
         <View style={[styles.iconContainer, disabled && styles.iconContainerDisabled]}>
-          <Icon name={icon} size={22} color={disabled ? '#CCC' : '#4A9B8E'} />
+          <Icon name={icon} size={22} color={disabled ? colors.textTertiary : colors.primary} />
         </View>
         <View style={styles.textContainer}>
           <Text style={[styles.settingTitle, disabled && styles.disabledText]}>{title}</Text>
@@ -199,15 +269,15 @@ const handleAdminNotificationToggle = async (value) => {
       <Switch
         value={value}
         onValueChange={onValueChange}
-        trackColor={{ false: '#E0E0E0', true: '#A1E3D8' }}
-        thumbColor={value ? '#4A9B8E' : '#F5F5F5'}
-        ios_backgroundColor="#E0E0E0"
+        trackColor={{ false: colors.border, true: colors.primary + '50' }}
+        thumbColor={value ? colors.primary : colors.surface}
+        ios_backgroundColor={colors.border}
         disabled={disabled}
       />
     </View>
   );
 
-  const ActionItem = ({ icon, iconComponent = Icon, title, subtitle, onPress, isLast = false, danger = false }) => (
+  const ActionItem = ({ icon, iconComponent = Icon, title, subtitle, onPress, isLast = false, danger = false, showArrow = true }) => (
     <TouchableOpacity
       style={[styles.settingItem, isLast && styles.settingItemLast]}
       onPress={onPress}
@@ -216,9 +286,9 @@ const handleAdminNotificationToggle = async (value) => {
       <View style={styles.settingItemLeft}>
         <View style={[styles.iconContainer, danger && styles.iconContainerDanger]}>
           {iconComponent === Icon ? (
-            <Icon name={icon} size={22} color={danger ? '#EF4444' : '#4A9B8E'} />
+            <Icon name={icon} size={22} color={danger ? colors.error : colors.primary} />
           ) : (
-            <Ionicons name={icon} size={22} color={danger ? '#EF4444' : '#4A9B8E'} />
+            <Ionicons name={icon} size={22} color={danger ? colors.error : colors.primary} />
           )}
         </View>
         <View style={styles.textContainer}>
@@ -226,13 +296,16 @@ const handleAdminNotificationToggle = async (value) => {
           {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
         </View>
       </View>
-      <Icon name="chevron-right" size={24} color="#C7C7CC" />
+      {showArrow && <Icon name="chevron-right" size={24} color={colors.textTertiary} />}
     </TouchableOpacity>
   );
-console.log("notificationsEnabled:", notificationsEnabled, "adminNotificationsEnabled:", adminNotificationsEnabled);
+
   return (
-    <View style={[styles.container, { paddingTop: statusBarHeight }]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8F9FA" />
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar 
+        barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.background}
+      />
       
       {/* Header */}
       <View style={styles.header}>
@@ -240,7 +313,7 @@ console.log("notificationsEnabled:", notificationsEnabled, "adminNotificationsEn
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="arrow-back" size={24} color="#1a1a1a" />
+          <Icon name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Настройки</Text>
         <View style={styles.backButton} />
@@ -280,13 +353,11 @@ console.log("notificationsEnabled:", notificationsEnabled, "adminNotificationsEn
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Внешний вид</Text>
           <View style={styles.settingsCard}>
-            <SettingItem
-              icon="brightness-4"
-              key="theme"
-              title="Темная тема"
-              subtitle="Использовать темное оформление"
-              value={isDarkTheme}
-              onValueChange={handleThemeToggle}
+            <ActionItem
+              icon="palette"
+              title="Тема приложения"
+              subtitle={getThemeLabel()}
+              onPress={() => setThemeModalVisible(true)}
               isLast
             />
           </View>
@@ -296,12 +367,6 @@ console.log("notificationsEnabled:", notificationsEnabled, "adminNotificationsEn
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Общие</Text>
           <View style={styles.settingsCard}>
-            <ActionItem
-              icon="language"
-              title="Язык приложения"
-              subtitle="Русский"
-              onPress={() => Alert.alert('Язык', 'В разработке')}
-            />
             <ActionItem
               icon="info-outline"
               title="О приложении"
@@ -351,14 +416,19 @@ console.log("notificationsEnabled:", notificationsEnabled, "adminNotificationsEn
           </Text>
         </View>
       </ScrollView>
+
+      <ThemeSelector 
+        visible={themeModalVisible}
+        onClose={() => setThemeModalVisible(false)}
+      />
     </View>
   );
 });
 
-const styles = StyleSheet.create({
+const themedStyles = (colors, theme) => ({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -366,9 +436,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: colors.border,
   },
   backButton: {
     width: 40,
@@ -379,7 +449,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#1a1a1a',
+    color: colors.text,
   },
   scrollView: {
     flex: 1,
@@ -393,18 +463,18 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#1a1a1a',
+    color: colors.text,
     marginHorizontal: 20,
     marginBottom: 12,
   },
   settingsCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.card,
     marginHorizontal: 20,
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: theme === 'dark' ? 0.2 : 0.1,
     shadowRadius: 8,
     elevation: 4,
   },
@@ -415,7 +485,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
+    borderBottomColor: colors.divider,
   },
   settingItemLast: {
     borderBottomWidth: 0,
@@ -429,16 +499,16 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#E6FFF9',
+    backgroundColor: colors.primary + '15',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
   },
   iconContainerDisabled: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.surface,
   },
   iconContainerDanger: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: colors.error + '15',
   },
   textContainer: {
     flex: 1,
@@ -446,19 +516,19 @@ const styles = StyleSheet.create({
   settingTitle: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#1a1a1a',
+    color: colors.text,
     marginBottom: 2,
   },
   settingSubtitle: {
     fontSize: 14,
-    color: '#8E8E93',
+    color: colors.textSecondary,
     lineHeight: 18,
   },
   disabledText: {
-    color: '#CCC',
+    color: colors.textTertiary,
   },
   dangerText: {
-    color: '#EF4444',
+    color: colors.error,
   },
   footer: {
     marginTop: 40,
@@ -467,7 +537,68 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 14,
-    color: '#8E8E93',
+    color: colors.textSecondary,
+  },
+});
+
+const themeModalStyles = (colors, theme) => ({
+  overlay: {
+    flex: 1,
+    backgroundColor: colors.overlay,
+    justifyContent: 'flex-end',
+  },
+  safeArea: {
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 30,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  themeOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 10,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  selectedThemeOption: {
+    borderColor: colors.primary,
+    borderWidth: 2,
+  },
+  themeOptionText: {
+    fontSize: 16,
+    color: colors.text,
+    flex: 1,
+    marginLeft: 12,
+  },
+  selectedThemeText: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  closeButton: {
+    marginTop: 10,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+  },
+  closeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

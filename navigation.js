@@ -4,9 +4,12 @@ import { createStackNavigator } from "@react-navigation/stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { observer } from "mobx-react-lite";
 import { useStores } from "./useStores";
+import { useTheme } from "./contexts/ThemeContext";
 import { View, StyleSheet, Platform, TouchableOpacity, Animated } from "react-native";
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { BlurView } from "@react-native-community/blur";
+import { Linking } from 'react-native';
+
 // Импортируем экраны
 import HomeScreen from "./screens/HomeScreen";
 import FavoritesScreen from "./screens/FavoritesScreen";
@@ -16,7 +19,6 @@ import AuthScreen from "./screens/AuthScreen";
 import CodeVerificationScreen from "./screens/CodeVerificationScreen";
 import BookingScreen from "./screens/BookingScreen";
 import ServiceSelectionScreen from './screens/ServiceSelectionScreen';
-
 import FilterAutoScreen from "./screens/FilterAutoScreen";
 import FilterScreen from "./screens/FilterScreen";
 import ProductListScreen from "./screens/ProductListScreen";
@@ -31,9 +33,6 @@ import StorageDetailScreen from './screens/StorageDetailScreen';
 import CartIconWithBadge from './components/CartIconWithBadge';
 import CheckoutScreen from './screens/CheckoutScreen';
 import OrderSuccessScreen from './screens/OrderSuccessScreen';
-import DeepLinkHandler from './components/DeepLinkHandler';
-import ShareHelper from './components/Share';
-import { Linking } from 'react-native';
 import SettingsScreen from "./screens/SettingsScreen";
 
 // Админские экраны
@@ -48,8 +47,20 @@ const Tab = createBottomTabNavigator();
 
 // Вложенный Stack для вкладки "Home"
 const HomeStack = () => {
+  const { colors } = useTheme();
+  
   return (
-    <Stack.Navigator>
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: colors.headerBackground,
+        },
+        headerTintColor: colors.text,
+        cardStyle: {
+          backgroundColor: colors.background,
+        },
+      }}
+    >
       <Stack.Screen name="HomeScreen" component={HomeScreen} options={{ headerShown: false }} />
       <Stack.Screen name="ProductList" component={ProductListScreen} options={{ headerShown: false }} />
       <Stack.Screen name="FilterAuto" component={FilterAutoScreen} options={{ headerShown: false }} />
@@ -60,8 +71,17 @@ const HomeStack = () => {
 
 // Админский Stack
 const AdminStack = () => {
+  const { colors } = useTheme();
+  
   return (
-    <Stack.Navigator>
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: colors.headerBackground,
+        },
+        headerTintColor: colors.primary,
+      }}
+    >
       <Stack.Screen 
         name="ScanProducts" 
         component={ScanProductsScreen} 
@@ -73,7 +93,6 @@ const AdminStack = () => {
         options={{ 
           title: 'Заказы',
           headerBackTitleVisible: false,
-          headerTintColor: '#2563eb',
           headerShown: false
         }} 
       />
@@ -83,7 +102,6 @@ const AdminStack = () => {
         options={{ 
           title: 'Детали заказа',
           headerBackTitleVisible: false,
-          headerTintColor: '#2563eb',
           headerShown: false
         }} 
       />
@@ -94,17 +112,14 @@ const AdminStack = () => {
           presentation: 'modal',
           title: 'Фильтры',
           headerBackTitleVisible: false,
-          headerTintColor: '#2563eb',
         }} 
       />
-       
       <Stack.Screen 
         name="VideoUpload" 
         component={VideoUploadScreen} 
         options={{ 
           title: 'Загрузка видео',
           headerBackTitleVisible: false,
-          headerTintColor: '#2563eb',
           headerShown: false
         }} 
       />
@@ -113,37 +128,47 @@ const AdminStack = () => {
 };
 
 const ProfileStack = () => {
+  const { colors } = useTheme();
+  
   return (
-    <Stack.Navigator>
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: colors.headerBackground,
+        },
+        headerTintColor: colors.text,
+        cardStyle: {
+          backgroundColor: colors.background,
+        },
+      }}
+    >
       <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
       <Stack.Screen 
         name="Orders" 
         component={OrdersScreen} 
-        options={{ 
-          headerShown: false
-        }} 
+        options={{ headerShown: false }} 
       />
       <Stack.Screen 
         name="OrderDetail" 
         component={OrderDetailScreen} 
         options={{ headerShown: false }}
       />
-      <Stack.Screen name="Storages" component={StorageScreen} options={{ headerShown: false }}  />
-      <Stack.Screen name="Garage" component={GarageScreen} options={{ headerShown: false }}  />
-       <Stack.Screen name="AddToGarage" component={AddToGarageScreen} options={{ headerShown: false }}  />
+      <Stack.Screen name="Storages" component={StorageScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Garage" component={GarageScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="AddToGarage" component={AddToGarageScreen} options={{ headerShown: false }} />
       <Stack.Screen 
         name="StorageDetail" 
         component={StorageDetailScreen} 
         options={{ headerShown: false }}
       />
       <Stack.Screen 
-  name="Settings" 
-  component={SettingsScreen}
-  options={{
-    headerShown: false,
-    animation: 'slide_from_right' // для iOS
-  }}
-/>
+        name="Settings" 
+        component={SettingsScreen}
+        options={{
+          headerShown: false,
+          animation: 'slide_from_right'
+        }}
+      />
       <Stack.Screen 
         name="Admin" 
         component={AdminStack} 
@@ -155,8 +180,20 @@ const ProfileStack = () => {
 
 // Вложенный Stack для вкладки "Cart"
 const CartStack = () => {
+  const { colors } = useTheme();
+  
   return (
-    <Stack.Navigator>
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: colors.headerBackground,
+        },
+        headerTintColor: colors.primary,
+        cardStyle: {
+          backgroundColor: colors.background,
+        },
+      }}
+    >
       <Stack.Screen name="CartScreen" component={CartScreen} options={{ headerShown: false }} />
       <Stack.Screen
         name="ProductModal"
@@ -175,9 +212,8 @@ const CartStack = () => {
           headerShown: true,
           headerTitle: 'Оформление заказа',
           headerBackTitleVisible: false,
-          headerTintColor: '#2563eb',
           headerStyle: {
-            backgroundColor: '#ffffff',
+            backgroundColor: colors.headerBackground,
             elevation: 0,
             shadowOpacity: 0,
             borderBottomWidth: 0,
@@ -210,6 +246,7 @@ const ServicePages = () => {
 
 const CustomTabBar = observer(({ state, descriptors, navigation }) => {
   const { cartStore } = useStores();
+  const { colors, theme } = useTheme();
   const animatedValues = useRef(
     state.routes.map(() => new Animated.Value(0))
   ).current;
@@ -226,14 +263,100 @@ const CustomTabBar = observer(({ state, descriptors, navigation }) => {
     });
   }, [state.index, animatedValues]);
 
+  const styles = StyleSheet.create({
+    tabBarContainer: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      height: Platform.OS === 'ios' ? 88 : 70,
+      backgroundColor: 'transparent',
+      elevation: 0,
+    },
+    blurView: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      overflow: 'hidden',
+    },
+    tabBar: {
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      alignItems: 'center',
+      height: Platform.OS === 'ios' ? 88 : 70,
+      backgroundColor: Platform.OS === 'ios' 
+        ? theme === 'dark' ? 'rgba(28, 28, 30, 0.9)' : 'rgba(255, 255, 255, 0.9)' 
+        : colors.tabBar,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingBottom: Platform.OS === 'ios' ? 20 : 0,
+      paddingTop: 8,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: theme === 'dark' ? 0.2 : 0.08,
+      shadowRadius: 16,
+      elevation: 20,
+      borderTopWidth: 0.5,
+      borderTopColor: colors.tabBarBorder,
+    },
+    tabItem: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      minWidth: 44,
+      minHeight: 44,
+      position: 'relative',
+    },
+    tabIconContainer: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      position: 'relative',
+    },
+    activeBackground: {
+      position: 'absolute',
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: theme === 'dark' 
+        ? 'rgba(10, 132, 255, 0.15)' 
+        : 'rgba(37, 235, 232, 0.1)',
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 8,
+      elevation: 4,
+    },
+    activeIndicator: {
+      position: 'absolute',
+      bottom: -12,
+      width: 24,
+      height: 3,
+      borderRadius: 2,
+      backgroundColor: colors.primary,
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.5,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+  });
+
   return (
     <View style={styles.tabBarContainer}>
       {Platform.OS === 'ios' && (
         <BlurView
           style={styles.blurView}
-          blurType="ultraThinMaterial"
+          blurType={theme === 'dark' ? 'dark' : 'ultraThinMaterial'}
           blurAmount={25}
-          reducedTransparencyFallbackColor="rgba(255, 255, 255, 0.95)"
+          reducedTransparencyFallbackColor={
+            theme === 'dark' ? 'rgba(28, 28, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)'
+          }
         />
       )}
       <View style={styles.tabBar}>
@@ -307,9 +430,9 @@ const CustomTabBar = observer(({ state, descriptors, navigation }) => {
                     <Ionicons
                       name={iconName}
                       size={24}
-                      color={isFocused ? '#4A9B8E' : '#64748b'}
+                      color={isFocused ? colors.primary : colors.textSecondary}
                       style={{
-                        textShadowColor: isFocused ? '#E6FFF9' : 'transparent',
+                        textShadowColor: isFocused ? colors.primary : 'transparent',
                         textShadowOffset: { width: 0, height: 1 },
                         textShadowRadius: 4,
                       }}
@@ -371,96 +494,27 @@ const MainTabs = () => {
 };
 
 const AuthStack = () => {
+  const { colors } = useTheme();
+  
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Auth" component={AuthScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="CodeVerification" component={CodeVerificationScreen} options={{ headerShown: false }} />
+    <Stack.Navigator 
+      screenOptions={{ 
+        headerShown: false,
+        cardStyle: {
+          backgroundColor: colors.background,
+        },
+      }}
+    >
+      <Stack.Screen name="Auth" component={AuthScreen} />
+      <Stack.Screen name="CodeVerification" component={CodeVerificationScreen} />
     </Stack.Navigator>
   );
 };
 
-const styles = StyleSheet.create({
-  tabBarContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: Platform.OS === 'ios' ? 88 : 70,
-    backgroundColor: 'transparent',
-    elevation: 0,
-  },
-  blurView: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: 'hidden',
-  },
-  tabBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    height: Platform.OS === 'ios' ? 88 : 70,
-    backgroundColor: Platform.OS === 'ios' ? 'rgba(255, 255, 255, 0.9)' : '#ffffff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 0,
-    paddingTop: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 20,
-    borderTopWidth: 0.5,
-    borderTopColor: 'rgba(0, 0, 0, 0.05)',
-  },
-  tabItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 44,
-    minHeight: 44,
-    position: 'relative',
-  },
-  tabIconContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    position: 'relative',
-  },
-  activeBackground: {
-    position: 'absolute',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(37, 235, 232, 0.1)',
-    shadowColor: '#E6FFF9',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  activeIndicator: {
-    position: 'absolute',
-    bottom: -12,
-    width: 24,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: '#E6FFF9',
-    shadowColor: '#E6FFF9',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-});
-
-const Navigation = () => {
+// Основной навигационный компонент
+const NavigationContent = observer(() => {
   const { authStore } = useStores();
+  const { colors, theme } = useTheme();
   const navigationRef = useRef();
   const routeQueueRef = useRef([]); 
 
@@ -537,9 +591,28 @@ const Navigation = () => {
     },
   };
 
+  // Тема для NavigationContainer
+  const navigationTheme = {
+    dark: theme === 'dark',
+    colors: {
+      primary: colors.primary,
+      background: colors.background,
+      card: colors.card,
+      text: colors.text,
+      border: colors.border,
+      notification: colors.error,
+    },
+  };
+
   return (
-    <NavigationContainer ref={navigationRef} linking={linking}>
-      <Stack.Navigator>
+    <NavigationContainer ref={navigationRef} linking={linking} theme={navigationTheme}>
+      <Stack.Navigator
+        screenOptions={{
+          cardStyle: {
+            backgroundColor: colors.background,
+          },
+        }}
+      >
         {authStore.isLoggedIn ? (
           <>
             <Stack.Screen 
@@ -573,6 +646,11 @@ const Navigation = () => {
       </Stack.Navigator>
     </NavigationContainer>
   );
+});
+
+// Обертка для использования вне провайдеров
+const Navigation = () => {
+  return <NavigationContent />;
 };
 
-export default observer(Navigation);
+export default Navigation;

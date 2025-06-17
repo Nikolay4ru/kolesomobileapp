@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Platform, Alert, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Platform, Alert, TouchableOpacity, StatusBar } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from "@react-navigation/native";
 import { observer } from "mobx-react-lite";
-import { authStore } from "../stores/AuthStore";
+import { useStores } from "../useStores";
+import { useTheme } from '../contexts/ThemeContext';
+import { useThemedStyles } from '../hooks/useThemedStyles';
 import ReactNativeBiometrics from 'react-native-biometrics';
 import Keychain from 'react-native-keychain';
 
@@ -12,9 +14,12 @@ const rnBiometrics = new ReactNativeBiometrics();
 
 const ProfileScreen = observer(() => {
   const insets = useSafeAreaInsets();
-  const statusBarHeight = insets.top;
-  const bottomInsets = insets.bottom; // Получаем отступ снизу
+  const bottomInsets = insets.bottom;
   const navigation = useNavigation();
+  const { authStore } = useStores();
+  const { colors, theme } = useTheme();
+  const styles = useThemedStyles(themedStyles);
+  
   const [adminMode, setAdminMode] = useState(false);
   const [biometryType, setBiometryType] = useState(null);
 
@@ -60,32 +65,27 @@ const ProfileScreen = observer(() => {
 
   const authenticateWithDeviceCredentials = async () => {
     try {
-      // Сохраняем временные данные (если их нет)
       const options = {
-        accessControl: Keychain.ACCESS_CONTROL.DEVICE_PASSCODE, // Требует пароль/PIN/графический ключ
+        accessControl: Keychain.ACCESS_CONTROL.DEVICE_PASSCODE,
         accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED,
         authenticationType: Keychain.AUTHENTICATION_TYPE.DEVICE_PASSCODE,
-        securityLevel: Keychain.SECURITY_LEVEL.SECURE_SOFTWARE, // На случай, если биометрия недоступна
+        securityLevel: Keychain.SECURITY_LEVEL.SECURE_SOFTWARE,
       };
 
-      // Пытаемся прочитать данные (если они есть)
       const credentials = await Keychain.getGenericPassword(options);
       
       if (credentials) {
-        return true; // Аутентификация успешна
+        return true;
       }
 
-      // Если данных нет, сохраняем временные данные, чтобы вызвать системный запрос
       await Keychain.setGenericPassword(
         'auth_temp_username',
         'auth_temp_password',
         options
       );
 
-      // Теперь запрашиваем их, чтобы вызвать системную аутентификацию
       const result = await Keychain.getGenericPassword(options);
       
-      // Удаляем временные данные
       await Keychain.resetGenericPassword();
 
       return result !== false;
@@ -97,11 +97,9 @@ const ProfileScreen = observer(() => {
 
   const authenticateWithBiometrics = async () => {
     try {
-      // Сначала проверяем доступность биометрии
       const { available, biometryType } = await rnBiometrics.isSensorAvailable();
       
       if (!available) {
-        // Если биометрия недоступна, запрашиваем системные учетные данные
         const authenticated = await authenticateWithDeviceCredentials();
         if (authenticated) {
           setAdminMode(!adminMode);
@@ -111,7 +109,6 @@ const ProfileScreen = observer(() => {
         return;
       }
 
-      // Если биометрия доступна, запрашиваем аутентификацию
       const { success } = await rnBiometrics.simplePrompt({
         promptMessage: 'Аутентификация для доступа к админ-панели',
         cancelButtonText: 'Отмена',
@@ -130,11 +127,9 @@ const ProfileScreen = observer(() => {
 
   const toggleAdminMode = () => {
     if (authStore.isAdmin) {
-      // На Android всегда требуем аутентификацию (биометрию или системные учетные данные)
       if (Platform.OS === 'android') {
         authenticateWithBiometrics();
       } else {
-        // На iOS используем биометрию при первом включении
         if (biometryType && !adminMode) {
           authenticateWithBiometrics();
         } else {
@@ -166,15 +161,51 @@ const ProfileScreen = observer(() => {
     return "П";
   };
 
+  const MenuItem = ({ icon, title, subtitle, onPress, isAdmin = false, isLast = false }) => (
+    <TouchableOpacity 
+      style={[
+        styles.menuItem, 
+        isLast && styles.menuItemLast,
+        isAdmin && styles.adminMenuItem
+      ]} 
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={styles.menuItemLeft}>
+        <View style={[styles.menuIconContainer, isAdmin && styles.adminIconContainer]}>
+          <Icon 
+            name={icon} 
+            size={22} 
+            color={isAdmin ? colors.warning : colors.primary} 
+          />
+        </View>
+        <View style={styles.menuTextContainer}>
+          <Text style={[styles.menuItemTitle, isAdmin && styles.adminMenuItemTitle]}>
+            {title}
+          </Text>
+          {subtitle && (
+            <Text style={styles.menuItemSubtitle}>{subtitle}</Text>
+          )}
+        </View>
+      </View>
+      <Icon name="chevron-right" size={20} color={colors.textTertiary} />
+    </TouchableOpacity>
+  );
+
   return (
-    <View style={[styles.container, { paddingTop: statusBarHeight }]}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar 
+        barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.background}
+      />
+      
       <ScrollView 
         style={styles.scrollView} 
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scrollContent,
           { 
-            paddingBottom: Math.max(bottomInsets, 20) + 60 // 60px для TabBar + отступ для безопасной зоны
+            paddingBottom: Math.max(bottomInsets, 20) + 60
           }
         ]}
       >
@@ -189,7 +220,7 @@ const ProfileScreen = observer(() => {
               <Icon 
                 name={adminMode ? "admin-panel-settings" : "visibility"} 
                 size={20} 
-                color={adminMode ? "#4A9B8E" : "#4A9B8E"} 
+                color={colors.primary} 
               />
             </TouchableOpacity>
           )}
@@ -210,10 +241,9 @@ const ProfileScreen = observer(() => {
             <Text style={styles.profileName}>{getUserName()}</Text>
             {authStore.isLoggedIn ? (
               <View style={styles.profileDetails}>
-                
                 {authStore.isAdmin && (
                   <View style={[styles.statusBadge, styles.adminBadge]}>
-                    <Icon name="admin-panel-settings" size={16} color="#FF9500" />
+                    <Icon name="admin-panel-settings" size={16} color={colors.warning} />
                     <Text style={[styles.statusText, styles.adminText]}>Администратор</Text>
                   </View>
                 )}
@@ -228,7 +258,7 @@ const ProfileScreen = observer(() => {
               style={styles.editButton}
               onPress={handleEditProfilePress}
             >
-              <Icon name="edit" size={20} color="#4A9B8E" />
+              <Icon name="edit" size={20} color={colors.primary} />
             </TouchableOpacity>
           ) : (
             <TouchableOpacity 
@@ -273,8 +303,8 @@ const ProfileScreen = observer(() => {
                   navigation.navigate('Storages');
                 }}
               />
-               <MenuItem 
-                icon="local-offer" 
+              <MenuItem 
+                icon="directions-car" 
                 title="Гараж" 
                 subtitle="Мои автомобили"
                 onPress={() => {
@@ -327,11 +357,11 @@ const ProfileScreen = observer(() => {
         {/* Admin Section */}
         {authStore.isAdmin && adminMode && (
           <View style={styles.menuSection}>
-            <Text style={[styles.sectionTitle, styles.adminSectionTitle]}>
-              <Icon name="admin-panel-settings" size={16} color="#FF9500" style={{ marginRight: 8 }} />
-              Администрирование
-            </Text>
-            <View style={[styles.menuCard, styles.adminMenuCard]}>
+            <View style={styles.adminSectionHeader}>
+              <Icon name="admin-panel-settings" size={20} color={colors.warning} />
+              <Text style={styles.adminSectionTitle}>Администрирование</Text>
+            </View>
+            <View style={styles.adminMenuCard}>
               <MenuItem 
                 icon="assignment" 
                 title="Заказы магазина" 
@@ -343,10 +373,10 @@ const ProfileScreen = observer(() => {
                 icon="qr-code-scanner" 
                 title="Сканер товаров" 
                 subtitle="Сканирование QR-кодов"
-                onPress={() => navigation.navigate('ScanProducts')}
+                onPress={() => navigation.navigate('Admin', { screen: 'ScanProducts' })}
                 isAdmin
               />
-              {authStore.admin.storeId === 8 && (
+              {authStore.user?.storeId === 8 && (
                 <MenuItem 
                   icon="video-library" 
                   title="Загрузка видео" 
@@ -364,47 +394,16 @@ const ProfileScreen = observer(() => {
   );
 });
 
-const MenuItem = ({ icon, title, subtitle, onPress, isAdmin = false, isLast = false }) => (
-  <TouchableOpacity 
-    style={[
-      styles.menuItem, 
-      isLast && styles.menuItemLast,
-      isAdmin && styles.adminMenuItem
-    ]} 
-    onPress={onPress}
-    activeOpacity={0.7}
-  >
-    <View style={styles.menuItemLeft}>
-      <View style={[styles.menuIconContainer, isAdmin && styles.adminIconContainer]}>
-        <Icon 
-          name={icon} 
-          size={22} 
-          color={isAdmin ? "#FF9500" : "#4A9B8E"} 
-        />
-      </View>
-      <View style={styles.menuTextContainer}>
-        <Text style={[styles.menuItemTitle, isAdmin && styles.adminMenuItemTitle]}>
-          {title}
-        </Text>
-        {subtitle && (
-          <Text style={styles.menuItemSubtitle}>{subtitle}</Text>
-        )}
-      </View>
-    </View>
-    <Icon name="chevron-right" size={20} color="#C7C7CC" />
-  </TouchableOpacity>
-);
-
-const styles = StyleSheet.create({
+const themedStyles = (colors, theme) => ({
   container: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: colors.background,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    // Убираем статичный paddingBottom, теперь он динамический
+    // paddingBottom динамический
   },
   header: {
     flexDirection: 'row',
@@ -416,33 +415,33 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 32,
     fontWeight: '700',
-    color: '#1a1a1a',
+    color: colors.text,
   },
   adminToggle: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#E6FFF9',
+    backgroundColor: colors.primary + '15',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#4A9B8E',
+    borderColor: colors.primary,
   },
   adminToggleActive: {
-    backgroundColor: '#E6FFF9',
-    borderColor: '#4A9B8E',
+    backgroundColor: colors.primary + '25',
+    borderColor: colors.primary,
   },
   profileCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.card,
     marginHorizontal: 20,
     marginBottom: 24,
     borderRadius: 20,
     padding: 24,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: theme === 'dark' ? 0.3 : 0.1,
     shadowRadius: 12,
     elevation: 6,
   },
@@ -454,7 +453,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#4A9B8E',
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -470,9 +469,9 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: '#34C759',
+    backgroundColor: colors.success,
     borderWidth: 3,
-    borderColor: '#ffffff',
+    borderColor: colors.card,
   },
   profileInfo: {
     flex: 1,
@@ -480,7 +479,7 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#1a1a1a',
+    color: colors.text,
     marginBottom: 4,
   },
   profileDetails: {
@@ -491,38 +490,38 @@ const styles = StyleSheet.create({
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F0FFF4',
+    backgroundColor: colors.success + '15',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
   },
   adminBadge: {
-    backgroundColor: '#FFF8F0',
+    backgroundColor: colors.warning + '15',
   },
   statusText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#34C759',
+    color: colors.success,
     marginLeft: 4,
   },
   adminText: {
-    color: '#FF9500',
+    color: colors.warning,
   },
   guestText: {
     fontSize: 14,
-    color: '#8E8E93',
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   editButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#E6FFF9',
+    backgroundColor: colors.primary + '15',
     justifyContent: 'center',
     alignItems: 'center',
   },
   loginButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: colors.primary,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 20,
@@ -538,29 +537,45 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#1a1a1a',
+    color: colors.text,
     marginHorizontal: 20,
     marginBottom: 12,
   },
-  adminSectionTitle: {
-    color: '#FF9500',
+  adminSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginHorizontal: 20,
+    marginBottom: 12,
+    gap: 8,
+  },
+  adminSectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: colors.warning,
   },
   menuCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.card,
     marginHorizontal: 20,
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: theme === 'dark' ? 0.2 : 0.1,
     shadowRadius: 8,
     elevation: 4,
   },
   adminMenuCard: {
+    backgroundColor: colors.card,
+    marginHorizontal: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: theme === 'dark' ? 0.2 : 0.1,
+    shadowRadius: 8,
+    elevation: 4,
     borderWidth: 1,
-    borderColor: '#FFE5CC',
+    borderColor: colors.warning + '30',
   },
   menuItem: {
     flexDirection: 'row',
@@ -569,13 +584,13 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
+    borderBottomColor: colors.divider,
   },
   menuItemLast: {
     borderBottomWidth: 0,
   },
   adminMenuItem: {
-    backgroundColor: 'rgba(255, 149, 0, 0.02)',
+    backgroundColor: colors.warning + '05',
   },
   menuItemLeft: {
     flexDirection: 'row',
@@ -586,13 +601,13 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#E6FFF9',
+    backgroundColor: colors.primary + '15',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
   },
   adminIconContainer: {
-    backgroundColor: '#FFF8F0',
+    backgroundColor: colors.warning + '15',
   },
   menuTextContainer: {
     flex: 1,
@@ -600,15 +615,15 @@ const styles = StyleSheet.create({
   menuItemTitle: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#1a1a1a',
+    color: colors.text,
     marginBottom: 2,
   },
   adminMenuItemTitle: {
-    color: '#FF9500',
+    color: colors.warning,
   },
   menuItemSubtitle: {
     fontSize: 14,
-    color: '#8E8E93',
+    color: colors.textSecondary,
     lineHeight: 18,
   },
 });
