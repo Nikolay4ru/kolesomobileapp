@@ -1,564 +1,770 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
+  Modal,
   View,
   Text,
-  Modal,
   TextInput,
   TouchableOpacity,
-  FlatList,
+  ScrollView,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Dimensions,
   Image,
+  FlatList,
+  useColorScheme,
   StyleSheet,
+  SafeAreaView,
 } from 'react-native';
-import { useStores } from '../useStores';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Ionicons from 'react-native-vector-icons/Ionicons';
+import Icon from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
-import { useTheme } from '../contexts/ThemeContext';
+import { MMKV } from 'react-native-mmkv';
+import { useStores } from '../useStores';
 
-const API_URL = 'https://api.koleso.app/api';
+const storage = new MMKV();
 
-const SearchModal = ({ visible, onClose, userId, token }) => {
-  const navigation = useNavigation();
-  const { authStore } = useStores();
-  const insets = useSafeAreaInsets();
-  const searchInputRef = useRef(null);
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-  // Тема по-умолчанию
-  let colors = {
-    background: '#FFFFFF',
-    card: '#FFFFFF',
-    text: '#000000',
-    textSecondary: '#666666',
-    textTertiary: '#999999',
-    primary: '#007AFF',
-    success: '#34C759',
-    border: '#E0E0E0',
-    divider: '#F0F0F0',
-    surface: '#F5F5F5',
-  };
-  let theme = 'light';
-  try {
-    const themeData = useTheme();
-    if (themeData && themeData.colors) {
-      colors = themeData.colors;
-      theme = themeData.theme || 'light';
-    }
-  } catch (error) {
-    console.log('Using default theme');
-  }
-
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
+const SearchModal = ({ isOpen, onClose }) => {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [carResults, setCarResults] = useState([]);
+  const [popular, setPopular] = useState([]);
+  const [recent, setRecent] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [recentSearches, setRecentSearches] = useState([]);
-  const [popularSearches, setPopularSearches] = useState([]);
-  const [suggestions, setSuggestions] = useState([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeTab, setActiveTab] = useState('products');
+   const { authStore } = useStores();
+  
+  const navigation = useNavigation();
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  const inputRef = useRef(null);
+  const debounceTimerRef = useRef(null);
 
-  // Заголовки для авторизации
-  const authHeaders = {
-    'Authorization': `Bearer ${authStore.token || token || ''}`,
-    'Content-Type': 'application/json'
+  // Цвета для темной и светлой темы (iOS стиль)
+  const colors = {
+    background: isDarkMode ? '#000000' : '#FFFFFF',
+    secondaryBackground: isDarkMode ? '#1C1C1E' : '#F2F2F7',
+    tertiaryBackground: isDarkMode ? '#2C2C2E' : '#FFFFFF',
+    label: isDarkMode ? '#FFFFFF' : '#000000',
+    secondaryLabel: isDarkMode ? '#8E8E93' : '#3C3C43',
+    tertiaryLabel: isDarkMode ? '#48484A' : '#C7C7CC',
+    separator: isDarkMode ? '#38383A' : '#C6C6C8',
+    tint: '#007AFF',
+    destructive: '#FF3B30',
+    success: '#34C759',
+    searchBackground: isDarkMode ? '#1C1C1E' : '#E5E5EA',
+    cardBackground: isDarkMode ? '#1C1C1E' : '#FFFFFF',
   };
 
-  // Загрузка популярных поисков
-  const loadPopularSearches = async () => {
-    try {
-      const response = await fetch(`${API_URL}/search.php?popular=1`, {
-        headers: authHeaders,
-      });
-      const data = await response.json();
-      if (data.success && data.popular) {
-        setPopularSearches(data.popular);
-      }
-    } catch (e) {
-      console.error('Popular search error:', e);
-    }
+  // Простая реализация debounce
+  const debounce = (func, wait) => {
+    return (...args) => {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(() => func(...args), wait);
+    };
   };
 
-  // Загрузка недавних поисков (по userId)
-  const loadRecentSearches = async () => {
-    try {
-      let url = `${API_URL}/search.php?recent=1`;
-      if (userId) url += `&user_id=${userId}`;
-      const response = await fetch(url, { headers: authHeaders });
-      const data = await response.json();
-      if (data.success && data.recent) {
-        setRecentSearches(data.recent);
-      }
-    } catch (e) {
-      console.error('Recent search error:', e);
-    }
-  };
-
-  // При открытии — грузим популярные и недавние поиски
+  // Загрузка популярных и недавних запросов при открытии
   useEffect(() => {
-    if (visible) {
-      loadPopularSearches();
-      loadRecentSearches();
-      setTimeout(() => {
-        searchInputRef.current?.focus();
-      }, 100);
+    if (isOpen) {
+      fetchInitialData();
+      setTimeout(() => inputRef.current?.focus(), 100);
     } else {
-      setSearchQuery('');
-      setSearchResults([]);
+      // Очистка при закрытии
+      setQuery('');
+      setResults([]);
+      setCarResults([]);
+      setActiveTab('products');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+  }, [isOpen]);
 
-  const fetchSuggestions = async (query) => {
-    if (query.trim().length < 1) {
-      setSuggestions([]);
-      setShowSuggestions(false);
-      return;
-    }
+  const fetchInitialData = async () => {
     try {
-      const response = await fetch(`${API_URL}/search_suggestions.php?q=${encodeURIComponent(query)}`, {
-        headers: authHeaders,
-      });
-      const data = await response.json();
-      if (data.success && data.suggestions && data.suggestions.length > 0) {
-        setSuggestions(data.suggestions);
-        setShowSuggestions(true);
-      } else {
-        setSuggestions([]);
-        setShowSuggestions(false);
+      
+      const headers = {
+        'Authorization': `Bearer ${authStore.token}`,
+        'Content-Type': 'application/json'
+      };
+
+      // Загружаем популярные запросы
+      const popularRes = await fetch('https://api.koleso.app/api/search.php?popular=1', { headers });
+      if (popularRes.ok) {
+        const data = await popularRes.json();
+        setPopular(data.popular || []);
+      }
+
+      // Загружаем недавние запросы
+      const recentRes = await fetch('https://api.koleso.app/api/search.php?recent=1', { headers });
+      if (recentRes.ok) {
+        const data = await recentRes.json();
+        setRecent(data.recent || []);
       }
     } catch (error) {
-      console.error('Suggestions error:', error);
+      console.error('Error fetching initial data:', error);
     }
   };
 
-  const performSearch = async (query) => {
-    if (query.trim().length < 2) {
-      setSearchResults([]);
+  // Поиск товаров и категорий
+  const searchProducts = async (searchQuery) => {
+    if (!searchQuery || searchQuery.length < 2) {
+      setResults([]);
       return;
     }
+
     setLoading(true);
     try {
-      let url = `${API_URL}/search.php?q=${encodeURIComponent(query)}`;
-      if (userId) url += `&user_id=${userId}`;
-      const response = await fetch(url, { headers: authHeaders });
-      const data = await response.json();
-      if (data.success) {
-        setSearchResults(data.data);
-        if (data.popular) setPopularSearches(data.popular);
-        if (data.recent) setRecentSearches(data.recent);
-      } else {
-        setSearchResults([]);
+      
+      const response = await fetch(
+        `https://api.koleso.app/api/search.php?q=${encodeURIComponent(searchQuery)}&type=all&limit=10`,
+        {
+          headers: {
+            'Authorization': `Bearer ${authStore.token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setResults(data.data || []);
+          // Обновляем популярные и недавние после поиска
+          if (data.popular) setPopular(data.popular);
+          if (data.recent) setRecent(data.recent);
+        }
       }
     } catch (error) {
       console.error('Search error:', error);
-      setSearchResults([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSearch = (text) => {
-    setSearchQuery(text);
-    if (text.length >= 1 && text.length < 2) {
-      fetchSuggestions(text);
-    } else if (text.length >= 2) {
-      setShowSuggestions(false);
-      performSearch(text);
+  // Поиск автомобилей
+  const searchCars = async (searchQuery) => {
+    if (!searchQuery || searchQuery.length < 2) {
+      setCarResults([]);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      
+      const response = await fetch(
+        `https://api.koleso.app/api/search.php?car_suggest=1&q=${encodeURIComponent(searchQuery)}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${authStore.token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setCarResults(data.cars || []);
+        }
+      }
+    } catch (error) {
+      console.error('Car search error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Дебаунсированные функции поиска
+  const debouncedProductSearch = useCallback(
+    debounce(searchProducts, 300),
+    []
+  );
+
+  const debouncedCarSearch = useCallback(
+    debounce(searchCars, 300),
+    []
+  );
+
+  // Обработчик изменения поискового запроса
+  const handleQueryChange = (value) => {
+    setQuery(value);
+
+    if (activeTab === 'products') {
+      debouncedProductSearch(value);
     } else {
-      setSuggestions([]);
-      setShowSuggestions(false);
-      setSearchResults([]);
+      debouncedCarSearch(value);
     }
   };
 
-  const renderSuggestions = () => {
-    if (!showSuggestions || suggestions.length === 0) return null;
-    return (
-      <View style={[styles.suggestionsContainer, { backgroundColor: colors.card }]}>
-        {suggestions.map((suggestion, index) => (
-          <TouchableOpacity
-            key={index}
-            style={[styles.suggestionItem, { borderBottomColor: colors.divider }]}
-            onPress={() => {
-              setSearchQuery(suggestion.text);
-              setShowSuggestions(false);
-              performSearch(suggestion.text);
-            }}
-          >
-            <Ionicons
-              name={suggestion.type === 'recent' ? 'time-outline' : 'search-outline'}
-              size={18}
-              color={colors.textSecondary}
-            />
-            <Text style={[styles.suggestionText, { color: colors.text }]}>
-              {suggestion.text}
-            </Text>
-            <Text style={[styles.suggestionType, { color: colors.textTertiary }]}>
-              {suggestion.type === 'product'
-                ? 'Товар'
-                : suggestion.type === 'category'
-                ? 'Категория'
-                : 'Недавний поиск'}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    );
+  // Переключение вкладок
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    setResults([]);
+    setCarResults([]);
+    
+    // Если есть запрос, выполняем поиск для новой вкладки
+    if (query.length >= 2) {
+      if (tab === 'products') {
+        searchProducts(query);
+      } else {
+        searchCars(query);
+      }
+    }
   };
 
-  const handleResultPress = (item) => {
-    if (!recentSearches.includes(item.name)) {
-      setRecentSearches([item.name, ...recentSearches.slice(0, 9)]);
-    }
+  // Клик по результату товара/категории
+  const handleResultClick = (result) => {
     onClose();
-    if (item.type === 'product') {
-      navigation.navigate('Home', {
-        screen: 'Product',
-        params: { productId: item.id },
-      });
-    } else if (item.type === 'service') {
-      navigation.navigate('Booking');
-    } else if (item.type === 'category') {
-      navigation.navigate('ProductList', { category: item.name });
+    
+    if (result.type === 'category') {
+      navigation.navigate('Catalog', { category: result.name });
+    } else if (result.type === 'product') {
+      navigation.navigate('Product', { productId: result.id });
     }
   };
 
-  const handleRecentSearchPress = (search) => {
-    setSearchQuery(search);
-    performSearch(search);
-  };
-
-const clearRecentSearches = async () => {
-  try {
-    const response = await fetch(`${API_URL}/search.php`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${authStore.token || token || ''}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ clear_recent: 1 })
+  // Клик по результату автомобиля
+  const handleCarClick = (car) => {
+    onClose();
+    
+    // Переходим в каталог с фильтром по автомобилю
+    navigation.navigate('Catalog', {
+      car_id: car.carid,
+      car_brand: car.marka,
+      car_model: car.model,
+      car_year_from: car.beginyear,
+      car_year_to: car.endyear,
     });
-    const data = await response.json();
-    console.log(data);
-    setRecentSearches([]); // Локально очищаем
-  } catch (e) {
-    console.error('Clear recent error', e);
-  }
-};
-
-  const renderSearchResult = ({ item }) => {
-    if (item.type === 'product') {
-      return (
-        <TouchableOpacity
-          style={[styles.resultItem, { backgroundColor: colors.card, borderBottomColor: colors.divider }]}
-          onPress={() => handleResultPress(item)}
-          activeOpacity={0.7}
-        >
-          <Image source={{ uri: item.image }} style={[styles.resultImage, { backgroundColor: colors.surface }]} />
-          <View style={styles.resultContent}>
-            <Text style={[styles.resultName, { color: colors.text }]} numberOfLines={2}>{item.name}</Text>
-            <Text style={[styles.resultPrice, { color: colors.primary }]}>{item.price ? item.price.toLocaleString() : ''} ₽</Text>
-            {item.inStock && (
-              <View style={[styles.stockBadge, { backgroundColor: colors.success + '15' }]}>
-                <Text style={[styles.stockText, { color: colors.success }]}>В наличии</Text>
-              </View>
-            )}
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
-        </TouchableOpacity>
-      );
-    } else if (item.type === 'service' || item.type === 'category') {
-      return (
-        <TouchableOpacity
-          style={[styles.resultItem, { backgroundColor: colors.card, borderBottomColor: colors.divider }]}
-          onPress={() => handleResultPress(item)}
-          activeOpacity={0.7}
-        >
-          <View style={[styles.resultIcon, { backgroundColor: colors.primary + '15' }]}>
-            <Ionicons name={item.icon || 'folder'} size={24} color={colors.primary} />
-          </View>
-          <View style={styles.resultContent}>
-            <Text style={[styles.resultName, { color: colors.text }]}>{item.name}</Text>
-            {item.type === 'service' && (
-              <Text style={[styles.resultPrice, { color: colors.primary }]}>от {item.price} ₽</Text>
-            )}
-            {item.type === 'category' && (
-              <Text style={[styles.resultSubtext, { color: colors.textSecondary }]}>{item.count} товаров</Text>
-            )}
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
-        </TouchableOpacity>
-      );
-    }
-    return null;
   };
+
+  // Клик по популярному/недавнему запросу
+  const handleQuickSearch = (searchQuery) => {
+    setQuery(searchQuery);
+    if (activeTab === 'products') {
+      searchProducts(searchQuery);
+    } else {
+      searchCars(searchQuery);
+    }
+  };
+
+  // Очистка недавних запросов
+  const clearRecent = async () => {
+    try {
+      
+      const response = await fetch('https://api.koleso.app/api/search.php', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authStore.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ clear_recent: true })
+      });
+
+      if (response.ok) {
+        setRecent([]);
+      }
+    } catch (error) {
+      console.error('Error clearing recent searches:', error);
+    }
+  };
+
+  // Рендер элемента результата товара
+  const renderProductItem = ({ item: result }) => (
+    <TouchableOpacity
+      style={[styles.resultItem, { backgroundColor: colors.cardBackground }]}
+      onPress={() => handleResultClick(result)}
+      activeOpacity={0.7}
+    >
+      {result.type === 'category' ? (
+        <>
+          <View style={[styles.iconContainer, { backgroundColor: colors.secondaryBackground }]}>
+            <Icon name="folder-outline" size={20} color={colors.tint} />
+          </View>
+          <View style={styles.resultInfo}>
+            <Text style={[styles.resultName, { color: colors.label }]}>{result.name}</Text>
+            <Text style={[styles.resultMeta, { color: colors.secondaryLabel }]}>
+              {result.count} товаров
+            </Text>
+          </View>
+          <Icon name="chevron-forward" size={18} color={colors.tertiaryLabel} />
+        </>
+      ) : (
+        <>
+          {result.image ? (
+            <Image source={{ uri: result.image }} style={styles.resultImage} />
+          ) : (
+            <View style={[styles.imagePlaceholder, { backgroundColor: colors.secondaryBackground }]}>
+              <Icon name="image-outline" size={24} color={colors.tertiaryLabel} />
+            </View>
+          )}
+          <View style={styles.resultInfo}>
+            <Text style={[styles.resultName, { color: colors.label }]} numberOfLines={2}>
+              {result.name}
+            </Text>
+            <View style={styles.metaRow}>
+              {result.brand && (
+                <Text style={[styles.resultMeta, { color: colors.secondaryLabel }]}>
+                  {result.brand}
+                </Text>
+              )}
+              {result.size && (
+                <Text style={[styles.resultMeta, { color: colors.secondaryLabel }]}>
+                  {result.size}
+                </Text>
+              )}
+            </View>
+            {result.price && (
+              <Text style={[styles.resultPrice, { color: colors.success }]}>
+                {result.price.toLocaleString()} ₽
+              </Text>
+            )}
+          </View>
+          {!result.inStock && (
+            <View style={styles.outOfStockBadge}>
+              <Text style={styles.outOfStockText}>Нет</Text>
+            </View>
+          )}
+        </>
+      )}
+    </TouchableOpacity>
+  );
+
+  // Рендер элемента автомобиля
+  const renderCarItem = ({ item: car }) => (
+    <TouchableOpacity
+      style={[styles.carItem, { backgroundColor: colors.cardBackground, borderColor: colors.separator }]}
+      onPress={() => handleCarClick(car)}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.iconContainer, { backgroundColor: colors.tint }]}>
+        <Icon name="car-sport-outline" size={20} color="#FFFFFF" />
+      </View>
+      <View style={styles.resultInfo}>
+        <Text style={[styles.resultName, { color: colors.label }]}>{car.label}</Text>
+        <Text style={[styles.resultMeta, { color: colors.secondaryLabel }]}>
+          ID: {car.carid}
+        </Text>
+      </View>
+      <Icon name="chevron-forward" size={18} color={colors.tertiaryLabel} />
+    </TouchableOpacity>
+  );
 
   return (
     <Modal
-      visible={visible}
+      visible={isOpen}
       animationType="slide"
       transparent={false}
       onRequestClose={onClose}
     >
-      <KeyboardAvoidingView
-        style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        {/* Header */}
-        <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-          <View style={[styles.searchContainer, { backgroundColor: colors.surface }]}>
-            <Ionicons name="search" size={20} color={colors.textSecondary} />
-            <TextInput
-              ref={searchInputRef}
-              style={[styles.searchInput, { color: colors.text }]}
-              placeholder="Поиск товаров и услуг..."
-              placeholderTextColor={colors.textTertiary}
-              value={searchQuery}
-              onChangeText={handleSearch}
-              returnKeyType="search"
-              autoCorrect={false}
-              autoCapitalize="none"
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity
-                onPress={() => setSearchQuery('')}
-                style={styles.clearButton}
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardAvoid}
+        >
+          {/* Заголовок */}
+          <View style={[styles.header, { borderBottomColor: colors.separator }]}>
+            <View style={[styles.searchContainer, { backgroundColor: colors.searchBackground }]}>
+              <Icon name="search" size={20} color={colors.tertiaryLabel} />
+              <TextInput
+                ref={inputRef}
+                style={[styles.searchInput, { color: colors.label }]}
+                placeholder="Поиск..."
+                placeholderTextColor={colors.tertiaryLabel}
+                value={query}
+                onChangeText={handleQueryChange}
+                autoFocus
+                returnKeyType="search"
+              />
+              {query.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => {
+                    setQuery('');
+                    setResults([]);
+                    setCarResults([]);
+                  }}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Icon name="close-circle" size={20} color={colors.tertiaryLabel} />
+                </TouchableOpacity>
+              )}
+            </View>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={onClose}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.cancelText, { color: colors.tint }]}>Отмена</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Вкладки */}
+          <View style={[styles.tabContainer, { backgroundColor: colors.secondaryBackground }]}>
+            <TouchableOpacity
+              style={[
+                styles.tab,
+                activeTab === 'products' && { backgroundColor: colors.background }
+              ]}
+              onPress={() => handleTabChange('products')}
+              activeOpacity={0.7}
+            >
+              <Icon 
+                name="basket-outline" 
+                size={18} 
+                color={activeTab === 'products' ? colors.tint : colors.secondaryLabel} 
+              />
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: activeTab === 'products' ? colors.tint : colors.secondaryLabel }
+                ]}
               >
-                <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
+                Товары
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[
+                styles.tab,
+                activeTab === 'cars' && { backgroundColor: colors.background }
+              ]}
+              onPress={() => handleTabChange('cars')}
+              activeOpacity={0.7}
+            >
+              <Icon 
+                name="car-sport-outline" 
+                size={18} 
+                color={activeTab === 'cars' ? colors.tint : colors.secondaryLabel} 
+              />
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: activeTab === 'cars' ? colors.tint : colors.secondaryLabel }
+                ]}
+              >
+                Автомобили
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Контент */}
+          <View style={styles.content}>
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={colors.tint} />
+                <Text style={[styles.loadingText, { color: colors.secondaryLabel }]}>
+                  Поиск...
+                </Text>
+              </View>
+            ) : (
+              <>
+                {/* Результаты поиска товаров */}
+                {activeTab === 'products' && results.length > 0 && (
+                  <FlatList
+                    data={results}
+                    renderItem={renderProductItem}
+                    keyExtractor={(item) => `${item.type}-${item.id}`}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.listContent}
+                  />
+                )}
+
+                {/* Результаты поиска автомобилей */}
+                {activeTab === 'cars' && carResults.length > 0 && (
+                  <FlatList
+                    data={carResults}
+                    renderItem={renderCarItem}
+                    keyExtractor={(item) => item.carid.toString()}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.listContent}
+                  />
+                )}
+
+                {/* Пустые результаты */}
+                {!loading && query.length >= 2 && 
+                 ((activeTab === 'products' && results.length === 0) ||
+                  (activeTab === 'cars' && carResults.length === 0)) && (
+                  <View style={styles.emptyContainer}>
+                    <Icon name="search-outline" size={64} color={colors.tertiaryLabel} />
+                    <Text style={[styles.emptyText, { color: colors.label }]}>
+                      Ничего не найдено
+                    </Text>
+                    <Text style={[styles.emptySubtext, { color: colors.secondaryLabel }]}>
+                      Попробуйте изменить запрос
+                    </Text>
+                  </View>
+                )}
+
+                {/* Популярные и недавние запросы */}
+                {!loading && query.length < 2 && activeTab === 'products' && (
+                  <ScrollView showsVerticalScrollIndicator={false}>
+                    {/* Недавние поиски */}
+                    {recent.length > 0 && (
+                      <View style={styles.section}>
+                        <View style={styles.sectionHeader}>
+                          <View style={styles.sectionTitleContainer}>
+                            <Icon name="time-outline" size={18} color={colors.secondaryLabel} />
+                            <Text style={[styles.sectionTitle, { color: colors.label }]}>
+                              Недавние
+                            </Text>
+                          </View>
+                          <TouchableOpacity onPress={clearRecent}>
+                            <Text style={[styles.clearButton, { color: colors.tint }]}>
+                              Очистить
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                        <View style={styles.tagsContainer}>
+                          {recent.map((item, index) => (
+                            <TouchableOpacity
+                              key={`recent-${index}`}
+                              style={[styles.tag, { backgroundColor: colors.secondaryBackground }]}
+                              onPress={() => handleQuickSearch(item)}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={[styles.tagText, { color: colors.label }]}>
+                                {item}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+
+                    {/* Популярные запросы */}
+                    {popular.length > 0 && (
+                      <View style={styles.section}>
+                        <View style={styles.sectionHeader}>
+                          <View style={styles.sectionTitleContainer}>
+                            <Icon name="trending-up" size={18} color={colors.secondaryLabel} />
+                            <Text style={[styles.sectionTitle, { color: colors.label }]}>
+                              Популярные
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.tagsContainer}>
+                          {popular.map((item, index) => (
+                            <TouchableOpacity
+                              key={`popular-${index}`}
+                              style={[styles.tag, { backgroundColor: colors.secondaryBackground }]}
+                              onPress={() => handleQuickSearch(item)}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={[styles.tagText, { color: colors.label }]}>
+                                {item}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+                  </ScrollView>
+                )}
+              </>
             )}
           </View>
-          <TouchableOpacity
-            style={styles.cancelButton}
-            onPress={onClose}
-          >
-            <Text style={[styles.cancelText, { color: colors.primary }]}>Отмена</Text>
-          </TouchableOpacity>
-        </View>
-        {/* Suggestions */}
-        {renderSuggestions()}
-        {/* Content */}
-        <View style={styles.content}>
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={colors.primary} />
-            </View>
-          ) : searchQuery.length === 0 ? (
-            // Recent & Popular Searches
-            <View style={styles.recentSection}>
-              <View style={styles.recentHeader}>
-                <Text style={[styles.recentTitle, { color: colors.text }]}>Недавние поиски</Text>
-                {recentSearches.length > 0 && (
-                  <TouchableOpacity onPress={clearRecentSearches}>
-                    <Text style={[styles.clearText, { color: colors.primary }]}>Очистить</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              {recentSearches.length > 0 ? (
-                <View style={styles.recentList}>
-                  {recentSearches.map((search, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      style={styles.recentItem}
-                      onPress={() => handleRecentSearchPress(search)}
-                    >
-                      <Ionicons name="time-outline" size={20} color={colors.textSecondary} />
-                      <Text style={[styles.recentText, { color: colors.text }]}>{search}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              ) : (
-                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Нет недавних поисков</Text>
-              )}
-              {/* Popular Searches */}
-              <View style={styles.popularSection}>
-                <Text style={[styles.popularTitle, { color: colors.text }]}>Популярные запросы</Text>
-                <View style={styles.popularTags}>
-                  {popularSearches.map((tag) => (
-                    <TouchableOpacity
-                      key={tag}
-                      style={[styles.popularTag, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                      onPress={() => handleRecentSearchPress(tag)}
-                    >
-                      <Text style={[styles.popularTagText, { color: colors.text }]}>{tag}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            </View>
-          ) : searchResults.length > 0 ? (
-            // Search Results
-            <FlatList
-              data={searchResults}
-              renderItem={renderSearchResult}
-              keyExtractor={(item) => item.id.toString()}
-              contentContainerStyle={styles.resultsList}
-              keyboardShouldPersistTaps="handled"
-            />
-          ) : (
-            // No Results
-            <View style={styles.noResults}>
-              <Ionicons name="search-outline" size={48} color={colors.textTertiary} />
-              <Text style={[styles.noResultsText, { color: colors.text }]}>Ничего не найдено</Text>
-              <Text style={[styles.noResultsSubtext, { color: colors.textSecondary }]}>
-                Попробуйте изменить запрос
-              </Text>
-            </View>
-          )}
-        </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: {
+    flex: 1,
+  },
+  keyboardAvoid: {
+    flex: 1,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderBottomWidth: 1,
+    borderBottomWidth: 0.5,
   },
   searchContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 12,
-    marginRight: 12,
+    height: 36,
   },
   searchInput: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
     fontSize: 16,
+    paddingHorizontal: 8,
+    paddingVertical: 0,
   },
-  clearButton: { padding: 4 },
   cancelButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 4,
+    paddingLeft: 12,
   },
-  cancelText: { fontSize: 16 },
-  content: { flex: 1 },
+  cancelText: {
+    fontSize: 17,
+    fontWeight: '400',
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    padding: 4,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 9,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 7,
+    gap: 6,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  content: {
+    flex: 1,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // Recent Searches
-  recentSection: { padding: 16 },
-  recentHeader: {
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+  },
+  listContent: {
+    paddingVertical: 8,
+  },
+  resultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginHorizontal: 16,
+    marginVertical: 4,
+    borderRadius: 12,
+  },
+  carItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginHorizontal: 16,
+    marginVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  iconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  resultImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  imagePlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    marginRight: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  resultName: {
+    fontSize: 16,
+    fontWeight: '400',
+    marginBottom: 2,
+  },
+  resultMeta: {
+    fontSize: 13,
+    marginRight: 8,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  resultPrice: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  outOfStockBadge: {
+    backgroundColor: '#FF3B30',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  outOfStockText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  emptyText: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginTop: 16,
+  },
+  emptySubtext: {
+    fontSize: 16,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  section: {
+    paddingHorizontal: 16,
+    marginTop: 20,
+  },
+  sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
-  recentTitle: { fontSize: 18, fontWeight: '600' },
-  clearText: { fontSize: 14 },
-  recentList: { marginBottom: 32 },
-  recentItem: {
+  sectionTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    gap: 6,
   },
-  recentText: { fontSize: 16, marginLeft: 12 },
-  emptyText: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginVertical: 24,
-  },
-  // Popular Searches
-  popularSection: { marginTop: 16 },
-  popularTitle: {
-    fontSize: 18,
+  sectionTitle: {
+    fontSize: 17,
     fontWeight: '600',
-    marginBottom: 16,
   },
-  popularTags: {
+  clearButton: {
+    fontSize: 15,
+  },
+  tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
-  popularTag: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    marginRight: 8,
+  tag: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
     marginBottom: 8,
   },
-  popularTagText: { fontSize: 14 },
-  // Search Results
-  resultsList: { paddingVertical: 8 },
-  resultItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
+  tagText: {
+    fontSize: 14,
+    fontWeight: '400',
   },
-  resultImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    marginRight: 12,
-  },
-  resultIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  resultContent: { flex: 1 },
-  resultName: { fontSize: 16, fontWeight: '500', marginBottom: 4 },
-  resultPrice: { fontSize: 16, fontWeight: '600' },
-  resultSubtext: { fontSize: 14 },
-  stockBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    alignSelf: 'flex-start',
-    marginTop: 4,
-  },
-  stockText: { fontSize: 12, fontWeight: '500' },
-  // No Results
-  noResults: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
-  noResultsText: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  noResultsSubtext: { fontSize: 16, textAlign: 'center' },
-  suggestionsContainer: {
-    position: 'absolute',
-    top: 160,
-    left: 16,
-    right: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-    zIndex: 1000,
-  },
-  suggestionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderBottomWidth: 1,
-  },
-  suggestionText: { flex: 1, marginLeft: 12, fontSize: 16 },
-  suggestionType: { fontSize: 12, marginLeft: 8 },
 });
 
 export default SearchModal;

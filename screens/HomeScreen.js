@@ -536,7 +536,7 @@ const HomeScreen = () => {
 
       {/* Search Modal */}
       <SearchModal 
-        visible={searchModalVisible}
+        isOpen={searchModalVisible}
         onClose={() => setSearchModalVisible(false)}
       />
     </View>
