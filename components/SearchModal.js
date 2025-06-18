@@ -28,13 +28,10 @@ const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const SearchModal = ({ isOpen, onClose }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
-  const [carResults, setCarResults] = useState([]);
   const [popular, setPopular] = useState([]);
   const [recent, setRecent] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('products');
-   const { authStore } = useStores();
-  
+  const { authStore, productStore } = useStores();
   const navigation = useNavigation();
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === 'dark';
@@ -65,23 +62,18 @@ const SearchModal = ({ isOpen, onClose }) => {
     };
   };
 
-  // Загрузка популярных и недавних запросов при открытии
   useEffect(() => {
     if (isOpen) {
       fetchInitialData();
       setTimeout(() => inputRef.current?.focus(), 100);
     } else {
-      // Очистка при закрытии
       setQuery('');
       setResults([]);
-      setCarResults([]);
-      setActiveTab('products');
     }
   }, [isOpen]);
 
   const fetchInitialData = async () => {
     try {
-      
       const headers = {
         'Authorization': `Bearer ${authStore.token}`,
         'Content-Type': 'application/json'
@@ -105,8 +97,8 @@ const SearchModal = ({ isOpen, onClose }) => {
     }
   };
 
-  // Поиск товаров и категорий
-  const searchProducts = async (searchQuery) => {
+  // Единый поиск: товары, категории, авто
+  const searchAll = async (searchQuery) => {
     if (!searchQuery || searchQuery.length < 2) {
       setResults([]);
       return;
@@ -114,21 +106,32 @@ const SearchModal = ({ isOpen, onClose }) => {
 
     setLoading(true);
     try {
-      
+      const headers = {
+        'Authorization': `Bearer ${authStore.token}`,
+        'Content-Type': 'application/json'
+      };
+      // Запрашиваем и товары, и автомобили
       const response = await fetch(
-        `https://api.koleso.app/api/search.php?q=${encodeURIComponent(searchQuery)}&type=all&limit=10`,
-        {
-          headers: {
-            'Authorization': `Bearer ${authStore.token}`,
-            'Content-Type': 'application/json'
-          }
-        }
+        `https://api.koleso.app/api/search.php?q=${encodeURIComponent(searchQuery)}&type=all&limit=10&car_suggest=0`,
+        { headers }
       );
-
       if (response.ok) {
         const data = await response.json();
+        console.log(data);
+        // Объединяем результат: товары, категории, авто
+        let finalResults = [];
         if (data.success) {
-          setResults(data.data || []);
+          if (Array.isArray(data.data)) finalResults = finalResults.concat(data.data);
+          if (Array.isArray(data.cars)) {
+            // Приводим авто к единому виду
+            finalResults = finalResults.concat(
+              data.cars.map(car => ({
+                ...car,
+                type: 'car'
+              }))
+            );
+          }
+          setResults(finalResults);
           // Обновляем популярные и недавние после поиска
           if (data.popular) setPopular(data.popular);
           if (data.recent) setRecent(data.recent);
@@ -141,116 +144,64 @@ const SearchModal = ({ isOpen, onClose }) => {
     }
   };
 
-  // Поиск автомобилей
-  const searchCars = async (searchQuery) => {
-    if (!searchQuery || searchQuery.length < 2) {
-      setCarResults([]);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      
-      const response = await fetch(
-        `https://api.koleso.app/api/search.php?car_suggest=1&q=${encodeURIComponent(searchQuery)}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${authStore.token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setCarResults(data.cars || []);
-        }
-      }
-    } catch (error) {
-      console.error('Car search error:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Дебаунсированные функции поиска
-  const debouncedProductSearch = useCallback(
-    debounce(searchProducts, 300),
+  // Дебаунсированная функция поиска
+  const debouncedSearch = useCallback(
+    debounce(searchAll, 300),
     []
   );
 
-  const debouncedCarSearch = useCallback(
-    debounce(searchCars, 300),
-    []
-  );
-
-  // Обработчик изменения поискового запроса
   const handleQueryChange = (value) => {
     setQuery(value);
-
-    if (activeTab === 'products') {
-      debouncedProductSearch(value);
-    } else {
-      debouncedCarSearch(value);
-    }
+    debouncedSearch(value);
   };
 
-  // Переключение вкладок
-  const handleTabChange = (tab) => {
-    setActiveTab(tab);
-    setResults([]);
-    setCarResults([]);
-    
-    // Если есть запрос, выполняем поиск для новой вкладки
-    if (query.length >= 2) {
-      if (tab === 'products') {
-        searchProducts(query);
-      } else {
-        searchCars(query);
-      }
-    }
-  };
-
-  // Клик по результату товара/категории
-  const handleResultClick = (result) => {
+  // Клик по любому результату
+  const handleResultClick = async (result) => {
     onClose();
-    
+
     if (result.type === 'category') {
       navigation.navigate('Catalog', { category: result.name });
     } else if (result.type === 'product') {
       navigation.navigate('Product', { productId: result.id });
+    } else if (result.type === 'car') {
+      try {
+        // Получаем полные данные об авто через productStore
+        const carData = await productStore.fetchCarById(result.carid);
+        if (carData) {
+          const filter = {
+            marka: carData.marka,
+            model: carData.model,
+            modification: carData.modification,
+            yearDisplay: carData.display || `${carData.beginyear}-${carData.endyear}`,
+            yearData: {
+              kuzov: carData.kuzov,
+              beginyear: carData.beginyear,
+              endyear: carData.endyear
+            },
+            carid: result.carid
+          };
+          await productStore.setCarFilter(filter);
+          navigation.navigate('ProductList');
+        } else {
+          await productStore.setCarFilter({ carid: result.carid });
+          navigation.navigate('ProductList');
+        }
+      } catch (e) {
+        await productStore.setCarFilter({ carid: result.carid });
+        navigation.navigate('ProductList');
+      }
     }
   };
 
-  // Клик по результату автомобиля
-  const handleCarClick = (car) => {
-    onClose();
-    
-    // Переходим в каталог с фильтром по автомобилю
-    navigation.navigate('Catalog', {
-      car_id: car.carid,
-      car_brand: car.marka,
-      car_model: car.model,
-      car_year_from: car.beginyear,
-      car_year_to: car.endyear,
-    });
-  };
-
-  // Клик по популярному/недавнему запросу
+  // Быстрый поиск по популярному/недавнему запросу
   const handleQuickSearch = (searchQuery) => {
     setQuery(searchQuery);
-    if (activeTab === 'products') {
-      searchProducts(searchQuery);
-    } else {
-      searchCars(searchQuery);
-    }
+    searchAll(searchQuery);
   };
 
-  // Очистка недавних запросов
+  // Очистка недавних
   const clearRecent = async () => {
     try {
-      
       const response = await fetch('https://api.koleso.app/api/search.php', {
         method: 'POST',
         headers: {
@@ -268,15 +219,15 @@ const SearchModal = ({ isOpen, onClose }) => {
     }
   };
 
-  // Рендер элемента результата товара
-  const renderProductItem = ({ item: result }) => (
-    <TouchableOpacity
-      style={[styles.resultItem, { backgroundColor: colors.cardBackground }]}
-      onPress={() => handleResultClick(result)}
-      activeOpacity={0.7}
-    >
-      {result.type === 'category' ? (
-        <>
+  // Рендер универсального результата
+  const renderResultItem = ({ item: result }) => {
+    if (result.type === 'category') {
+      return (
+        <TouchableOpacity
+          style={[styles.resultItem, { backgroundColor: colors.cardBackground }]}
+          onPress={() => handleResultClick(result)}
+          activeOpacity={0.7}
+        >
           <View style={[styles.iconContainer, { backgroundColor: colors.secondaryBackground }]}>
             <Icon name="folder-outline" size={20} color={colors.tint} />
           </View>
@@ -287,9 +238,15 @@ const SearchModal = ({ isOpen, onClose }) => {
             </Text>
           </View>
           <Icon name="chevron-forward" size={18} color={colors.tertiaryLabel} />
-        </>
-      ) : (
-        <>
+        </TouchableOpacity>
+      );
+    } else if (result.type === 'product') {
+      return (
+        <TouchableOpacity
+          style={[styles.resultItem, { backgroundColor: colors.cardBackground }]}
+          onPress={() => handleResultClick(result)}
+          activeOpacity={0.7}
+        >
           {result.image ? (
             <Image source={{ uri: result.image }} style={styles.resultImage} />
           ) : (
@@ -324,30 +281,31 @@ const SearchModal = ({ isOpen, onClose }) => {
               <Text style={styles.outOfStockText}>Нет</Text>
             </View>
           )}
-        </>
-      )}
-    </TouchableOpacity>
-  );
-
-  // Рендер элемента автомобиля
-  const renderCarItem = ({ item: car }) => (
-    <TouchableOpacity
-      style={[styles.carItem, { backgroundColor: colors.cardBackground, borderColor: colors.separator }]}
-      onPress={() => handleCarClick(car)}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.iconContainer, { backgroundColor: colors.tint }]}>
-        <Icon name="car-sport-outline" size={20} color="#FFFFFF" />
-      </View>
-      <View style={styles.resultInfo}>
-        <Text style={[styles.resultName, { color: colors.label }]}>{car.label}</Text>
-        <Text style={[styles.resultMeta, { color: colors.secondaryLabel }]}>
-          ID: {car.carid}
-        </Text>
-      </View>
-      <Icon name="chevron-forward" size={18} color={colors.tertiaryLabel} />
-    </TouchableOpacity>
-  );
+        </TouchableOpacity>
+      );
+    } else if (result.type === 'car') {
+      return (
+        <TouchableOpacity
+          style={[styles.resultItem, { backgroundColor: colors.cardBackground }]}
+          onPress={() => handleResultClick(result)}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.iconContainer, { backgroundColor: colors.tint }]}>
+            <Icon name="car-sport-outline" size={20} color="#FFFFFF" />
+          </View>
+          <View style={styles.resultInfo}>
+            <Text style={[styles.resultName, { color: colors.label }]}>{result.label}</Text>
+            <Text style={[styles.resultMeta, { color: colors.secondaryLabel }]}>
+              ID: {result.carid}
+            </Text>
+          </View>
+          <Icon name="chevron-forward" size={18} color={colors.tertiaryLabel} />
+        </TouchableOpacity>
+      );
+    } else {
+      return null;
+    }
+  };
 
   return (
     <Modal
@@ -380,7 +338,6 @@ const SearchModal = ({ isOpen, onClose }) => {
                   onPress={() => {
                     setQuery('');
                     setResults([]);
-                    setCarResults([]);
                   }}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
@@ -397,55 +354,6 @@ const SearchModal = ({ isOpen, onClose }) => {
             </TouchableOpacity>
           </View>
 
-          {/* Вкладки */}
-          <View style={[styles.tabContainer, { backgroundColor: colors.secondaryBackground }]}>
-            <TouchableOpacity
-              style={[
-                styles.tab,
-                activeTab === 'products' && { backgroundColor: colors.background }
-              ]}
-              onPress={() => handleTabChange('products')}
-              activeOpacity={0.7}
-            >
-              <Icon 
-                name="basket-outline" 
-                size={18} 
-                color={activeTab === 'products' ? colors.tint : colors.secondaryLabel} 
-              />
-              <Text
-                style={[
-                  styles.tabText,
-                  { color: activeTab === 'products' ? colors.tint : colors.secondaryLabel }
-                ]}
-              >
-                Товары
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[
-                styles.tab,
-                activeTab === 'cars' && { backgroundColor: colors.background }
-              ]}
-              onPress={() => handleTabChange('cars')}
-              activeOpacity={0.7}
-            >
-              <Icon 
-                name="car-sport-outline" 
-                size={18} 
-                color={activeTab === 'cars' ? colors.tint : colors.secondaryLabel} 
-              />
-              <Text
-                style={[
-                  styles.tabText,
-                  { color: activeTab === 'cars' ? colors.tint : colors.secondaryLabel }
-                ]}
-              >
-                Автомобили
-              </Text>
-            </TouchableOpacity>
-          </View>
-
           {/* Контент */}
           <View style={styles.content}>
             {loading ? (
@@ -457,32 +365,23 @@ const SearchModal = ({ isOpen, onClose }) => {
               </View>
             ) : (
               <>
-                {/* Результаты поиска товаров */}
-                {activeTab === 'products' && results.length > 0 && (
+                {/* Результаты поиска */}
+                {results.length > 0 && (
                   <FlatList
                     data={results}
-                    renderItem={renderProductItem}
-                    keyExtractor={(item) => `${item.type}-${item.id}`}
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={styles.listContent}
-                  />
-                )}
-
-                {/* Результаты поиска автомобилей */}
-                {activeTab === 'cars' && carResults.length > 0 && (
-                  <FlatList
-                    data={carResults}
-                    renderItem={renderCarItem}
-                    keyExtractor={(item) => item.carid.toString()}
+                    renderItem={renderResultItem}
+                    keyExtractor={(item, idx) =>
+                      item.type === 'category' ? `cat-${item.id || item.name}` :
+                      item.type === 'car' ? `car-${item.carid}` :
+                      item.type === 'product' ? `prod-${item.id}` : `item-${idx}`
+                    }
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={styles.listContent}
                   />
                 )}
 
                 {/* Пустые результаты */}
-                {!loading && query.length >= 2 && 
-                 ((activeTab === 'products' && results.length === 0) ||
-                  (activeTab === 'cars' && carResults.length === 0)) && (
+                {!loading && query.length >= 2 && results.length === 0 && (
                   <View style={styles.emptyContainer}>
                     <Icon name="search-outline" size={64} color={colors.tertiaryLabel} />
                     <Text style={[styles.emptyText, { color: colors.label }]}>
@@ -495,7 +394,7 @@ const SearchModal = ({ isOpen, onClose }) => {
                 )}
 
                 {/* Популярные и недавние запросы */}
-                {!loading && query.length < 2 && activeTab === 'products' && (
+                {!loading && query.length < 2 && (
                   <ScrollView showsVerticalScrollIndicator={false}>
                     {/* Недавние поиски */}
                     {recent.length > 0 && (
@@ -603,26 +502,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '400',
   },
-  tabContainer: {
-    flexDirection: 'row',
-    padding: 4,
-    marginHorizontal: 16,
-    marginTop: 8,
-    borderRadius: 9,
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    borderRadius: 7,
-    gap: 6,
-  },
-  tabText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
   content: {
     flex: 1,
   },
@@ -646,16 +525,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginVertical: 4,
     borderRadius: 12,
-  },
-  carItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginHorizontal: 16,
-    marginVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
   },
   iconContainer: {
     width: 36,
