@@ -33,6 +33,8 @@ import Carousel, {
 import MapView, { Marker } from 'react-native-maps';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import LinearGradient from 'react-native-linear-gradient';
+import { useTheme } from '../contexts/ThemeContext';
+import { useThemedStyles } from '../hooks/useThemedStyles';
 
 const ProductScreen = observer(() => {
   const DEFAULT_IMAGE = 'https://api.koleso.app/public/img/no-image.jpg';
@@ -41,6 +43,8 @@ const ProductScreen = observer(() => {
   const navigation = useNavigation();
   const { productId, fromCart, modal } = route.params;
   const { cartStore, authStore, favoritesStore } = useStores();
+  const { colors, theme } = useTheme();
+  const styles = useThemedStyles(themedStyles);
   
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
@@ -72,13 +76,12 @@ const ProductScreen = observer(() => {
 
   // Получение максимального доступного количества товара
   const getMaxAvailableQuantity = useCallback(() => {
-    if (!stores || stores.length === 0) return 20; // Дефолтный лимит если нет данных о складах
+    if (!stores || stores.length === 0) return 20;
     
     const totalStock = stores.reduce((total, store) => {
       return total + (store.quantity > 0 ? store.quantity : 0);
     }, 0);
     
-    // Возвращаем минимум между общим остатком на складах и максимальным лимитом (20)
     return Math.min(totalStock, 20);
   }, [stores]);
 
@@ -87,6 +90,7 @@ const ProductScreen = observer(() => {
     const maxAvailable = getMaxAvailableQuantity();
     return requestedQuantity <= maxAvailable;
   }, [getMaxAvailableQuantity]);
+
   const isInCart = useCallback(() => {
     if (!product) return false;
     return cartStore.items.some(item => item.product_id == product.id);
@@ -106,7 +110,6 @@ const ProductScreen = observer(() => {
         setQuantity(cartItem.quantity);
       }
     } else if (!isInCart() && quantity !== 1) {
-      // Если товара нет в корзине, устанавливаем количество в 1
       setQuantity(1);
     }
   }, [product, cartStore.items, isInCart, getCartItem, isUpdatingQuantity]);
@@ -586,7 +589,7 @@ const ProductScreen = observer(() => {
       >
         <View style={styles.storeCardHeader}>
           <View style={styles.storeIconContainer}>
-            <Ionicons name="business" size={20} color={inStock ? "#006363" : "#CCC"} />
+            <Ionicons name="business" size={20} color={inStock ? colors.primary : colors.textTertiary} />
           </View>
           <View style={styles.storeInfo}>
             <Text style={styles.storeName} numberOfLines={1}>{item.storeInfo.name}</Text>
@@ -601,7 +604,7 @@ const ProductScreen = observer(() => {
             <Ionicons 
               name={inStock ? "checkmark-circle" : "close-circle"} 
               size={16} 
-              color={inStock ? "#10B981" : "#EF4444"} 
+              color={inStock ? colors.success : colors.error} 
             />
             <Text style={[styles.stockStatus, inStock ? styles.inStockText : styles.outOfStockText]}>
               {inStock ? `${item.quantity} шт` : 'Нет'}
@@ -612,7 +615,7 @@ const ProductScreen = observer(() => {
             style={styles.mapLinkButton}
             onPress={() => openStoreMap(item.storeInfo)}
           >
-            <Ionicons name="navigate-outline" size={18} color="#006363" />
+            <Ionicons name="navigate-outline" size={18} color={colors.primary} />
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -688,7 +691,7 @@ const ProductScreen = observer(() => {
             }
           }}
         >
-          <Ionicons name="cart-outline" size={20} color="#006363" />
+          <Ionicons name="cart-outline" size={20} color={colors.primary} />
           <Text style={styles.productCardButtonText}>В корзину</Text>
         </TouchableOpacity>
       </View>
@@ -698,7 +701,7 @@ const ProductScreen = observer(() => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#006363" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Загружаем детали товара...</Text>
       </View>
     );
@@ -708,7 +711,7 @@ const ProductScreen = observer(() => {
     return (
       <View style={styles.errorContainer}>
         <View style={styles.errorIcon}>
-          <Ionicons name="alert-circle-outline" size={64} color="#EF4444" />
+          <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
         </View>
         <Text style={styles.errorTitle}>Упс! Что-то пошло не так</Text>
         <Text style={styles.errorText}>{error}</Text>
@@ -726,7 +729,7 @@ const ProductScreen = observer(() => {
     return (
       <View style={styles.errorContainer}>
         <View style={styles.errorIcon}>
-          <Ionicons name="search-outline" size={64} color="#999" />
+          <Ionicons name="search-outline" size={64} color={colors.textTertiary} />
         </View>
         <Text style={styles.errorTitle}>Товар не найден</Text>
         <Text style={styles.errorText}>К сожалению, мы не смогли найти этот товар</Text>
@@ -746,35 +749,39 @@ const ProductScreen = observer(() => {
 
   return (
     <View style={[styles.container, { paddingTop: statusBarHeight }]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F5F5F5" translucent={false} />
+      <StatusBar 
+        barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.headerBackground}
+        translucent={false} 
+      />
       
       <CustomHeader 
         title=""
         navigation={navigation}
         statusBarProps={{
-          barStyle: 'dark-content',
-          backgroundColor: '#F5F5F5'
+          barStyle: theme === 'dark' ? 'light-content' : 'dark-content',
+          backgroundColor: colors.headerBackground
         }}
         safeAreaStyle={{
-          backgroundColor: '#F5F5F5',
-          paddingTop: 0 || 0
+          backgroundColor: colors.headerBackground,
+          paddingTop: 0
         }}
         headerStyle={{
-          backgroundColor: '#F5F5F5',
+          backgroundColor: colors.headerBackground,
           borderBottomWidth: 0,
           elevation: 0,
           shadowOpacity: 0,
-          marginTop: 0 || 0
+          marginTop: 0
         }}
         rightAction={() => toggleFavorite()}
         onBackPress={handleBackPress}
         rightIcon={isFavorite(productId) ? "heart" : "heart-outline"}
         rightIcon2="share-outline"
         rightAction2={() => handleShare()}
-        iconColorRight2="#333"              
-        iconColorRight={isFavorite(productId) ? "#FF6B6B" : "#333"}
-        iconColorLeft="#333"
-        titleStyle={{ color: '#333' }}
+        iconColorRight2={colors.text}              
+        iconColorRight={isFavorite(productId) ? colors.error : colors.text}
+        iconColorLeft={colors.text}
+        titleStyle={{ color: colors.text }}
         withBackButton
       />
      
@@ -785,7 +792,10 @@ const ProductScreen = observer(() => {
         {/* Карусель изображений */}
         <View style={styles.carouselWrapper}>
           <LinearGradient
-            colors={['#F5F5F5', '#F5F5F5', '#FFFFFF']}
+            colors={theme === 'dark' 
+              ? ['#000000', '#000000', '#1C1C1E'] 
+              : ['#F5F5F5', '#F5F5F5', '#FFFFFF']
+            }
             style={styles.carouselBackground}
             start={{x: 0, y: 0}}
             end={{x: 0, y: 1}}
@@ -861,7 +871,7 @@ const ProductScreen = observer(() => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionIcon}>
-              <Ionicons name="list-outline" size={22} color="#006363" />
+              <Ionicons name="list-outline" size={22} color={colors.primary} />
             </View>
             <Text style={styles.sectionTitle}>Характеристики</Text>
           </View>
@@ -874,11 +884,14 @@ const ProductScreen = observer(() => {
                   title="Размер" 
                   value={`${formatValue(product.width)}/${formatValue(product.profile)} R${formatValue(product.diameter)}`} 
                   highlight
+                  colors={colors}
+                  theme={theme}
+                  styles={styles}
                 />
-                <SpecItem icon="snow-outline" title="Сезон" value={product.season} />
-                <SpecItem icon="speedometer-outline" title="Индексы" value={`${product.load_index}/${product.speed_index}`} />
-                <SpecItem icon="car-sport-outline" title="RunFlat" value={product.runflat ? 'Есть' : 'Нет'} />
-                {product.spiked && <SpecItem icon="snow-outline" title="Шипы" value="Есть" highlight />}
+                <SpecItem icon="snow-outline" title="Сезон" value={product.season} colors={colors} theme={theme} styles={styles} />
+                <SpecItem icon="speedometer-outline" title="Индексы" value={`${product.load_index}/${product.speed_index}`} colors={colors} theme={theme} styles={styles}/>
+                <SpecItem icon="car-sport-outline" title="RunFlat" value={product.runflat ? 'Есть' : 'Нет'} colors={colors} theme={theme} styles={styles} />
+                {product.spiked && <SpecItem icon="snow-outline" title="Шипы" value="Есть" highlight colors={colors} theme={theme} styles={styles} />}
               </>
             )}
             
@@ -888,38 +901,59 @@ const ProductScreen = observer(() => {
                   icon="disc-outline" 
                   title="Тип" 
                   value={product.rim_type || 'Литой'} 
+                  colors={colors}
+                  theme={theme}
+                  styles={styles}
                 />
                 <SpecItem 
                   icon="resize-outline" 
                   title="Диаметр" 
                   value={`R${formatValue(product.diameter)}`} 
                   highlight 
+                  colors={colors}
+                  theme={theme}
+                  styles={styles}
                 />
                 <SpecItem 
                   icon="git-network-outline" 
                   title="PCD" 
                   value={product.pcd ? `${product.pcd}` : `${product.hole_count}x${product.bolt_pattern}`} 
+                  colors={colors}
+                  theme={theme}
+                  styles={styles}
                 />
                 <SpecItem 
                   icon="arrow-forward-outline" 
                   title="Вылет (ET)" 
                   value={`ET${formatValue(product.et || product.offset)}`} 
+                  colors={colors}
+                  theme={theme}
+                  styles={styles}
                 />
                 <SpecItem 
                   icon="radio-button-on-outline" 
                   title="Центральное отверстие (DIA)" 
                   value={`${formatValue(product.dia || product.center_bore)} мм`} 
+                  colors={colors}
+                  theme={theme}
+                  styles={styles}
                 />
                 <SpecItem 
                   icon="resize-outline" 
                   title="Ширина" 
                   value={`${formatValue(product.width)} J`} 
+                  colors={colors}
+                  theme={theme}
+                  styles={styles}
                 />
                 {product.rim_color && (
                   <SpecItem 
                     icon="color-palette-outline" 
                     title="Цвет" 
                     value={product.rim_color} 
+                    colors={colors}
+                    theme={theme}
+                    styles={styles}
                   />
                 )}
                 {product.material && (
@@ -927,6 +961,9 @@ const ProductScreen = observer(() => {
                     icon="build-outline" 
                     title="Материал" 
                     value={product.material} 
+                    colors={colors}
+                    theme={theme}
+                    styles={styles}
                   />
                 )}
               </>
@@ -939,27 +976,42 @@ const ProductScreen = observer(() => {
                   title="Емкость" 
                   value={`${product.capacity} А·ч`} 
                   highlight 
+                  colors={colors}
+                  theme={theme}
+                  styles={styles}
                 />
                 <SpecItem 
                   icon="flash-outline" 
                   title="Пусковой ток" 
                   value={`${product.starting_current} А`} 
+                  colors={colors}
+                  theme={theme}
+                  styles={styles}
                 />
                 <SpecItem 
                   icon="swap-horizontal-outline" 
                   title="Полярность" 
                   value={product.polarity === '0' ? 'Прямая' : product.polarity === '1' ? 'Обратная' : product.polarity} 
+                  colors={colors}
+                  theme={theme}
+                  styles={styles}
                 />
                 <SpecItem 
                   icon="cube-outline" 
                   title="Размеры (Д×Ш×В)" 
                   value={`${product.length}×${product.width}×${product.height} мм`} 
+                  colors={colors}
+                  theme={theme}
+                  styles={styles}
                 />
                 {product.terminal_type && (
                   <SpecItem 
                     icon="hardware-chip-outline" 
                     title="Тип клемм" 
                     value={product.terminal_type} 
+                    colors={colors}
+                    theme={theme}
+                    styles={styles}
                   />
                 )}
               </>
@@ -972,22 +1024,34 @@ const ProductScreen = observer(() => {
                   title="Вязкость" 
                   value={product.viscosity} 
                   highlight 
+                  colors={colors}
+                  theme={theme}
+                  styles={styles}
                 />
                 <SpecItem 
                   icon="car-outline" 
                   title="Тип двигателя" 
                   value={product.engine_type} 
+                  colors={colors}
+                  theme={theme}
+                  styles={styles}
                 />
                 <SpecItem 
                   icon="flask-outline" 
                   title="Объем" 
                   value={`${product.volume} л`} 
+                  colors={colors}
+                  theme={theme}
+                  styles={styles}
                 />
                 {product.api_class && (
                   <SpecItem 
                     icon="ribbon-outline" 
                     title="Класс API" 
                     value={product.api_class} 
+                    colors={colors}
+                    theme={theme}
+                    styles={styles}
                   />
                 )}
                 {product.acea_class && (
@@ -995,6 +1059,9 @@ const ProductScreen = observer(() => {
                     icon="medal-outline" 
                     title="Класс ACEA" 
                     value={product.acea_class} 
+                    colors={colors}
+                    theme={theme}
+                    styles={styles}
                   />
                 )}
               </>
@@ -1006,6 +1073,9 @@ const ProductScreen = observer(() => {
                 icon="business-outline" 
                 title="Бренд" 
                 value={product.brand} 
+                colors={colors}
+                theme={theme}
+                styles={styles}
               />
             )}
             
@@ -1014,6 +1084,9 @@ const ProductScreen = observer(() => {
                 icon="flag-outline" 
                 title="Страна производства" 
                 value={product.country} 
+                colors={colors}
+                theme={theme}
+                styles={styles}
               />
             )}
             
@@ -1022,6 +1095,9 @@ const ProductScreen = observer(() => {
                 icon="shield-checkmark-outline" 
                 title="Гарантия" 
                 value={product.warranty} 
+                colors={colors}
+                theme={theme}
+                styles={styles}
               />
             )}
           </View>
@@ -1031,7 +1107,7 @@ const ProductScreen = observer(() => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionIcon}>
-              <Ionicons name="location-outline" size={22} color="#006363" />
+              <Ionicons name="location-outline" size={22} color={colors.primary} />
             </View>
             <Text style={styles.sectionTitle}>Наличие в магазинах</Text>
           </View>
@@ -1067,14 +1143,14 @@ const ProductScreen = observer(() => {
                     <View style={styles.storeDetailsInfo}>
                       <Text style={styles.storeDetailsName}>{selectedStore.storeInfo.name}</Text>
                       <View style={styles.storeDetailsRow}>
-                        <Ionicons name="location-outline" size={16} color="#6B7280" />
+                        <Ionicons name="location-outline" size={16} color={colors.textSecondary} />
                         <Text style={styles.storeDetailsText}>
                           {selectedStore.storeInfo.city}, {selectedStore.storeInfo.address}
                         </Text>
                       </View>
                       {selectedStore.storeInfo.working_hours && (
                         <View style={styles.storeDetailsRow}>
-                          <Ionicons name="time-outline" size={16} color="#6B7280" />
+                          <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
                           <Text style={styles.storeDetailsText}>
                             {selectedStore.storeInfo.working_hours}
                           </Text>
@@ -1127,7 +1203,7 @@ const ProductScreen = observer(() => {
           ) : (
             <View style={styles.noStores}>
               <View style={styles.noStoresIcon}>
-                <Ionicons name="cube-outline" size={48} color="#D1D5DB" />
+                <Ionicons name="cube-outline" size={48} color={colors.textTertiary} />
               </View>
               <Text style={styles.noStoresText}>Информация о наличии скоро появится</Text>
             </View>
@@ -1139,7 +1215,7 @@ const ProductScreen = observer(() => {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionIcon}>
-                <Ionicons name="document-text-outline" size={22} color="#006363" />
+                <Ionicons name="document-text-outline" size={22} color={colors.primary} />
               </View>
               <Text style={styles.sectionTitle}>Описание</Text>
             </View>
@@ -1160,7 +1236,7 @@ const ProductScreen = observer(() => {
                 <Ionicons 
                   name={showFullDescription ? "chevron-up" : "chevron-down"} 
                   size={16} 
-                  color="#006363" 
+                  color={colors.primary} 
                 />
               </TouchableOpacity>
             )}
@@ -1172,7 +1248,7 @@ const ProductScreen = observer(() => {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionIcon}>
-                <Ionicons name="layers-outline" size={22} color="#006363" />
+                <Ionicons name="layers-outline" size={22} color={colors.primary} />
               </View>
               <Text style={styles.sectionTitle}>Та же модель</Text>
             </View>
@@ -1194,7 +1270,7 @@ const ProductScreen = observer(() => {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionIcon}>
-                <Ionicons name="bulb-outline" size={22} color="#006363" />
+                <Ionicons name="bulb-outline" size={22} color={colors.primary} />
               </View>
               <Text style={styles.sectionTitle}>Похожие товары</Text>
             </View>
@@ -1215,7 +1291,10 @@ const ProductScreen = observer(() => {
       {/* Фиксированная панель покупки */}
       <View style={[styles.bottomPanel, { paddingBottom: tabBarHeight }]}>
         <LinearGradient
-          colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.8)', 'rgba(255,255,255,1)']}
+          colors={theme === 'dark' 
+            ? ['rgba(0,0,0,0)', 'rgba(0,0,0,0.8)', 'rgba(0,0,0,1)']
+            : ['rgba(255,255,255,0)', 'rgba(255,255,255,0.8)', 'rgba(255,255,255,1)']
+          }
           style={styles.bottomPanelGradient}
         />
         
@@ -1235,9 +1314,9 @@ const ProductScreen = observer(() => {
                     disabled={quantity <= 1 || isUpdatingQuantity}
                   >
                     {isUpdatingQuantity ? (
-                      <ActivityIndicator size="small" color="#6B7280" />
+                      <ActivityIndicator size="small" color={colors.textSecondary} />
                     ) : (
-                      <Ionicons name="remove" size={20} color={quantity <= 1 ? "#D1D5DB" : "#374151"} />
+                      <Ionicons name="remove" size={20} color={quantity <= 1 ? colors.textTertiary : colors.text} />
                     )}
                   </TouchableOpacity>
                   
@@ -1259,12 +1338,12 @@ const ProductScreen = observer(() => {
                     disabled={quantity >= getMaxAvailableQuantity() || quantity >= 20 || isUpdatingQuantity}
                   >
                     {isUpdatingQuantity ? (
-                      <ActivityIndicator size="small" color="#6B7280" />
+                      <ActivityIndicator size="small" color={colors.textSecondary} />
                     ) : (
                       <Ionicons 
                         name="add" 
                         size={20} 
-                        color={(quantity >= getMaxAvailableQuantity() || quantity >= 20) ? "#D1D5DB" : "#374151"} 
+                        color={(quantity >= getMaxAvailableQuantity() || quantity >= 20) ? colors.textTertiary : colors.text} 
                       />
                     )}
                   </TouchableOpacity>
@@ -1298,10 +1377,10 @@ const ProductScreen = observer(() => {
                 disabled={addingToCart}
               >
                 {addingToCart ? (
-                  <ActivityIndicator size="small" color="#006363" />
+                  <ActivityIndicator size="small" color={colors.primary} />
                 ) : (
                   <>
-                    <Ionicons name="cart-outline" size={24} color="#006363" />
+                    <Ionicons name="cart-outline" size={24} color={colors.primary} />
                     <Text style={styles.addToCartButtonTextFull}>В корзину</Text>
                   </>
                 )}
@@ -1315,22 +1394,38 @@ const ProductScreen = observer(() => {
 });
 
 // Компонент для отображения характеристик
-const SpecItem = ({ icon, title, value, highlight }) => (
-  <View style={[styles.specItem, highlight && styles.specItemHighlight]}>
+const SpecItem = ({ icon, title, value, highlight, colors, theme, styles }) => (
+  <View style={[
+    styles.specItem, 
+    highlight && styles.specItemHighlight,
+    { borderBottomColor: colors.border }
+  ]}>
     <View style={styles.specLeft}>
-      <View style={[styles.specIconContainer, highlight && styles.specIconHighlight]}>
-        <Ionicons name={icon} size={18} color={highlight ? "#006363" : "#6B7280"} />
+      <View style={[
+        styles.specIconContainer, 
+        highlight && styles.specIconHighlight,
+        { backgroundColor: highlight ? colors.primaryLight : colors.surface }
+      ]}>
+        <Ionicons name={icon} size={18} color={highlight ? colors.primary : colors.textSecondary} />
       </View>
-      <Text style={[styles.specTitle, highlight && styles.specTitleHighlight]}>{title}</Text>
+      <Text style={[
+        styles.specTitle, 
+        highlight && styles.specTitleHighlight,
+        { color: highlight ? colors.text : colors.textSecondary }
+      ]}>{title}</Text>
     </View>
-    <Text style={[styles.specValue, highlight && styles.specValueHighlight]}>{value || '—'}</Text>
+    <Text style={[
+      styles.specValue, 
+      highlight && styles.specValueHighlight,
+      { color: highlight ? colors.primary : colors.text }
+    ]}>{value || '—'}</Text>
   </View>
 );
 
-const styles = StyleSheet.create({
+const themedStyles = (colors, theme) => ({
   container: {
     flex: 1,
-    backgroundColor: '#FFF',
+    backgroundColor: colors.background,
   },
   content: {
     paddingBottom: 20,
@@ -1339,12 +1434,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F8FAFB',
+    backgroundColor: colors.background,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#6B7280',
+    color: colors.textSecondary,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
   errorContainer: {
@@ -1352,13 +1447,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
-    backgroundColor: '#F8FAFB',
+    backgroundColor: colors.background,
   },
   errorIcon: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#FEE2E2',
+    backgroundColor: theme === 'dark' ? colors.surface : '#FEE2E2',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
@@ -1366,25 +1461,25 @@ const styles = StyleSheet.create({
   errorTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 12,
     textAlign: 'center',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
   errorText: {
     fontSize: 16,
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: 32,
     lineHeight: 24,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   errorButton: {
-    backgroundColor: '#006363',
+    backgroundColor: colors.primary,
     paddingHorizontal: 32,
     paddingVertical: 16,
     borderRadius: 12,
-    shadowColor: '#006363',
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
@@ -1399,7 +1494,7 @@ const styles = StyleSheet.create({
   carouselWrapper: {
     position: 'relative',
     marginBottom: -40,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.headerBackground,
   },
   carouselBackground: {
     position: 'absolute',
@@ -1432,23 +1527,23 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: 'rgba(0,0,0,0.2)',
+    backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
     marginHorizontal: 4,
   },
   paginationDotActive: {
-    backgroundColor: '#006363',
+    backgroundColor: colors.primary,
     width: 24,
   },
   mainInfo: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.card,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
     marginBottom: 12,
     paddingTop: 50,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.1,
+    shadowOpacity: theme === 'dark' ? 0.3 : 0.1,
     shadowRadius: 10,
     elevation: 5,
   },
@@ -1456,7 +1551,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 24,
     right: 24,
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.error,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -1474,7 +1569,7 @@ const styles = StyleSheet.create({
   },
   productBrand: {
     fontSize: 14,
-    color: '#006363',
+    color: colors.primary,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -1483,7 +1578,7 @@ const styles = StyleSheet.create({
   productName: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 20,
     lineHeight: 36,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
@@ -1501,19 +1596,19 @@ const styles = StyleSheet.create({
   productPrice: {
     fontSize: 36,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.text,
     marginRight: 12,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
   productOldPrice: {
     fontSize: 22,
-    color: '#9CA3AF',
+    color: colors.textTertiary,
     textDecorationLine: 'line-through',
   },
   availabilityBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#D1FAE5',
+    backgroundColor: theme === 'dark' ? colors.successDark : '#D1FAE5',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
@@ -1522,23 +1617,23 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#10B981',
+    backgroundColor: colors.success,
     marginRight: 8,
   },
   availabilityText: {
     fontSize: 14,
-    color: '#059669',
+    color: theme === 'dark' ? colors.success : '#059669',
     fontWeight: '600',
   },
   section: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.card,
     marginBottom: 12,
     borderRadius: 16,
     marginHorizontal: 12,
     padding: 20,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: theme === 'dark' ? 0.2 : 0.05,
     shadowRadius: 8,
     elevation: 2,
   },
@@ -1551,7 +1646,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: '#E6F4F4',
+    backgroundColor: colors.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -1559,7 +1654,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#111827',
+    color: colors.text,
     flex: 1,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
@@ -1572,10 +1667,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
   },
   specItemHighlight: {
-    backgroundColor: '#F0FFFE',
+    backgroundColor: theme === 'dark' ? colors.primaryDark : '#F0FFFE',
     marginHorizontal: -20,
     paddingHorizontal: 20,
     borderRadius: 12,
@@ -1591,32 +1685,28 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
   specIconHighlight: {
-    backgroundColor: '#E6F4F4',
+    backgroundColor: colors.primaryLight,
   },
   specTitle: {
     fontSize: 15,
-    color: '#6B7280',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   specTitleHighlight: {
-    color: '#374151',
     fontWeight: '500',
   },
   specValue: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#111827',
     textAlign: 'right',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   specValueHighlight: {
-    color: '#006363',
+    color: colors.primary,
   },
   storesList: {
     paddingHorizontal: 8,
@@ -1627,20 +1717,20 @@ const styles = StyleSheet.create({
     marginHorizontal: 6,
     padding: 16,
     borderRadius: 16,
-    backgroundColor: '#FFF',
-    shadowColor: '#000',
+    backgroundColor: colors.card,
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: theme === 'dark' ? 0.3 : 0.1,
     shadowRadius: 16,
     elevation: 4,
     borderWidth: 2,
     borderColor: 'transparent',
   },
   selectedStoreCard: {
-    backgroundColor: '#F0FFFE',
+    backgroundColor: theme === 'dark' ? colors.primaryDark : '#F0FFFE',
     borderWidth: 2,
-    borderColor: '#006363',
-    shadowColor: '#006363',
+    borderColor: colors.primary,
+    shadowColor: colors.primary,
     shadowOpacity: 0.15,
     elevation: 6,
     transform: [{ scale: 1.02 }],
@@ -1657,7 +1747,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: '#E6F4F4',
+    backgroundColor: colors.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -1668,13 +1758,13 @@ const styles = StyleSheet.create({
   storeName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 4,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   storeAddress: {
     fontSize: 14,
-    color: '#6B7280',
+    color: colors.textSecondary,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   storeCardFooter: {
@@ -1690,10 +1780,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   inStockIndicator: {
-    backgroundColor: '#D1FAE5',
+    backgroundColor: theme === 'dark' ? colors.successDark : '#D1FAE5',
   },
   outOfStockIndicator: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: theme === 'dark' ? colors.errorDark : '#FEE2E2',
   },
   stockStatus: {
     fontSize: 14,
@@ -1701,16 +1791,16 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   inStockText: {
-    color: '#059669',
+    color: theme === 'dark' ? colors.success : '#059669',
   },
   outOfStockText: {
-    color: '#DC2626',
+    color: colors.error,
   },
   mapLinkButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#E6F4F4',
+    backgroundColor: colors.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1722,14 +1812,14 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
   },
   noStoresText: {
     fontSize: 16,
-    color: '#6B7280',
+    color: colors.textSecondary,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   storeDetailsContainer: {
@@ -1748,7 +1838,7 @@ const styles = StyleSheet.create({
   storeDetailsName: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 12,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
@@ -1759,7 +1849,7 @@ const styles = StyleSheet.create({
   },
   storeDetailsText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginLeft: 8,
     flex: 1,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
@@ -1768,10 +1858,10 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#10B981',
+    backgroundColor: colors.success,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#10B981',
+    shadowColor: colors.success,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -1781,7 +1871,7 @@ const styles = StyleSheet.create({
     height: 220,
     borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surface,
     position: 'relative',
   },
   map: {
@@ -1793,7 +1883,7 @@ const styles = StyleSheet.create({
     right: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#006363',
+    backgroundColor: colors.primary,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 24,
@@ -1811,7 +1901,7 @@ const styles = StyleSheet.create({
   },
   descriptionText: {
     fontSize: 16,
-    color: '#4B5563',
+    color: colors.textSecondary,
     lineHeight: 24,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
@@ -1822,11 +1912,11 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     marginTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: colors.border,
   },
   showMoreText: {
     fontSize: 14,
-    color: '#006363',
+    color: colors.primary,
     fontWeight: '600',
     marginRight: 4,
   },
@@ -1835,11 +1925,11 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#FFF',
+    backgroundColor: colors.card,
     paddingTop: 16,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: theme === 'dark' ? 0.4 : 0.15,
     shadowRadius: 10,
     elevation: 10,
   },
@@ -1862,13 +1952,13 @@ const styles = StyleSheet.create({
   },
   bottomPriceLabel: {
     fontSize: 16,
-    color: '#6B7280',
+    color: colors.textSecondary,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   bottomPriceValue: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.text,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
   bottomActions: {
@@ -1878,23 +1968,23 @@ const styles = StyleSheet.create({
   quantitySection: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF',
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 4,
     marginRight: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   quantityButton: {
     width: 36,
     height: 36,
     borderRadius: 8,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
   },
   quantityButtonDisabled: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: theme === 'dark' ? colors.surface : '#F9FAFB',
     opacity: 0.6,
   },
   quantityValue: {
@@ -1905,12 +1995,12 @@ const styles = StyleSheet.create({
   quantityText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
+    color: colors.text,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   quantityAvailable: {
     fontSize: 12,
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginTop: 2,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
@@ -1929,7 +2019,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#006363',
+    backgroundColor: colors.primary,
   },
   buyButtonText: {
     color: '#FFF',
@@ -1944,19 +2034,19 @@ const styles = StyleSheet.create({
   productCard: {
     width: Dimensions.get('window').width * 0.45,
     marginHorizontal: 6,
-    backgroundColor: '#FFF',
+    backgroundColor: colors.card,
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: theme === 'dark' ? 0.3 : 0.08,
     shadowRadius: 8,
     elevation: 3,
   },
   productImageContainer: {
     width: '100%',
     height: 160,
-    backgroundColor: '#F8FAFB',
+    backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
@@ -1969,7 +2059,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.error,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -1984,7 +2074,7 @@ const styles = StyleSheet.create({
   },
   productCardBrand: {
     fontSize: 12,
-    color: '#006363',
+    color: colors.primary,
     fontWeight: '600',
     textTransform: 'uppercase',
     marginBottom: 4,
@@ -1992,13 +2082,13 @@ const styles = StyleSheet.create({
   productCardName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 4,
     lineHeight: 18,
   },
   productCardSize: {
     fontSize: 13,
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 8,
   },
   productCardPriceRow: {
@@ -2009,26 +2099,26 @@ const styles = StyleSheet.create({
   productCardPrice: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.text,
     marginRight: 8,
   },
   productCardOldPrice: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: colors.textTertiary,
     textDecorationLine: 'line-through',
   },
   productCardButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#E6F4F4',
+    backgroundColor: colors.primaryLight,
     paddingVertical: 10,
     borderRadius: 10,
   },
   productCardButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#006363',
+    color: colors.primary,
     marginLeft: 6,
   },
   addToCartButtonFull: {
@@ -2038,19 +2128,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     height: 52,
     borderRadius: 16,
-    backgroundColor: '#FFF',
+    backgroundColor: colors.card,
     borderWidth: 2,
-    borderColor: '#006363',
-    shadowColor: '#000',
+    borderColor: colors.primary,
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: theme === 'dark' ? 0.3 : 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
   addToCartButtonTextFull: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#006363',
+    color: colors.primary,
     marginLeft: 8,
   },
 });

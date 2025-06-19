@@ -11,6 +11,7 @@ import { ordersStore } from "./stores/OrdersStore";
 import { storagesStore } from "./stores/StoragesStore";
 import { productStore } from "./stores/ProductStore";
 import { StoreProvider } from "./StoreContext";
+import CustomLoader from './components/CustomLoader';
 import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import AppMetrica from '@appmetrica/react-native-analytics';
 import { OneSignal } from 'react-native-onesignal';
@@ -118,7 +119,7 @@ const FullApp = () => {
   if (!appReady) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
-        <Text style={{ color: colors.text }}>Загрузка...</Text>
+        <CustomLoader color={colors.text} size={50} />
       </View>
     );
   }

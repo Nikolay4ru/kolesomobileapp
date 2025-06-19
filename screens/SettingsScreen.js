@@ -12,6 +12,7 @@ import {
   Modal,
   SafeAreaView
 } from 'react-native';
+import DeviceInfo from 'react-native-device-info';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,6 +22,8 @@ import { MMKV } from 'react-native-mmkv';
 import { useStores } from '../useStores';
 import { useTheme } from '../contexts/ThemeContext';
 import { useThemedStyles } from '../hooks/useThemedStyles';
+import BannerNotificationPermission from '../components/BannerNotificationPermission';
+
 
 const storage = new MMKV();
 
@@ -416,7 +419,9 @@ const SettingsScreen = observer(() => {
           </Text>
         </View>
       </ScrollView>
-
+      {authStore.isNotificationDenied && (
+        <BannerNotificationPermission />
+      )}
       <ThemeSelector 
         visible={themeModalVisible}
         onClose={() => setThemeModalVisible(false)}

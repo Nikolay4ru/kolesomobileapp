@@ -1,0 +1,11 @@
+<!-- android/app/src/main/res/values/miui_config.xml -->
+<!-- Специальный конфиг для MIUI -->
+<resources>
+    <!-- Отключаем оптимизации MIUI -->
+    <bool name="config_force_dark_allowed">false</bool>
+    <bool name="config_override_force_dark">true</bool>
+    
+    <!-- Настройки для корректной работы темы -->
+    <bool name="config_ui_night_mode_override_to_enabled">false</bool>
+    <bool name="config_ui_night_mode_override_to_disabled">false</bool>
+</resources>

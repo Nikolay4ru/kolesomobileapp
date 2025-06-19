@@ -9,13 +9,15 @@ import {
   Image,
   Dimensions,
   Alert,
-  Animated
+  Animated,
+  StatusBar
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useStores } from "../useStores";
+import { useTheme } from '../contexts/ThemeContext';
+import { useThemedStyles } from '../hooks/useThemedStyles';
 
 const { width } = Dimensions.get('window');
 
@@ -24,18 +26,29 @@ const AdminOrderDetailScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { authStore } = useStores();
+  const { colors, theme } = useTheme();
+  const styles = useThemedStyles(themedStyles);
   const { order } = route.params;
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const fadeAnim = new Animated.Value(0);
+  const slideAnim = new Animated.Value(50);
 
   React.useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        tension: 65,
+        friction: 11,
+        useNativeDriver: true,
+      })
+    ]).start();
   }, []);
 
   const handleAction = async (action) => {
@@ -47,10 +60,11 @@ const AdminOrderDetailScreen = () => {
         if (insufficientItems.length > 0) {
           const itemNames = insufficientItems.map(item => item.name).join(', ');
           Alert.alert(
-            'Недостаточно товара на складе',
-            `Следующих товаров недостаточно для резервирования: ${itemNames}`,
-            [{ text: 'OK', style: 'default' }]
+            'Недостаточно товара',
+            `На складе недостаточно: ${itemNames}`,
+            [{ text: 'Понятно', style: 'default' }]
           );
+          setLoading(false);
           return;
         }
       }
@@ -81,21 +95,15 @@ const AdminOrderDetailScreen = () => {
   };
 
   const getStatusConfig = () => {
-    switch(order.status) {
-      case 'Отменён (Удален)': 
-      case 'Отменён (Возврат товара)': 
-        return { color: '#E53E3E', icon: 'cancel', bgColor: '#FFE5E5' };
-      case 'Завершен': 
-        return { color: '#38A169', icon: 'check-circle', bgColor: '#E6FFEC' };
-      case 'Новый': 
-        return { color: '#F6AD55', icon: 'fiber-new', bgColor: '#FFFAF0' };
-      case 'Товар зарезервирован': 
-        return { color: '#4A9B8E', icon: 'inventory', bgColor: '#E6FFF9' };
-      case 'В обработке': 
-        return { color: '#3182CE', icon: 'sync', bgColor: '#E6F7FF' };
-      default: 
-        return { color: '#718096', icon: 'help-outline', bgColor: '#F7FAFC' };
-    }
+    const configs = {
+      'Отменён (Удален)': { color: colors.error, icon: 'cancel', bg: colors.error + '20' },
+      'Отменён (Возврат товара)': { color: colors.error, icon: 'undo', bg: colors.error + '20' },
+      'Завершен': { color: colors.success, icon: 'check-circle', bg: colors.success + '20' },
+      'Новый': { color: colors.warning, icon: 'fiber-new', bg: colors.warning + '20' },
+      'Товар зарезервирован': { color: colors.info, icon: 'inventory', bg: colors.info + '20' },
+      'В обработке': { color: colors.primary, icon: 'sync', bg: colors.primary + '20' },
+    };
+    return configs[order.status] || { color: colors.textSecondary, icon: 'help-outline', bg: colors.surface };
   };
 
   const statusConfig = getStatusConfig();
@@ -107,7 +115,7 @@ const AdminOrderDetailScreen = () => {
         <Icon 
           name={isInsufficient ? 'warning' : 'check-circle'} 
           size={14} 
-          color={isInsufficient ? '#E53E3E' : '#38A169'} 
+          color={isInsufficient ? colors.error : colors.success} 
         />
         <Text style={[styles.stockText, isInsufficient && styles.insufficientStock]}>
           {stock} шт. на складе
@@ -120,7 +128,7 @@ const AdminOrderDetailScreen = () => {
     <View style={styles.infoRow}>
       <View style={styles.infoLeft}>
         <View style={styles.iconContainer}>
-          <Icon name={icon} size={18} color="#4A9B8E" />
+          <Icon name={icon} size={20} color={colors.primary} />
         </View>
         <Text style={styles.infoLabel}>{label}</Text>
       </View>
@@ -129,198 +137,235 @@ const AdminOrderDetailScreen = () => {
   );
 
   return (
-    <SafeAreaView edges={['top']} style={styles.container}>
-      <View style={styles.mainContainer}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity 
-            onPress={() => navigation.goBack()}
-            style={styles.backButton}
-          >
-            <Icon name="arrow-back-ios" size={20} color="#000000" />
-          </TouchableOpacity>
-          <View style={styles.headerTitle}>
-            <Text style={styles.title}>Заказ #{order.number}</Text>
-            <Text style={styles.subtitle}>{order.created_at}</Text>
-          </View>
-          <TouchableOpacity style={styles.moreButton}>
-            <Icon name="more-vert" size={24} color="#000000" />
-          </TouchableOpacity>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar 
+        barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.background}
+      />
+      
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity 
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+          activeOpacity={0.7}
+        >
+          <Icon name="arrow-back-ios" size={22} color={colors.primary} />
+        </TouchableOpacity>
+        <View style={styles.headerTitle}>
+          <Text style={styles.title}>Заказ #{order.number}</Text>
+          <Text style={styles.subtitle}>{order.created_at}</Text>
         </View>
+        <TouchableOpacity style={styles.moreButton} activeOpacity={0.7}>
+          <Icon name="more-horiz" size={24} color={colors.text} />
+        </TouchableOpacity>
+      </View>
 
-        {/* Status Badge */}
-        <Animated.View style={[styles.statusContainer, { opacity: fadeAnim }]}>
-          <View style={[styles.statusBadge, { backgroundColor: statusConfig.bgColor }]}>
-            <Icon name={statusConfig.icon} size={20} color={statusConfig.color} />
-            <Text style={[styles.statusText, { color: statusConfig.color }]}>{order.status}</Text>
+      {/* Status Badge */}
+      <Animated.View 
+        style={[
+          styles.statusContainer, 
+          { 
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }]
+          }
+        ]}
+      >
+        <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
+          <Icon name={statusConfig.icon} size={22} color={statusConfig.color} />
+          <Text style={[styles.statusText, { color: statusConfig.color }]}>{order.status}</Text>
+        </View>
+      </Animated.View>
+
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Order Info Card */}
+        <Animated.View 
+          style={[
+            styles.card,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }]
+            }
+          ]}
+        >
+          <View style={styles.cardHeader}>
+            <View style={styles.sectionTitleContainer}>
+              <View style={styles.sectionIcon}>
+                <Icon name="info" size={22} color={colors.primary} />
+              </View>
+              <Text style={styles.sectionTitle}>Информация</Text>
+            </View>
+          </View>
+          
+          <View style={styles.cardContent}>
+            <InfoRow icon="store" label="Магазин" value={order.store_name} />
+            <InfoRow icon="person" label="Клиент" value={order.client} />
+            <InfoRow icon="phone" label="Телефон" value={order.client_phone} />
+            <View style={styles.divider} />
+            <InfoRow 
+              icon="account-balance-wallet" 
+              label="К оплате" 
+              value={`${order.total_amount.toLocaleString('ru-RU')} ₽`}
+              valueStyle={styles.totalAmount}
+            />
           </View>
         </Animated.View>
 
-        <ScrollView 
-          style={styles.scrollView}
-          contentContainerStyle={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
+        {/* Products Card */}
+        <Animated.View 
+          style={[
+            styles.card,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }]
+            }
+          ]}
         >
-          {/* Order Info Card */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={styles.sectionTitleContainer}>
-                <Icon name="info" size={20} color="#4A9B8E" />
-                <Text style={styles.sectionTitle}>Информация о заказе</Text>
+          <View style={styles.cardHeader}>
+            <View style={styles.sectionTitleContainer}>
+              <View style={styles.sectionIcon}>
+                <Icon name="shopping-cart" size={22} color={colors.primary} />
               </View>
+              <Text style={styles.sectionTitle}>Товары</Text>
             </View>
-            
-            <View style={styles.cardContent}>
-              <InfoRow icon="store" label="Магазин" value={order.store_name} />
-              <InfoRow icon="person" label="Клиент" value={order.client} />
-              <InfoRow icon="phone" label="Телефон" value={order.client_phone} />
-              <View style={styles.divider} />
-              <InfoRow 
-                icon="payments" 
-                label="Итого к оплате" 
-                value={`${order.total_amount.toLocaleString('ru-RU')} ₽`}
-                valueStyle={styles.totalAmount}
-              />
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{order.items.length}</Text>
             </View>
           </View>
-
-          {/* Products Card */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={styles.sectionTitleContainer}>
-                <Icon name="shopping-bag" size={20} color="#4A9B8E" />
-                <Text style={styles.sectionTitle}>Товары</Text>
-              </View>
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{order.items.length}</Text>
-              </View>
-            </View>
-            
-            <View style={styles.cardContent}>
-              {order.items.map((item, index) => (
-                <TouchableOpacity 
-                  key={index} 
-                  style={[
-                    styles.productItem,
-                    index === order.items.length - 1 && styles.lastProductItem
-                  ]}
-                  onPress={() => navigation.navigate('Cart', {
-                    screen: 'ProductModal',
-                    params: {
-                      productId: item.product_id,
-                      fromCart: false
-                    }
-                  })}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.productImageContainer}>
-                    {item.image_url ? (
-                      <Image 
-                        source={{ uri: item.image_url }} 
-                        style={styles.productImage}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={styles.productImagePlaceholder}>
-                        <Icon name="image" size={24} color="#C7C7CC" />
-                      </View>
-                    )}
-                  </View>
+          
+          <View style={styles.cardContent}>
+            {order.items.map((item, index) => (
+              <TouchableOpacity 
+                key={index} 
+                style={[
+                  styles.productItem,
+                  index === order.items.length - 1 && styles.lastProductItem
+                ]}
+                onPress={() => navigation.navigate('Cart', {
+                  screen: 'ProductModal',
+                  params: {
+                    productId: item.product_id,
+                    fromCart: false
+                  }
+                })}
+                activeOpacity={0.7}
+              >
+                <View style={styles.productImageContainer}>
+                  {item.image_url ? (
+                    <Image 
+                      source={{ uri: item.image_url }} 
+                      style={styles.productImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={styles.productImagePlaceholder}>
+                      <Icon name="image" size={28} color={colors.textTertiary} />
+                    </View>
+                  )}
+                </View>
+                
+                <View style={styles.productInfo}>
+                  <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
+                  {renderStockInfo(item.quantity, item.stock)}
                   
-                  <View style={styles.productInfo}>
-                    <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
-                    {renderStockInfo(item.quantity, item.stock)}
-                    
-                    <View style={styles.productBottom}>
-                      <View style={styles.quantityBadge}>
-                        <Text style={styles.quantityText}>{item.quantity} шт</Text>
-                      </View>
-                      <View style={styles.priceContainer}>
-                        <Text style={styles.productPrice}>{item.price.toLocaleString('ru-RU')} ₽</Text>
-                        <Text style={styles.productTotal}>
-                          {(item.price * item.quantity).toLocaleString('ru-RU')} ₽
-                        </Text>
-                      </View>
+                  <View style={styles.productBottom}>
+                    <View style={styles.quantityBadge}>
+                      <Text style={styles.quantityText}>{item.quantity} шт</Text>
+                    </View>
+                    <View style={styles.priceContainer}>
+                      <Text style={styles.productPrice}>{item.price.toLocaleString('ru-RU')} ₽</Text>
+                      <Text style={styles.productTotal}>
+                        {(item.price * item.quantity).toLocaleString('ru-RU')} ₽
+                      </Text>
                     </View>
                   </View>
-                  
-                  <Icon name="chevron-right" size={20} color="#C7C7CC" />
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Action Buttons */}
-          <View style={styles.actionsContainer}>
-            {order.status === 'Новый' && (
-              <>
-                <TouchableOpacity 
-                  style={styles.primaryButton}
-                  onPress={() => handleAction('reserve')}
-                  disabled={loading}
-                  activeOpacity={0.8}
-                >
-                  {loading ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <>
-                      <Icon name="inventory" size={20} color="#FFFFFF" />
-                      <Text style={styles.primaryButtonText}>Зарезервировать товар</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
+                </View>
                 
-                <TouchableOpacity 
-                  style={[styles.secondaryButton, { opacity: 0.5 }]}
-                  disabled={true}
-                  activeOpacity={0.8}
-                >
-                  <Icon name="description" size={20} color="#4A9B8E" />
-                  <Text style={styles.secondaryButtonText}>Выставить счет</Text>
-                </TouchableOpacity>
-              </>
-            )}
-            
-            {order.status !== 'Отменён (Возврат товара)' && 
-             order.status !== 'Отменён (Удален)' && (
+                <Icon name="chevron-right" size={22} color={colors.textTertiary} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </Animated.View>
+
+        {/* Action Buttons */}
+        <Animated.View 
+          style={[
+            styles.actionsContainer,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }]
+            }
+          ]}
+        >
+          {order.status === 'Новый' && (
+            <>
               <TouchableOpacity 
-                style={styles.dangerButton}
-                onPress={() => handleAction('cancel')}
+                style={styles.primaryButton}
+                onPress={() => handleAction('reserve')}
                 disabled={loading}
                 activeOpacity={0.8}
               >
                 {loading ? (
-                  <ActivityIndicator color="#E53E3E" />
+                  <ActivityIndicator color="#FFFFFF" />
                 ) : (
                   <>
-                    <Icon name="close" size={20} color="#E53E3E" />
-                    <Text style={styles.dangerButtonText}>Отменить заказ</Text>
+                    <Icon name="inventory" size={22} color="#FFFFFF" />
+                    <Text style={styles.primaryButtonText}>Зарезервировать товар</Text>
                   </>
                 )}
               </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Error Message */}
-          {error && (
-            <Animated.View style={[styles.errorContainer, { opacity: fadeAnim }]}>
-              <Icon name="error-outline" size={20} color="#E53E3E" />
-              <Text style={styles.errorText}>{error}</Text>
-            </Animated.View>
+              
+              <TouchableOpacity 
+                style={[styles.secondaryButton, { opacity: 0.5 }]}
+                disabled={true}
+                activeOpacity={0.8}
+              >
+                <Icon name="receipt-long" size={22} color={colors.primary} />
+                <Text style={styles.secondaryButtonText}>Выставить счет</Text>
+              </TouchableOpacity>
+            </>
           )}
-        </ScrollView>
-      </View>
-    </SafeAreaView>
+          
+          {order.status !== 'Отменён (Возврат товара)' && 
+           order.status !== 'Отменён (Удален)' && (
+            <TouchableOpacity 
+              style={styles.dangerButton}
+              onPress={() => handleAction('cancel')}
+              disabled={loading}
+              activeOpacity={0.8}
+            >
+              {loading ? (
+                <ActivityIndicator color={colors.error} />
+              ) : (
+                <>
+                  <Icon name="close" size={22} color={colors.error} />
+                  <Text style={styles.dangerButtonText}>Отменить заказ</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+        </Animated.View>
+
+        {/* Error Message */}
+        {error && (
+          <Animated.View style={[styles.errorContainer, { opacity: fadeAnim }]}>
+            <Icon name="error-outline" size={20} color={colors.error} />
+            <Text style={styles.errorText}>{error}</Text>
+          </Animated.View>
+        )}
+      </ScrollView>
+    </View>
   );
 };
 
-const styles = StyleSheet.create({
+const themedStyles = (colors, theme) => ({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
-  },
-  mainContainer: {
-    flex: 1,
+    backgroundColor: colors.background,
   },
   scrollView: {
     flex: 1,
@@ -332,16 +377,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: colors.card,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F5F5F5',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -350,92 +396,100 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '600',
-    color: '#000000',
-    letterSpacing: -0.5,
+    color: colors.text,
+    letterSpacing: -0.4,
   },
   subtitle: {
-    fontSize: 12,
-    color: '#8E8E93',
+    fontSize: 14,
+    color: colors.textSecondary,
     marginTop: 2,
   },
   moreButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
   statusContainer: {
     alignItems: 'center',
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
+    paddingVertical: 16,
+    backgroundColor: colors.card,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 24,
   },
   statusText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
-    marginLeft: 8,
+    marginLeft: 10,
     letterSpacing: -0.3,
   },
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderRadius: 16,
     marginHorizontal: 16,
     marginTop: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: theme === 'dark' ? 0.3 : 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
+    padding: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   sectionTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+  sectionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: colors.primary + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
   sectionTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '600',
-    color: '#000000',
-    marginLeft: 10,
+    color: colors.text,
     letterSpacing: -0.3,
   },
   badge: {
-    backgroundColor: '#9BDDD3',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
+    backgroundColor: colors.primary + '20',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
   badgeText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#2C5F56',
+    color: colors.primary,
   },
   cardContent: {
-    padding: 16,
+    padding: 20,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   infoLeft: {
     flexDirection: 'row',
@@ -443,61 +497,61 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   iconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: '#E6FFF9',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 14,
   },
   infoLabel: {
-    fontSize: 15,
-    color: '#8E8E93',
+    fontSize: 16,
+    color: colors.textSecondary,
     letterSpacing: -0.2,
   },
   infoValue: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '500',
-    color: '#000000',
+    color: colors.text,
     letterSpacing: -0.2,
     textAlign: 'right',
     maxWidth: '50%',
   },
   totalAmount: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
-    color: '#4A9B8E',
+    color: colors.primary,
   },
   divider: {
-    height: 1,
-    backgroundColor: '#E5E5EA',
-    marginVertical: 8,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+    marginVertical: 12,
   },
   productItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
+    paddingVertical: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   lastProductItem: {
     borderBottomWidth: 0,
   },
   productImageContainer: {
-    marginRight: 12,
+    marginRight: 14,
   },
   productImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 10,
-    backgroundColor: '#F2F2F7',
+    width: 70,
+    height: 70,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
   },
   productImagePlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 10,
-    backgroundColor: '#F2F2F7',
+    width: 70,
+    height: 70,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -505,24 +559,24 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   productName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '500',
-    color: '#000000',
-    marginBottom: 4,
+    color: colors.text,
+    marginBottom: 6,
     letterSpacing: -0.2,
   },
   stockContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   stockText: {
-    fontSize: 13,
-    color: '#8E8E93',
-    marginLeft: 4,
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginLeft: 6,
   },
   insufficientStock: {
-    color: '#E53E3E',
+    color: colors.error,
     fontWeight: '500',
   },
   productBottom: {
@@ -531,28 +585,28 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   quantityBadge: {
-    backgroundColor: '#F2F2F7',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   quantityText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#000000',
+    color: colors.text,
   },
   priceContainer: {
     alignItems: 'flex-end',
   },
   productPrice: {
-    fontSize: 13,
-    color: '#8E8E93',
+    fontSize: 14,
+    color: colors.textSecondary,
     marginBottom: 2,
   },
   productTotal: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#000000',
+    color: colors.text,
   },
   actionsContainer: {
     paddingHorizontal: 16,
@@ -563,72 +617,72 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#4A9B8E',
-    borderRadius: 12,
+    backgroundColor: colors.primary,
+    borderRadius: 14,
     paddingVertical: 16,
     paddingHorizontal: 24,
     marginBottom: 12,
-    shadowColor: '#4A9B8E',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   primaryButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600',
-    marginLeft: 8,
+    marginLeft: 10,
     letterSpacing: -0.3,
   },
   secondaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#E6FFF9',
-    borderRadius: 12,
+    backgroundColor: colors.primary + '15',
+    borderRadius: 14,
     paddingVertical: 16,
     paddingHorizontal: 24,
     marginBottom: 12,
   },
   secondaryButtonText: {
-    color: '#4A9B8E',
-    fontSize: 16,
+    color: colors.primary,
+    fontSize: 17,
     fontWeight: '600',
-    marginLeft: 8,
+    marginLeft: 10,
     letterSpacing: -0.3,
   },
   dangerButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFE5E5',
-    borderRadius: 12,
+    backgroundColor: colors.error + '15',
+    borderRadius: 14,
     paddingVertical: 16,
     paddingHorizontal: 24,
   },
   dangerButtonText: {
-    color: '#E53E3E',
-    fontSize: 16,
+    color: colors.error,
+    fontSize: 17,
     fontWeight: '600',
-    marginLeft: 8,
+    marginLeft: 10,
     letterSpacing: -0.3,
   },
   errorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFE5E5',
-    borderRadius: 10,
+    backgroundColor: colors.error + '15',
+    borderRadius: 12,
     padding: 16,
     marginHorizontal: 16,
     marginBottom: 16,
   },
   errorText: {
-    color: '#E53E3E',
-    fontSize: 14,
+    color: colors.error,
+    fontSize: 15,
     fontWeight: '500',
-    marginLeft: 8,
+    marginLeft: 10,
     flex: 1,
   },
 });

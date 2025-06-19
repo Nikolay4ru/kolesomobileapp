@@ -82,6 +82,11 @@ class AuthStore {
     this.syncNotificationStatus();
   }
 
+
+  get isNotificationDenied() {
+  return this.isNotificationPermissionRequested && !this.hasNotificationPermission;
+}
+
   // === ONESIGNAL МЕТОДЫ ===
   
   async initializeOneSignal() {
@@ -115,21 +120,43 @@ class AuthStore {
     }
   }
 
-  async setupNotificationPermissions() {
-    const savedPermission = storage.getBoolean(STORAGE_KEYS.NOTIFICATION_PERMISSION);
-    if (savedPermission !== undefined) {
-      this._hasNotificationPermission = Boolean(savedPermission);
-    }
+async setupNotificationPermissions() {
+  const savedPermission = storage.getBoolean(STORAGE_KEYS.NOTIFICATION_PERMISSION);
+  if (savedPermission !== undefined) {
+    this._hasNotificationPermission = Boolean(savedPermission);
+  }
 
+  // Проверяем текущее разрешение из системы
+  const currentPermission = await this.getSystemNotificationPermission();
+
+  if (currentPermission === 'notDetermined') {
+    // Только если не определено — запрашиваем, и только 1 раз
     if (!this.isNotificationPermissionRequested) {
       await this.requestNotificationPermission();
     }
-
-    const currentPermission = await this.checkNotificationPermission();
-    if (savedPermission !== undefined && savedPermission !== currentPermission) {
-      this._hasNotificationPermission = Boolean(currentPermission);
-    }
+  } else if (currentPermission === 'granted') {
+    this._hasNotificationPermission = true;
+  } else if (currentPermission === 'denied') {
+    // Не показываем повторно запрос, просто отмечаем как denied
+    this._hasNotificationPermission = false;
+    this.isNotificationPermissionRequested = true; // чтобы больше не запрашивать!
   }
+}
+
+// хелпер для получения статуса разрешения
+async getSystemNotificationPermission() {
+  if (!this.oneSignalInitialized) return 'notDetermined';
+
+  try {
+    const permission = await OneSignal.Notifications.getPermissionAsync();
+    // по OneSignal: 1 — granted, 0 — denied, null/undefined — notDetermined
+    if (permission === 1 || permission === true) return 'granted';
+    if (permission === 0 || permission === false) return 'denied';
+    return 'notDetermined';
+  } catch (e) {
+    return 'notDetermined';
+  }
+}
 
   setupOneSignalListeners() {
     console.log('Setting up OneSignal listeners...');
@@ -186,7 +213,7 @@ class AuthStore {
     }
   }
 
-  async requestNotificationPermission() {
+  async requestNotificationPermission1() {
     if (!this.oneSignalInitialized) return false;
     
     try {
@@ -221,6 +248,35 @@ class AuthStore {
       return false;
     }
   }
+
+
+  async requestNotificationPermission() {
+  if (!this.oneSignalInitialized) return false;
+
+  // Проверяем, не заблокировано ли в системе
+  const currentPermission = await this.getSystemNotificationPermission();
+  if (currentPermission === 'denied') {
+    this.isNotificationPermissionRequested = true; // Не запрашиваем повторно
+    this._hasNotificationPermission = false;
+    return false;
+  }
+
+  try {
+    console.log('Requesting notification permission...');
+    this.isNotificationPermissionRequested = true;
+    const result = await OneSignal.Notifications.requestPermission(true);
+    const boolResult = Boolean(result);
+    this.hasNotificationPermission = boolResult;
+    if (boolResult) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await this.fetchOneSignalIds();
+    }
+    return boolResult;
+  } catch (error) {
+    console.error('Error requesting notification permission:', error);
+    return false;
+  }
+}
 
   async fetchOneSignalIds() {
     if (!this.oneSignalInitialized) return;

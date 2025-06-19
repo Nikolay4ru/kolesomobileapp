@@ -19,6 +19,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useThemedStyles } from '../hooks/useThemedStyles';
 import SearchModal from '../components/SearchModal';
 import NotificationBadge from '../components/NotificationBadge';
+import { useStores } from '../useStores';
+import BannerNotificationPermission from '../components/BannerNotificationPermission';
 
 
 const API_URL = 'https://api.koleso.app/api';
@@ -27,6 +29,7 @@ const { width: screenWidth } = Dimensions.get('window');
 const HomeScreen = () => {
   const { colors, theme } = useTheme();
   const styles = useThemedStyles(themedStyles);
+  const { authStore } = useStores();
   const [activeSlide, setActiveSlide] = useState(0);
   const scrollX = useRef(new Animated.Value(0)).current;
   const [popularProducts, setPopularProducts] = useState([]);
@@ -37,6 +40,11 @@ const HomeScreen = () => {
   const [searchModalVisible, setSearchModalVisible] = useState(false);
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+
+  const handleOpenSettings = () => {
+    // Открыть настройки приложения (RN Linking)
+    Linking.openSettings();
+  };
 
   const slides = [
     {
@@ -77,7 +85,7 @@ const HomeScreen = () => {
       }
     };
     
-    fetchUserData();
+   // fetchUserData();
   }, []);
 
   // Загрузка популярных товаров
@@ -532,7 +540,9 @@ const HomeScreen = () => {
 
         <View style={{ height: 100 }} />
       </ScrollView>
-
+      {authStore.isNotificationDenied && (
+        <BannerNotificationPermission onPressSettings={handleOpenSettings} />
+      )}
       {/* Search Modal */}
       <SearchModal 
         isOpen={searchModalVisible}
