@@ -18,6 +18,8 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useThemedStyles } from '../hooks/useThemedStyles';
 import SearchModal from '../components/SearchModal';
+import NotificationBadge from '../components/NotificationBadge';
+
 
 const API_URL = 'https://api.koleso.app/api';
 const { width: screenWidth } = Dimensions.get('window');
@@ -236,10 +238,7 @@ const HomeScreen = () => {
           >
             <Ionicons name="search-outline" size={24} color={colors.text} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.headerButton}>
-            <Ionicons name="notifications-outline" size={24} color={colors.text} />
-            <View style={styles.notificationDot} />
-          </TouchableOpacity>
+         <NotificationBadge style={styles.headerButton} />
         </View>
       </View>
 

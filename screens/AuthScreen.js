@@ -16,6 +16,8 @@ import { observer } from "mobx-react-lite";
 import { MaskedTextInput } from "react-native-advanced-input-mask";
 import { useStores } from "../useStores";
 import { useNavigation } from "@react-navigation/native";
+import { useTheme } from '../contexts/ThemeContext';
+import { useThemedStyles } from '../hooks/useThemedStyles';
 import CustomHeader from "../components/CustomHeader";
 
 const { width, height } = Dimensions.get('window');
@@ -26,6 +28,8 @@ const AuthScreen = observer(() => {
   const [isInputFocused, setIsInputFocused] = useState(false);
   const { authStore } = useStores();
   const navigation = useNavigation();
+  const { colors, theme } = useTheme();
+  const styles = useThemedStyles(themedStyles);
   
   // Анимации
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -122,7 +126,10 @@ const AuthScreen = observer(() => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FAFBFC" />
+      <StatusBar 
+        barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.background}
+      />
       
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -176,7 +183,7 @@ const AuthScreen = observer(() => {
                   placeholder="+7 (___) ___-__-__"
                   style={styles.input}
                   editable={!authStore.isLoading}
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={colors.placeholder}
                   autoFocus={false}
                   blurOnSubmit={false}
                   returnKeyType="done"
@@ -198,7 +205,7 @@ const AuthScreen = observer(() => {
             ]}>
               {authStore.isLoading ? (
                 <View style={styles.loaderContainer}>
-                  <ActivityIndicator size={20} color="#007AFF" />
+                  <ActivityIndicator size={20} color={colors.primary} />
                 </View>
               ) : (
                 <TouchableOpacity
@@ -243,10 +250,10 @@ const AuthScreen = observer(() => {
   );
 });
 
-const styles = StyleSheet.create({
+const themedStyles = (colors, theme) => ({
   container: {
     flex: 1,
-    backgroundColor: '#FAFBFC',
+    backgroundColor: colors.background,
   },
   keyboardContainer: {
     flex: 1,
@@ -267,7 +274,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     marginBottom: 8,
     textAlign: 'center',
     letterSpacing: -0.8,
@@ -275,7 +282,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     fontWeight: '400',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -285,31 +292,31 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#374151',
+    color: colors.text,
     marginBottom: 8,
     marginLeft: 4,
   },
   inputWrapper: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     paddingHorizontal: 16,
     minHeight: 56,
     justifyContent: 'center',
   },
   inputWrapperFocused: {
-    borderColor: '#007AFF',
-    backgroundColor: '#F8FAFF',
+    borderColor: colors.primary,
+    backgroundColor: theme === 'dark' ? colors.surface : '#F8FAFF',
   },
   inputWrapperError: {
-    borderColor: '#EF4444',
-    backgroundColor: '#FEF2F2',
+    borderColor: colors.error,
+    backgroundColor: theme === 'dark' ? 'rgba(239, 68, 68, 0.1)' : '#FEF2F2',
   },
   input: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#1A1A1A',
+    color: colors.text,
     backgroundColor: 'transparent',
     paddingVertical: 16,
   },
@@ -318,7 +325,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   errorText: {
-    color: '#EF4444',
+    color: colors.error,
     fontSize: 14,
     fontWeight: '500',
   },
@@ -333,10 +340,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   buttonActive: {
-    backgroundColor: '#007AFF',
+    backgroundColor: colors.primary,
   },
   buttonDisabled: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.buttonDisabled,
   },
   buttonText: {
     fontSize: 16,
@@ -347,13 +354,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   buttonTextDisabled: {
-    color: '#9CA3AF',
+    color: colors.textTertiary,
   },
   loaderContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     height: 52,
-    backgroundColor: '#F8FAFF',
+    backgroundColor: colors.surface,
     borderRadius: 12,
   },
   infoText: {
@@ -362,7 +369,7 @@ const styles = StyleSheet.create({
   },
   infoDescription: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   footer: {
@@ -371,12 +378,12 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
   },
   footerLink: {
-    color: '#007AFF',
+    color: colors.primary,
     fontWeight: '600',
   },
 });

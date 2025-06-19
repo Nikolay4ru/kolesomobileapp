@@ -23,7 +23,6 @@ import { useStores } from '../useStores';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
-import { LinearGradient } from 'react-native-linear-gradient';
 
 const { width, height } = Dimensions.get('window');
 

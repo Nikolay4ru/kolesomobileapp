@@ -9,6 +9,7 @@ import { View, StyleSheet, Platform, TouchableOpacity, Animated } from "react-na
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { BlurView } from "@react-native-community/blur";
 import { Linking } from 'react-native';
+import { navigationRef } from './services/NavigationService';
 
 // Импортируем экраны
 import HomeScreen from "./screens/HomeScreen";
@@ -16,6 +17,7 @@ import FavoritesScreen from "./screens/FavoritesScreen";
 import CartScreen from "./screens/CartScreen";
 import ProfileScreen from "./screens/ProfileScreen";
 import AuthScreen from "./screens/AuthScreen";
+import NotificationsScreen from "./screens/NotificationsScreen";
 import CodeVerificationScreen from "./screens/CodeVerificationScreen";
 import BookingScreen from "./screens/BookingScreen";
 import ServiceSelectionScreen from './screens/ServiceSelectionScreen';
@@ -65,7 +67,9 @@ const HomeStack = () => {
       <Stack.Screen name="ProductList" component={ProductListScreen} options={{ headerShown: false }} />
       <Stack.Screen name="FilterAuto" component={FilterAutoScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Product" component={ProductScreen} options={{ headerShown: false }} />
-    </Stack.Navigator>
+      <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ headerShown: false }}/>
+  
+       </Stack.Navigator>
   );
 };
 
@@ -515,7 +519,7 @@ const AuthStack = () => {
 const NavigationContent = observer(() => {
   const { authStore } = useStores();
   const { colors, theme } = useTheme();
-  const navigationRef = useRef();
+  //const navigationRef = useRef();
   const routeQueueRef = useRef([]); 
 
   const processRouteQueue = useCallback(() => {

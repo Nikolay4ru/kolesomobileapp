@@ -6,13 +6,16 @@ import {
   StyleSheet, 
   TouchableOpacity, 
   ActivityIndicator,
-  Dimensions 
+  Dimensions,
+  StatusBar
 } from 'react-native';
 import { observer } from 'mobx-react-lite';
 import { useStores } from '../useStores';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import FastImage from "@d11/react-native-fast-image";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../contexts/ThemeContext';
+import { useThemedStyles } from '../hooks/useThemedStyles';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
@@ -20,6 +23,8 @@ const CARD_WIDTH = (width - 48) / 2;
 const FavoritesScreen = observer(({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { authStore, favoritesStore } = useStores();
+  const { colors, theme } = useTheme();
+  const styles = useThemedStyles(themedStyles);
   const [loading, setLoading] = useState(true);
   const [localRemovals, setLocalRemovals] = useState([]);
 
@@ -81,7 +86,7 @@ const FavoritesScreen = observer(({ navigation }) => {
             activeOpacity={0.8}
           >
             <View style={styles.favoriteButtonInner}>
-              <Ionicons name="heart" size={20} color="#FF6B6B" />
+              <Ionicons name="heart" size={20} color={colors.error} />
             </View>
           </TouchableOpacity>
         </View>
@@ -97,11 +102,15 @@ const FavoritesScreen = observer(({ navigation }) => {
   if (loading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar 
+          barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
+          backgroundColor={colors.background}
+        />
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Избранное</Text>
         </View>
         <View style={styles.loaderContainer}>
-          <ActivityIndicator size="large" color="#FF6B6B" />
+          <ActivityIndicator size="large" color={colors.error} />
         </View>
       </View>
     );
@@ -109,6 +118,10 @@ const FavoritesScreen = observer(({ navigation }) => {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar 
+        barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.background}
+      />
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Избранное</Text>
         {visibleItems.length > 0 && (
@@ -119,7 +132,7 @@ const FavoritesScreen = observer(({ navigation }) => {
       {visibleItems.length === 0 ? (
         <View style={styles.emptyContainer}>
           <View style={styles.emptyIconContainer}>
-            <Ionicons name="heart-outline" size={64} color="#E0E0E0" />
+            <Ionicons name="heart-outline" size={64} color={colors.textTertiary} />
           </View>
           <Text style={styles.emptyTitle}>Здесь пока пусто</Text>
           <Text style={styles.emptySubtitle}>
@@ -148,10 +161,10 @@ const FavoritesScreen = observer(({ navigation }) => {
   );
 });
 
-const styles = StyleSheet.create({
+const themedStyles = (colors, theme) => ({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -159,19 +172,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
     paddingVertical: 20,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: colors.border,
   },
   headerTitle: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     letterSpacing: -0.5,
   },
   headerCount: {
     fontSize: 14,
-    color: '#999999',
+    color: colors.textSecondary,
     fontWeight: '500',
   },
   loaderContainer: {
@@ -190,12 +203,12 @@ const styles = StyleSheet.create({
   },
   card: {
     width: CARD_WIDTH,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
+    shadowOpacity: theme === 'dark' ? 0.2 : 0.06,
     shadowRadius: 8,
     elevation: 3,
   },
@@ -205,7 +218,7 @@ const styles = StyleSheet.create({
   imageContainer: {
     width: '100%',
     height: CARD_WIDTH,
-    backgroundColor: '#F8F8F8',
+    backgroundColor: colors.surface,
     position: 'relative',
   },
   image: {
@@ -220,13 +233,13 @@ const styles = StyleSheet.create({
   favoriteButtonInner: {
     width: 36,
     height: 36,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: theme === 'dark' ? 0.3 : 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
@@ -235,7 +248,7 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 14,
-    color: '#1A1A1A',
+    color: colors.text,
     fontWeight: '500',
     marginBottom: 8,
     lineHeight: 18,
@@ -243,7 +256,7 @@ const styles = StyleSheet.create({
   price: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     letterSpacing: -0.3,
   },
   emptyContainer: {
@@ -256,7 +269,7 @@ const styles = StyleSheet.create({
   emptyIconContainer: {
     width: 120,
     height: 120,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.surface,
     borderRadius: 60,
     justifyContent: 'center',
     alignItems: 'center',
@@ -265,23 +278,23 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     marginBottom: 12,
     letterSpacing: -0.3,
   },
   emptySubtitle: {
     fontSize: 16,
-    color: '#666666',
+    color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 32,
   },
   exploreButton: {
-    backgroundColor: '#4A9B8E',
+    backgroundColor: colors.primary,
     paddingHorizontal: 32,
     paddingVertical: 16,
     borderRadius: 30,
-    shadowColor: '#FF6B6B',
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,

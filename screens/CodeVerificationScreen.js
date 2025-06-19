@@ -1,9 +1,21 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, StyleSheet, KeyboardAvoidingView, TextInput, Platform, TouchableWithoutFeedback, Keyboard, Animated } from "react-native";
-import { Button, Text, useTheme } from "react-native-paper";
+import { 
+  View, 
+  StyleSheet, 
+  KeyboardAvoidingView, 
+  TextInput, 
+  Platform, 
+  TouchableWithoutFeedback, 
+  Keyboard, 
+  Animated,
+  StatusBar 
+} from "react-native";
+import { Button, Text } from "react-native-paper";
 import { observer } from "mobx-react-lite";
 import { useStores } from "../useStores";
 import { useNavigation } from "@react-navigation/native";
+import { useTheme } from '../contexts/ThemeContext';
+import { useThemedStyles } from '../hooks/useThemedStyles';
 import CustomHeader from "../components/CustomHeader";
 
 const RESEND_TIMEOUT = 60;
@@ -15,7 +27,8 @@ const CodeVerificationScreen = observer(() => {
   const [shakeAnim] = useState(new Animated.Value(0));
   const { authStore } = useStores();
   const navigation = useNavigation();
-  const theme = useTheme();
+  const { colors, theme } = useTheme();
+  const styles = useThemedStyles(themedStyles);
   const textInputRef = useRef(null);
 
   useEffect(() => {
@@ -94,22 +107,27 @@ const CodeVerificationScreen = observer(() => {
         style={styles.container}
         keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
       >
+        <StatusBar 
+          barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
+          backgroundColor={colors.background}
+        />
+        
         <CustomHeader 
           title=""
           statusBarProps={{
-            barStyle: 'dark-content',
-            backgroundColor: '#FAFBFC'
+            barStyle: theme === 'dark' ? 'light-content' : 'dark-content',
+            backgroundColor: colors.background
           }}
           safeAreaStyle={{
-            backgroundColor: '#FAFBFC'
+            backgroundColor: colors.background
           }}
           headerStyle={{
-            backgroundColor: '#FAFBFC',
+            backgroundColor: colors.background,
             borderBottomWidth: 0,
             elevation: 0,
             shadowOpacity: 0
           }}
-          iconColor="#1F2937"
+          iconColor={colors.text}
         />
         
         <View style={styles.content}>
@@ -158,9 +176,11 @@ const CodeVerificationScreen = observer(() => {
                     style={[
                       styles.codeInput,
                       { 
-                        borderColor: code.length === index ? '#3B82F6' : 
-                                   code[index] ? '#10B981' : '#E5E7EB',
-                        backgroundColor: code[index] ? '#F0F9FF' : '#FFFFFF',
+                        borderColor: code.length === index ? colors.primary : 
+                                   code[index] ? colors.success : colors.border,
+                        backgroundColor: code[index] ? 
+                          (theme === 'dark' ? colors.surface : '#F0F9FF') : 
+                          colors.card,
                         borderWidth: code.length === index ? 2 : 1,
                         transform: [{ scale: code.length === index ? 1.05 : 1 }]
                       }
@@ -169,7 +189,7 @@ const CodeVerificationScreen = observer(() => {
                     <Text style={[
                       styles.codeText, 
                       { 
-                        color: code[index] ? '#1F2937' : '#9CA3AF',
+                        color: code[index] ? colors.text : colors.placeholder,
                       }
                     ]}>
                       {code[index] || ''}
@@ -190,7 +210,7 @@ const CodeVerificationScreen = observer(() => {
               labelStyle={[
                 styles.resendButtonText,
                 { 
-                  color: timeLeft > 0 ? '#9CA3AF' : '#3B82F6',
+                  color: timeLeft > 0 ? colors.textTertiary : colors.primary,
                   fontWeight: '500'
                 }
               ]}
@@ -211,10 +231,10 @@ const CodeVerificationScreen = observer(() => {
   );
 });
 
-const styles = StyleSheet.create({
+const themedStyles = (colors, theme) => ({
   container: {
     flex: 1,
-    backgroundColor: '#FAFBFC',
+    backgroundColor: colors.background,
   },
   content: {
     flex: 1,
@@ -233,11 +253,11 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#EBF8FF',
+    backgroundColor: theme === 'dark' ? colors.surface : '#EBF8FF',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: theme === 'dark' ? colors.border : '#BFDBFE',
   },
   iconText: {
     fontSize: 32,
@@ -245,13 +265,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#1F2937',
+    color: colors.text,
     marginBottom: 12,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 8,
@@ -259,7 +279,7 @@ const styles = StyleSheet.create({
   phoneNumber: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1F2937',
+    color: colors.text,
     textAlign: 'center',
   },
   inputContainer: {
@@ -284,12 +304,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: {
       width: 0,
       height: 2,
     },
-    shadowOpacity: 0.05,
+    shadowOpacity: theme === 'dark' ? 0.2 : 0.05,
     shadowRadius: 8,
     elevation: 2,
   },
@@ -311,7 +331,7 @@ const styles = StyleSheet.create({
   },
   helpText: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
     maxWidth: 280,

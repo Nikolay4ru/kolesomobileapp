@@ -365,7 +365,7 @@ class AuthStore {
 
   // === АВТОРИЗАЦИЯ ===
 
-  async loadAuthState() {
+async loadAuthState() {
     try {
       const token = storage.getString(STORAGE_KEYS.TOKEN);
       const userJson = storage.getString(STORAGE_KEYS.USER);
@@ -379,6 +379,16 @@ class AuthStore {
         
         if (notificationPermission !== undefined) {
           this._hasNotificationPermission = Boolean(notificationPermission);
+        }
+        
+        // Login в OneSignal если пользователь уже авторизован
+        if (this.oneSignalInitialized && this.user?.id) {
+          try {
+            await OneSignal.login(this.user.id.toString());
+            console.log('OneSignal login restored for user:', this.user.id);
+          } catch (error) {
+            console.error('Error restoring OneSignal login:', error);
+          }
         }
         
         await Promise.all([
@@ -414,7 +424,7 @@ class AuthStore {
     }
   }
 
-  async verifyCode(code: string) {
+ async verifyCode(code: string) {
     this.setLoadingState(true);
 
     try {
@@ -435,6 +445,16 @@ class AuthStore {
         phone: this.phoneNumber
       };
       this.isLoggedIn = true;
+
+      // Login в OneSignal с ID пользователя
+      if (this.oneSignalInitialized && this.user.id) {
+        try {
+          await OneSignal.login(this.user.id.toString());
+          console.log('OneSignal login successful for user:', this.user.id);
+        } catch (error) {
+          console.error('Error logging in to OneSignal:', error);
+        }
+      }
 
       // Выполняем дополнительные операции параллельно
       await Promise.all([
@@ -553,7 +573,30 @@ class AuthStore {
     }
   }
 
+  // Метод для обновления OneSignal ID на сервере (для совместимости с App.js)
+  async updateOneSignalId(oneSignalId) {
+    if (!oneSignalId) return;
+    
+    // Если это новый ID, сохраняем его
+    if (oneSignalId !== this.oneSignalId) {
+      console.log('Updating OneSignal ID from external source:', oneSignalId);
+      this.oneSignalId = oneSignalId;
+      
+      // Синхронизируем с сервером
+      await this.syncOneSignalIdWithServer();
+    }
+  }
+
   logout() {
+    // Logout из OneSignal
+    if (this.oneSignalInitialized && this.user?.id) {
+      try {
+        OneSignal.logout();
+      } catch (error) {
+        console.error('Error logging out from OneSignal:', error);
+      }
+    }
+
     // Сбрасываем состояние
     this.token = "";
     this.phoneNumber = "";
@@ -562,6 +605,8 @@ class AuthStore {
     this.isAdmin = false;
     this.isLoggedIn = false;
     this.error = "";
+    this.oneSignalId = null;
+    this.pushSubscriptionId = null;
 
     // Очищаем хранилище
     storage.delete(STORAGE_KEYS.TOKEN);
