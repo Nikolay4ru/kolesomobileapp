@@ -23,11 +23,16 @@ import { useStores } from '../useStores';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useTheme } from '../contexts/ThemeContext';
+import { useThemedStyles } from '../hooks/useThemedStyles';
 
 const { width, height } = Dimensions.get('window');
 
 const CartScreen = observer(({ navigation }) => {
   const { cartStore, authStore } = useStores();
+  const { colors, theme } = useTheme();
+  const styles = useThemedStyles(themedStyles);
+  
   const [loading, setLoading] = useState(true);
   const [forceUpdate, setForceUpdate] = useState(false);
   const [deliveryOption, setDeliveryOption] = useState('pickup');
@@ -74,7 +79,6 @@ const CartScreen = observer(({ navigation }) => {
     const loadStores = async () => {
       if (!authStore.token || cartStore.items.length === 0) return;
       
-      // Не перезагружаем магазины, если обновляем количество
       if (isUpdatingQuantity.current) return;
       
       setLoadingStores(true);
@@ -163,7 +167,6 @@ const CartScreen = observer(({ navigation }) => {
     
     setSelectedStoreId(storeId);
     
-    // Центрируем выбранный магазин с анимацией
     requestAnimationFrame(() => {
       if (storePositions.current[storeId] && storeScrollViewRef.current) {
         const { x, width } = storePositions.current[storeId];
@@ -327,17 +330,14 @@ const CartScreen = observer(({ navigation }) => {
     try {
       setUpdatingItems(prev => ({ ...prev, [itemId]: true }));
       
-      // Сохраняем текущую позицию скролла
       if (storeScrollViewRef.current) {
         currentScrollPosition.current = storeScrollViewRef.current.scrollLeft || 0;
       }
       
-      // Устанавливаем флаг обновления количества
       isUpdatingQuantity.current = true;
       
       await cartStore.updateItemQuantity(itemId, newQuantity, authStore.token);
       
-      // Небольшая задержка для завершения обновления
       setTimeout(() => {
         isUpdatingQuantity.current = false;
       }, 100);
@@ -684,12 +684,12 @@ const CartScreen = observer(({ navigation }) => {
                   onPress={() => updateQuantity(item.id, item.quantity - 1)}
                   disabled={item.quantity <= 1 || updatingItems[item.id]}
                 >
-                  <Ionicons name="remove" size={20} color={item.quantity <= 1 ? "#E0E0E0" : "#000"} />
+                  <Ionicons name="remove" size={20} color={item.quantity <= 1 ? colors.textTertiary : colors.text} />
                 </TouchableOpacity>
                 
                 <View style={styles.quantityDisplay}>
                   {updatingItems[item.id] ? (
-                    <ActivityIndicator size="small" color="#000" />
+                    <ActivityIndicator size="small" color={colors.text} />
                   ) : (
                     <Text style={styles.quantityText}>{item.quantity}</Text>
                   )}
@@ -700,7 +700,7 @@ const CartScreen = observer(({ navigation }) => {
                   onPress={() => updateQuantity(item.id, item.quantity + 1)}
                   disabled={item.quantity >= maxAvailable || updatingItems[item.id]}
                 >
-                  <Ionicons name="add" size={20} color={item.quantity >= maxAvailable ? "#E0E0E0" : "#000"} />
+                  <Ionicons name="add" size={20} color={item.quantity >= maxAvailable ? colors.textTertiary : colors.text} />
                 </TouchableOpacity>
               </View>
               
@@ -712,7 +712,7 @@ const CartScreen = observer(({ navigation }) => {
         </Pressable>
       </Swipeable>
     );
-  }, [selectedItems, stores, checkAvailability, getAvailableQuantity, getDeliveryStatus, appliedPromo, updatingItems, navigation, toggleSelectItem, updateQuantity, removeSingleItem, calculateItemDiscountPrice]);
+  }, [selectedItems, stores, checkAvailability, getAvailableQuantity, getDeliveryStatus, appliedPromo, updatingItems, navigation, toggleSelectItem, updateQuantity, removeSingleItem, calculateItemDiscountPrice, colors]);
 
   // Компонент элемента магазина
   const StoreItem = React.memo(({ store, isSelected, onSelect, onLayout }) => {
@@ -872,7 +872,7 @@ const CartScreen = observer(({ navigation }) => {
             <Ionicons 
               name="storefront-outline" 
               size={22} 
-              color={deliveryOption === 'pickup' ? '#fff' : '#999'} 
+              color={deliveryOption === 'pickup' ? '#fff' : colors.textSecondary} 
             />
             <Text style={[
               styles.deliveryTabText,
@@ -893,7 +893,7 @@ const CartScreen = observer(({ navigation }) => {
             <Ionicons 
               name="car-outline" 
               size={22} 
-              color={deliveryOption === 'delivery' ? '#fff' : '#999'} 
+              color={deliveryOption === 'delivery' ? '#fff' : colors.textSecondary} 
             />
             <Text style={[
               styles.deliveryTabText,
@@ -908,7 +908,7 @@ const CartScreen = observer(({ navigation }) => {
           <Animated.View style={styles.storeSelectionContainer}>
             {loadingStores ? (
               <View style={styles.loadingStores}>
-                <ActivityIndicator size="small" color="#000" />
+                <ActivityIndicator size="small" color={colors.text} />
               </View>
             ) : (
               <>
@@ -939,7 +939,7 @@ const CartScreen = observer(({ navigation }) => {
               <TextInput
                 style={styles.promoInput}
                 placeholder="Есть промокод?"
-                placeholderTextColor="#999"
+                placeholderTextColor={colors.textSecondary}
                 value={promoCode}
                 onChangeText={setPromoCode}
                 editable={!isCheckingPromo}
@@ -955,9 +955,9 @@ const CartScreen = observer(({ navigation }) => {
                 disabled={!promoCode || isCheckingPromo}
               >
                 {isCheckingPromo ? (
-                  <ActivityIndicator color="#000" size="small" />
+                  <ActivityIndicator color={colors.text} size="small" />
                 ) : (
-                  <Ionicons name="arrow-forward" size={20} color="#000" />
+                  <Ionicons name="arrow-forward" size={20} color={colors.text} />
                 )}
               </TouchableOpacity>
             </View>
@@ -966,7 +966,7 @@ const CartScreen = observer(({ navigation }) => {
           {appliedPromo && (
             <View style={styles.promoApplied}>
               <View style={styles.promoAppliedInfo}>
-                <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
+                <Ionicons name="checkmark-circle" size={18} color={colors.success} />
                 <Text style={styles.promoAppliedText}>
                   Промокод "{appliedPromo.code}" • Скидка {appliedPromo.value}{appliedPromo.type === 'percentage' ? '%' : '₽'}
                 </Text>
@@ -976,7 +976,7 @@ const CartScreen = observer(({ navigation }) => {
                 style={styles.clearPromoButton}
                 activeOpacity={0.7}
               >
-                <Ionicons name="close-circle" size={22} color="#666" />
+                <Ionicons name="close-circle" size={22} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
           )}
@@ -1031,9 +1031,9 @@ const CartScreen = observer(({ navigation }) => {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+        <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
         <View style={styles.loaderContainer}>
-          <ActivityIndicator size="large" color="#000" />
+          <ActivityIndicator size="large" color={colors.text} />
         </View>
       </SafeAreaView>
     );
@@ -1042,12 +1042,12 @@ const CartScreen = observer(({ navigation }) => {
   // Основной рендер
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
       
       {cartStore.items.length === 0 ? (
         <View style={styles.emptyCart}>
           <View style={styles.emptyIconWrapper}>
-            <Ionicons name="bag-outline" size={64} color="#E0E0E0" />
+                   <Ionicons name="bag-outline" size={64} color={colors.textTertiary} />
           </View>
           <Text style={styles.emptyTitle}>Корзина пуста</Text>
           <Text style={styles.emptySubtitle}>Добавьте товары для оформления заказа</Text>
@@ -1069,7 +1069,7 @@ const CartScreen = observer(({ navigation }) => {
                   onPress={removeItems}
                   style={styles.deleteButton}
                 >
-                  <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+                  <Ionicons name="trash-outline" size={20} color={colors.error} />
                 </TouchableOpacity>
               )}
               {cartStore.items.length > 0 && (
@@ -1116,10 +1116,10 @@ const CartScreen = observer(({ navigation }) => {
   );
 });
 
-const styles = StyleSheet.create({
+const themedStyles = (colors, theme) => ({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
   },
   loaderContainer: {
     flex: 1,
@@ -1140,19 +1140,19 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 24,
     fontWeight: '600',
-    color: '#000',
+    color: colors.text,
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 16,
-    color: '#666',
+    color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: 32,
   },
   shopButton: {
     paddingHorizontal: 32,
     paddingVertical: 16,
-    backgroundColor: '#4A9B8E',
+    backgroundColor: colors.primary,
     borderRadius: 30,
   },
   shopButtonText: {
@@ -1169,12 +1169,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: colors.border,
   },
   headerTitle: {
     fontSize: 32,
     fontWeight: '700',
-    color: '#000',
+    color: colors.text,
   },
   headerActions: {
     flexDirection: 'row',
@@ -1186,7 +1186,7 @@ const styles = StyleSheet.create({
   },
   selectAllButton: {
     fontSize: 16,
-    color: '#666',
+    color: colors.textSecondary,
   },
 
   // List
@@ -1195,14 +1195,14 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.border,
     marginHorizontal: 16,
   },
 
   // Delivery Options
   deliverySection: {
     paddingVertical: 16,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: colors.surface,
   },
   deliveryTabs: {
     flexDirection: 'row',
@@ -1216,18 +1216,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: '#FFF',
+    backgroundColor: colors.card,
     gap: 8,
   },
   deliveryTabActive: {
-    backgroundColor: '#4A9B8E',
+    backgroundColor: colors.primary,
   },
   deliveryTabPressed: {
     opacity: 0.8,
   },
   deliveryTabText: {
     fontSize: 16,
-    color: '#999',
+    color: colors.textSecondary,
     fontWeight: '500',
   },
   deliveryTabTextActive: {
@@ -1250,14 +1250,14 @@ const styles = StyleSheet.create({
     width: 200,
     padding: 16,
     borderRadius: 16,
-    backgroundColor: '#FFF',
+    backgroundColor: colors.card,
     marginRight: 12,
     borderWidth: 2,
-    borderColor: '#F0F0F0',
+    borderColor: colors.border,
   },
   storeCardSelected: {
-    borderColor: '#000',
-    backgroundColor: '#FAFAFA',
+    borderColor: colors.text,
+    backgroundColor: colors.surface,
   },
   storeCardPressed: {
     opacity: 0.9,
@@ -1271,12 +1271,12 @@ const styles = StyleSheet.create({
   storeName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#000',
+    color: colors.text,
     flex: 1,
   },
   storeAddress: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   availabilityDot: {
@@ -1285,13 +1285,13 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   dotfull: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: colors.success,
   },
   dotpartial: {
-    backgroundColor: '#FFA726',
+    backgroundColor: colors.warning,
   },
   dotnone: {
-    backgroundColor: '#EF5350',
+    backgroundColor: colors.error,
   },
 
   // Cart Item
@@ -1299,34 +1299,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingVertical: 16,
-    backgroundColor: '#FFF',
+    backgroundColor: colors.card,
     alignItems: 'center',
   },
   selectedItem: {
-    backgroundColor: '#FAFAFA',
+    backgroundColor: colors.surface,
   },
   itemPressed: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.surface,
   },
   checkbox: {
     width: 24,
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#E0E0E0',
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   checkboxSelected: {
-    backgroundColor: '#000',
-    borderColor: '#000',
+    backgroundColor: colors.text,
+    borderColor: colors.text,
   },
   itemImage: {
     width: 80,
     height: 80,
     borderRadius: 12,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: colors.surface,
     marginRight: 12,
   },
   itemInfo: {
@@ -1335,7 +1335,7 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#000',
+    color: colors.text,
     marginBottom: 8,
     lineHeight: 22,
   },
@@ -1353,43 +1353,43 @@ const styles = StyleSheet.create({
   itemPrice: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#000',
+    color: colors.text,
   },
   originalPrice: {
     fontSize: 16,
-    color: '#999',
+    color: colors.textSecondary,
     textDecorationLine: 'line-through',
   },
   discountedPrice: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FF3B30',
+    color: colors.error,
   },
   statusBadge: {
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 16,
-    backgroundColor: '#F0F0F0',
+    backgroundColor: colors.surface,
   },
   statusToday: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: theme === 'dark' ? 'rgba(76, 175, 80, 0.2)' : '#E8F5E9',
   },
   statusDelivery: {
-    backgroundColor: '#E3F2FD',
+    backgroundColor: theme === 'dark' ? 'rgba(33, 150, 243, 0.2)' : '#E3F2FD',
   },
   statusLater: {
-    backgroundColor: '#FFF3E0',
+    backgroundColor: theme === 'dark' ? 'rgba(255, 167, 38, 0.2)' : '#FFF3E0',
   },
   statusUnavailable: {
-    backgroundColor: '#FFEBEE',
+    backgroundColor: theme === 'dark' ? 'rgba(244, 67, 54, 0.2)' : '#FFEBEE',
   },
   statusText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#666',
+    color: colors.textSecondary,
   },
   statusTextUnavailable: {
-    color: '#D32F2F',
+    color: colors.error,
   },
   quantitySection: {
     flexDirection: 'row',
@@ -1399,7 +1399,7 @@ const styles = StyleSheet.create({
   quantityControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.surface,
     borderRadius: 8,
   },
   quantityButton: {
@@ -1418,17 +1418,17 @@ const styles = StyleSheet.create({
   quantityText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#000',
+    color: colors.text,
   },
   totalPrice: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#000',
+    color: colors.text,
   },
 
   // Delete Action
   deleteAction: {
-    backgroundColor: '#FF3B30',
+    backgroundColor: colors.error,
     justifyContent: 'center',
     alignItems: 'center',
     width: 80,
@@ -1441,12 +1441,12 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#FFF',
+    backgroundColor: colors.card,
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
-    shadowColor: '#000',
+    borderTopColor: colors.border,
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: theme === 'dark' ? 0.2 : 0.05,
     shadowRadius: 8,
     elevation: 5,
   },
@@ -1461,16 +1461,16 @@ const styles = StyleSheet.create({
   promoInput: {
     flex: 1,
     height: 48,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.surface,
     borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
-    color: '#000',
+    color: colors.text,
   },
   promoButton: {
     width: 48,
     height: 48,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.surface,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1482,7 +1482,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#E8F5E9',
+    backgroundColor: theme === 'dark' ? 'rgba(76, 175, 80, 0.2)' : '#E8F5E9',
     padding: 12,
     borderRadius: 12,
     marginBottom: 16,
@@ -1495,7 +1495,7 @@ const styles = StyleSheet.create({
   promoAppliedText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#2E7D32',
+    color: colors.success,
   },
   checkoutSection: {
     flexDirection: 'row',
@@ -1507,7 +1507,7 @@ const styles = StyleSheet.create({
   },
   totalLabel: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
     marginBottom: 4,
   },
   totalAmount: {
@@ -1517,18 +1517,18 @@ const styles = StyleSheet.create({
   },
   originalTotal: {
     fontSize: 18,
-    color: '#999',
+    color: colors.textSecondary,
     textDecorationLine: 'line-through',
   },
   totalPrice: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#000',
+    color: colors.text,
   },
   checkoutButton: {
     paddingHorizontal: 32,
     paddingVertical: 16,
-    backgroundColor: '#4A9B8E',
+    backgroundColor: colors.primary,
     borderRadius: 30,
   },
   checkoutButtonDisabled: {
@@ -1545,17 +1545,17 @@ const styles = StyleSheet.create({
   storeSelectionPlaceholder: {
     padding: 16,
     alignItems: 'center',
-    backgroundColor: '#F9F9F9',
+    backgroundColor: colors.surface,
     marginHorizontal: 16,
     marginBottom: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: colors.border,
     borderStyle: 'dashed',
   },
   placeholderText: {
     fontSize: 16,
-    color: '#666',
+    color: colors.textSecondary,
     fontWeight: '500',
   },
 });

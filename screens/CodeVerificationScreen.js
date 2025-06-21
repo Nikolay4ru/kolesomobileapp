@@ -8,12 +8,13 @@ import {
   TouchableWithoutFeedback, 
   Keyboard, 
   Animated,
-  StatusBar 
+  StatusBar,
+  InteractionManager
 } from "react-native";
 import { Button, Text } from "react-native-paper";
 import { observer } from "mobx-react-lite";
 import { useStores } from "../useStores";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useTheme } from '../contexts/ThemeContext';
 import { useThemedStyles } from '../hooks/useThemedStyles';
 import CustomHeader from "../components/CustomHeader";
@@ -25,19 +26,46 @@ const CodeVerificationScreen = observer(() => {
   const [timeLeft, setTimeLeft] = useState(RESEND_TIMEOUT);
   const [isResending, setIsResending] = useState(false);
   const [shakeAnim] = useState(new Animated.Value(0));
+  const [isFocused, setIsFocused] = useState(false);
   const { authStore } = useStores();
   const navigation = useNavigation();
   const { colors, theme } = useTheme();
   const styles = useThemedStyles(themedStyles);
   const textInputRef = useRef(null);
+  const timerRef = useRef(null);
 
+  // Таймер обратного отсчета
   useEffect(() => {
-    const timer = setInterval(() => {
+    timerRef.current = setInterval(() => {
       setTimeLeft((prev) => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
 
-    return () => clearInterval(timer);
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
   }, []);
+
+  // Автофокус при входе на экран с задержкой для Android
+  useFocusEffect(
+    React.useCallback(() => {
+      const focusTimeout = setTimeout(() => {
+        InteractionManager.runAfterInteractions(() => {
+          if (textInputRef.current && Platform.OS === 'android') {
+            // Для Android используем задержку и принудительный фокус
+            textInputRef.current.focus();
+            setIsFocused(true);
+          }
+        });
+      }, Platform.OS === 'android' ? 300 : 100);
+
+      return () => {
+        clearTimeout(focusTimeout);
+        setIsFocused(false);
+      };
+    }, [])
+  );
 
   const shakeAnimation = () => {
     Animated.sequence([
@@ -48,15 +76,20 @@ const CodeVerificationScreen = observer(() => {
     ]).start();
   };
 
-  const handleVerify = async (code) => {
+  const handleVerify = async (verificationCode) => {
     Keyboard.dismiss();
     try {
-      console.log(code);
-      await authStore.verifyCode(code);
+      await authStore.verifyCode(verificationCode);
       navigation.navigate("MainTabs");
     } catch (error) {
       setCode("");
       shakeAnimation();
+      // Восстанавливаем фокус после ошибки
+      setTimeout(() => {
+        if (textInputRef.current) {
+          textInputRef.current.focus();
+        }
+      }, 300);
     }
   };
 
@@ -66,10 +99,17 @@ const CodeVerificationScreen = observer(() => {
     setIsResending(true);
     try {
       // Здесь код для повторной отправки SMS
+      await authStore.resendCode?.(); // Предполагаем, что есть такой метод
       setTimeLeft(RESEND_TIMEOUT);
       setCode("");
+      // Возвращаем фокус после очистки
+      setTimeout(() => {
+        if (textInputRef.current) {
+          textInputRef.current.focus();
+        }
+      }, 100);
     } catch (error) {
-      // Обработка ошибки
+      console.error('Error resending code:', error);
     } finally {
       setIsResending(false);
     }
@@ -82,23 +122,39 @@ const CodeVerificationScreen = observer(() => {
   };
 
   const handleCodeChange = (text) => {
+    // Оставляем только цифры
     const formattedText = text.replace(/[^0-9]/g, '');
+    
+    // Ограничиваем длину
+    if (formattedText.length > 4) return;
+    
     setCode(formattedText);
-    console.log(formattedText);
     
     if (formattedText.length === 4) {
+      // Задержка перед верификацией для лучшего UX
       setTimeout(() => handleVerify(formattedText), 100);
     }
   };
 
   const focusTextInput = () => {
-    textInputRef.current?.focus();
+    if (textInputRef.current && !isFocused) {
+      textInputRef.current.focus();
+      setIsFocused(true);
+    }
   };
 
-  const formattedPhone = authStore.phoneNumber.replace(
+  const handleFocus = () => {
+    setIsFocused(true);
+  };
+
+  const handleBlur = () => {
+    setIsFocused(false);
+  };
+
+  const formattedPhone = authStore.phoneNumber?.replace(
     /(\d{1})(\d{3})(\d{3})(\d{2})(\d{2})/,
     '+7 $2 $3-$4-$5'
-  );
+  ) || '';
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -162,10 +218,17 @@ const CodeVerificationScreen = observer(() => {
               style={styles.hiddenInput}
               value={code}
               onChangeText={handleCodeChange}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
               keyboardType="number-pad"
               maxLength={4}
-              autoFocus
+              autoFocus={Platform.OS === 'ios'} // Автофокус только для iOS
               returnKeyType="done"
+              caretHidden={Platform.OS === 'android'} // Скрываем курсор на Android
+              selection={Platform.OS === 'android' ? { start: code.length, end: code.length } : undefined}
+              importantForAutofill="no"
+              autoComplete="one-time-code"
+              textContentType="oneTimeCode"
             />
             
             <TouchableWithoutFeedback onPress={focusTextInput}>
@@ -176,13 +239,13 @@ const CodeVerificationScreen = observer(() => {
                     style={[
                       styles.codeInput,
                       { 
-                        borderColor: code.length === index ? colors.primary : 
+                        borderColor: isFocused && code.length === index ? colors.primary : 
                                    code[index] ? colors.success : colors.border,
                         backgroundColor: code[index] ? 
                           (theme === 'dark' ? colors.surface : '#F0F9FF') : 
                           colors.card,
-                        borderWidth: code.length === index ? 2 : 1,
-                        transform: [{ scale: code.length === index ? 1.05 : 1 }]
+                        borderWidth: isFocused && code.length === index ? 2 : 1,
+                        transform: [{ scale: isFocused && code.length === index ? 1.05 : 1 }]
                       }
                     ]}
                   >
@@ -192,7 +255,7 @@ const CodeVerificationScreen = observer(() => {
                         color: code[index] ? colors.text : colors.placeholder,
                       }
                     ]}>
-                      {code[index] || ''}
+                      {code[index] || '•'}
                     </Text>
                   </View>
                 ))}
@@ -288,9 +351,12 @@ const themedStyles = (colors, theme) => ({
   },
   hiddenInput: {
     position: 'absolute',
-    height: 0,
-    width: 0,
+    left: -1000,
+    top: -1000,
+    height: 1,
+    width: 1,
     opacity: 0,
+    fontSize: 16, // Важно для Android
   },
   codeContainer: {
     flexDirection: 'row',

@@ -21,11 +21,16 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import LinearGradient from 'react-native-linear-gradient';
+import { useTheme } from '../contexts/ThemeContext';
+import { useThemedStyles } from '../hooks/useThemedStyles';
 
 const { width, height } = Dimensions.get('window');
 
 const FilterAutoScreen = ({ navigation }) => {
   const { productStore } = useStores();
+  const { colors, theme } = useTheme();
+  const styles = useThemedStyles(themedStyles);
+  
   const [selectedMarka, setSelectedMarka] = useState(null);
   const [selectedModel, setSelectedModel] = useState(null);
   const [selectedYear, setSelectedYear] = useState(null);
@@ -50,9 +55,9 @@ const FilterAutoScreen = ({ navigation }) => {
   useEffect(() => {
     StatusBar.setBarStyle('light-content', true);
     if (Platform.OS === 'android') {
-      StatusBar.setBackgroundColor('#006363', true);
+      StatusBar.setBackgroundColor(theme === 'dark' ? '#004040' : '#006363', true);
     }
-  }, []);
+  }, [theme]);
 
   useEffect(() => {
     Animated.parallel([
@@ -93,7 +98,6 @@ const FilterAutoScreen = ({ navigation }) => {
   // Сброс зависимых выборов при изменении родительских
   useEffect(() => {
     if (selectedMarka && selectedModel) {
-      // Сбрасываем год и модификацию только если марка или модель изменились
       setSelectedYear(null);
       setSelectedModification(null);
     }
@@ -101,7 +105,6 @@ const FilterAutoScreen = ({ navigation }) => {
 
   useEffect(() => {
     if (selectedYear) {
-      // Сбрасываем модификацию при изменении года
       setSelectedModification(null);
     }
   }, [selectedYear]);
@@ -120,7 +123,6 @@ const FilterAutoScreen = ({ navigation }) => {
     if (selectedMarka && selectedModel && selectedYear && selectedModification) {
       setApplying(true);
       try {
-        // Создаем фильтр с полными данными
         const filter = productStore.createCarFilter(
           selectedMarka,
           selectedModel,
@@ -231,20 +233,23 @@ const FilterAutoScreen = ({ navigation }) => {
     return 0;
   };
 
+  const gradientColors = theme === 'dark' 
+    ? ['#004040', '#003030']
+    : ['#006363', '#004545'];
+
   return (
-    <View style={{flex: 1, backgroundColor: '#fff'}}>
-      {/* Зеленый фон для StatusBar на iOS */}
+    <View style={styles.container}>
       {!!insets.top && (
-        <View style={{ height: insets.top, backgroundColor: '#006363' }} />
+        <View style={[styles.statusBarBackground, { height: insets.top }]} />
       )}
       <StatusBar
         translucent={false}
-        backgroundColor="#006363"
+        backgroundColor={theme === 'dark' ? '#004040' : '#006363'}
         barStyle="light-content"
       />
       
       <LinearGradient
-        colors={['#006363', '#004545']}
+        colors={gradientColors}
         style={styles.headerGradient}
       >
         <View style={styles.header}>
@@ -303,7 +308,7 @@ const FilterAutoScreen = ({ navigation }) => {
         }}>
           {/* Welcome Card */}
           <View style={styles.welcomeCard}>
-            <MaterialCommunityIcons name="car-sports" size={48} color="#006363" />
+            <MaterialCommunityIcons name="car-sports" size={48} color={colors.primary} />
             <Text style={styles.welcomeTitle}>Найдите идеальные товары</Text>
             <Text style={styles.welcomeSubtitle}>
               Выберите параметры вашего автомобиля для точного подбора
@@ -354,7 +359,7 @@ const FilterAutoScreen = ({ navigation }) => {
           {/* Error Display */}
           {productStore.error && (
             <View style={styles.errorCard}>
-              <MaterialCommunityIcons name="alert-circle" size={24} color="#FF6B6B" />
+              <MaterialCommunityIcons name="alert-circle" size={24} color={colors.error} />
               <Text style={styles.errorText}>{productStore.error}</Text>
             </View>
           )}
@@ -396,6 +401,8 @@ const FilterAutoScreen = ({ navigation }) => {
 
 // Selection Card Component
 const SelectionCard = ({ step, title, placeholder, value, onPress, enabled, icon }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(themedStyles);
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -444,7 +451,7 @@ const SelectionCard = ({ step, title, placeholder, value, onPress, enabled, icon
             <MaterialCommunityIcons 
               name={value ? "check-circle" : icon} 
               size={24} 
-              color={value ? "#006363" : (enabled ? "#999" : "#DDD")} 
+              color={value ? colors.primary : (enabled ? colors.textSecondary : colors.textTertiary)} 
             />
           </View>
         </View>
@@ -456,6 +463,8 @@ const SelectionCard = ({ step, title, placeholder, value, onPress, enabled, icon
 // Modal Components
 const MarkaModal = ({ onSelect, onClose, searchQuery, setSearchQuery }) => {
   const { productStore } = useStores();
+  const { colors, theme } = useTheme();
+  const styles = useThemedStyles(themedStyles);
   const [marks, setMarks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -484,6 +493,7 @@ const MarkaModal = ({ onSelect, onClose, searchQuery, setSearchQuery }) => {
 
   return (
     <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
+      <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
       <ModalHeader title="Выберите марку" onClose={onClose} />
       
       <SearchBar 
@@ -520,6 +530,8 @@ const MarkaModal = ({ onSelect, onClose, searchQuery, setSearchQuery }) => {
 
 const ModelModal = ({ marka, onSelect, onClose, searchQuery, setSearchQuery }) => {
   const { productStore } = useStores();
+  const { colors, theme } = useTheme();
+  const styles = useThemedStyles(themedStyles);
   const [models, setModels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -550,6 +562,7 @@ const ModelModal = ({ marka, onSelect, onClose, searchQuery, setSearchQuery }) =
 
   return (
     <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
+      <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
       <ModalHeader title={`Модели ${marka}`} onClose={onClose} />
       
       <SearchBar 
@@ -586,6 +599,8 @@ const ModelModal = ({ marka, onSelect, onClose, searchQuery, setSearchQuery }) =
 
 const YearModal = ({ marka, model, onSelect, onClose }) => {
   const { productStore } = useStores();
+  const { colors, theme } = useTheme();
+  const styles = useThemedStyles(themedStyles);
   const [years, setYears] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -612,6 +627,7 @@ const YearModal = ({ marka, model, onSelect, onClose }) => {
 
   return (
     <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
+      <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
       <ModalHeader title="Выберите год" onClose={onClose} />
 
       {loading ? (
@@ -643,6 +659,8 @@ const YearModal = ({ marka, model, onSelect, onClose }) => {
 
 const ModificationModal = ({ marka, model, year, onSelect, onClose, searchQuery, setSearchQuery }) => {
   const { productStore } = useStores();
+  const { colors, theme } = useTheme();
+  const styles = useThemedStyles(themedStyles);
   const [modifications, setModifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -673,6 +691,7 @@ const ModificationModal = ({ marka, model, year, onSelect, onClose, searchQuery,
 
   return (
     <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
+      <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
       <ModalHeader title="Выберите модификацию" onClose={onClose} />
       
       <SearchBar 
@@ -709,81 +728,114 @@ const ModificationModal = ({ marka, model, year, onSelect, onClose, searchQuery,
 };
 
 // Helper Components
-const ModalHeader = ({ title, onClose }) => (
-  <View style={styles.modalHeader}>
-    <TouchableOpacity onPress={onClose} style={styles.modalCloseButton}>
-      <Ionicons name="arrow-back" size={24} color="#000" />
-    </TouchableOpacity>
-    <Text style={styles.modalTitle}>{title}</Text>
-    <View style={{ width: 40 }} />
-  </View>
-);
+const ModalHeader = ({ title, onClose }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(themedStyles);
+  
+  return (
+    <View style={styles.modalHeader}>
+      <TouchableOpacity onPress={onClose} style={styles.modalCloseButton}>
+        <Ionicons name="arrow-back" size={24} color={colors.text} />
+      </TouchableOpacity>
+      <Text style={styles.modalTitle}>{title}</Text>
+      <View style={{ width: 40 }} />
+    </View>
+  );
+};
 
-const SearchBar = ({ value, onChangeText, placeholder }) => (
-  <View style={styles.searchContainer}>
-    <View style={styles.searchInputWrapper}>
-      <Ionicons name="search-outline" size={20} color="#999" style={styles.searchIcon} />
-      <TextInput
-        style={styles.searchInput}
-        placeholder={placeholder}
-        value={value}
-        onChangeText={onChangeText}
-        placeholderTextColor="#999"
-        autoCorrect={false}
-        returnKeyType="search"
-      />
-      {value.length > 0 && (
-        <TouchableOpacity onPress={() => onChangeText('')} style={styles.clearSearchButton}>
-          <Ionicons name="close-circle" size={20} color="#999" />
+const SearchBar = ({ value, onChangeText, placeholder }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(themedStyles);
+  
+  return (
+    <View style={styles.searchContainer}>
+      <View style={styles.searchInputWrapper}>
+        <Ionicons name="search-outline" size={20} color={colors.textSecondary} style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={placeholder}
+          value={value}
+          onChangeText={onChangeText}
+          placeholderTextColor={colors.textSecondary}
+          autoCorrect={false}
+          returnKeyType="search"
+        />
+        {value.length > 0 && (
+          <TouchableOpacity onPress={() => onChangeText('')} style={styles.clearSearchButton}>
+            <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+};
+
+const ModalItem = ({ text, onPress, multiline = false }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(themedStyles);
+  
+  return (
+    <TouchableOpacity 
+      style={styles.modalItem}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <Text style={[styles.modalItemText, multiline && styles.modalItemTextMultiline]} numberOfLines={multiline ? 3 : 1}>
+        {text}
+      </Text>
+      <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+    </TouchableOpacity>
+  );
+};
+
+const LoadingState = () => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(themedStyles);
+  
+  return (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color={colors.primary} />
+      <Text style={styles.loadingText}>Загрузка...</Text>
+    </View>
+  );
+};
+
+const ErrorState = ({ message, onRetry }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(themedStyles);
+  
+  return (
+    <View style={styles.errorContainer}>
+      <MaterialCommunityIcons name="alert-circle-outline" size={48} color={colors.error} />
+      <Text style={styles.errorText}>{message}</Text>
+      {onRetry && (
+        <TouchableOpacity style={styles.retryButton} onPress={onRetry}>
+          <Text style={styles.retryButtonText}>Повторить</Text>
         </TouchableOpacity>
       )}
     </View>
-  </View>
-);
+  );
+};
 
-const ModalItem = ({ text, onPress, multiline = false }) => (
-  <TouchableOpacity 
-    style={styles.modalItem}
-    onPress={onPress}
-    activeOpacity={0.7}
-  >
-    <Text style={[styles.modalItemText, multiline && styles.modalItemTextMultiline]} numberOfLines={multiline ? 3 : 1}>
-      {text}
-    </Text>
-    <Ionicons name="chevron-forward" size={20} color="#C7C7CC" />
-  </TouchableOpacity>
-);
+const EmptyState = ({ message }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(themedStyles);
+  
+  return (
+    <View style={styles.emptyContainer}>
+      <MaterialCommunityIcons name="car-off" size={48} color={colors.textSecondary} />
+      <Text style={styles.emptyText}>{message}</Text>
+    </View>
+  );
+};
 
-const LoadingState = () => (
-  <View style={styles.loadingContainer}>
-    <ActivityIndicator size="large" color="#006363" />
-    <Text style={styles.loadingText}>Загрузка...</Text>
-  </View>
-);
-
-const ErrorState = ({ message, onRetry }) => (
-  <View style={styles.errorContainer}>
-    <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#FF6B6B" />
-    <Text style={styles.errorText}>{message}</Text>
-    {onRetry && (
-      <TouchableOpacity style={styles.retryButton} onPress={onRetry}>
-        <Text style={styles.retryButtonText}>Повторить</Text>
-      </TouchableOpacity>
-    )}
-  </View>
-);
-
-const EmptyState = ({ message }) => (
-  <View style={styles.emptyContainer}>
-    <MaterialCommunityIcons name="car-off" size={48} color="#999" />
-    <Text style={styles.emptyText}>{message}</Text>
-  </View>
-);
-
-const styles = StyleSheet.create({
+const themedStyles = (colors, theme) => ({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: colors.background,
+  },
+  statusBarBackground: {
+    backgroundColor: theme === 'dark' ? '#004040' : '#006363',
   },
   headerGradient: {
     paddingBottom: 20,
@@ -862,46 +914,46 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   welcomeCard: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.card,
     borderRadius: 20,
     padding: 20,
     alignItems: 'center',
     marginBottom: 24,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
+    shadowOpacity: theme === 'dark' ? 0.3 : 0.08,
     shadowRadius: 12,
     elevation: 4,
   },
   welcomeTitle: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     marginTop: 10,
     marginBottom: 8,
     textAlign: 'center',
   },
   welcomeSubtitle: {
     fontSize: 15,
-    color: '#666',
+    color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
   },
   selectionCard: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.card,
     borderRadius: 16,
     marginBottom: 12,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
+    shadowOpacity: theme === 'dark' ? 0.2 : 0.06,
     shadowRadius: 8,
     elevation: 3,
     borderWidth: 1,
-    borderColor: '#F0F0F0',
+    borderColor: colors.border,
   },
   disabledCard: {
     opacity: 0.6,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: theme === 'dark' ? colors.surface : '#FAFAFA',
   },
   selectionCardContent: {
     flexDirection: 'row',
@@ -912,7 +964,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#E6F4F4',
+    backgroundColor: theme === 'dark' ? 'rgba(78, 165, 142, 0.2)' : '#E6F4F4',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -920,7 +972,7 @@ const styles = StyleSheet.create({
   stepText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#006363',
+    color: colors.primary,
   },
   selectionInfo: {
     flex: 1,
@@ -928,65 +980,65 @@ const styles = StyleSheet.create({
   selectionTitle: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#666',
+    color: colors.textSecondary,
     marginBottom: 4,
   },
   selectionValue: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: colors.text,
   },
   placeholderText: {
-    color: '#999',
+    color: colors.textSecondary,
     fontWeight: '400',
   },
   disabledText: {
-    color: '#CCC',
+    color: colors.textTertiary,
   },
   iconContainer: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 12,
   },
   iconContainerActive: {
-    backgroundColor: '#E6F4F4',
+    backgroundColor: theme === 'dark' ? 'rgba(78, 165, 142, 0.2)' : '#E6F4F4',
   },
   errorCard: {
-    backgroundColor: '#FFF2F2',
+    backgroundColor: theme === 'dark' ? 'rgba(255, 107, 107, 0.1)' : '#FFF2F2',
     borderRadius: 16,
     padding: 16,
     marginTop: 16,
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#FFE6E6',
+    borderColor: theme === 'dark' ? 'rgba(255, 107, 107, 0.3)' : '#FFE6E6',
   },
   errorText: {
     flex: 1,
     fontSize: 14,
-    color: '#FF6B6B',
+    color: colors.error,
     marginLeft: 12,
     lineHeight: 20,
   },
   bottomContainer: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.card,
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 20,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: theme === 'dark' ? 0.3 : 0.1,
     shadowRadius: 12,
     elevation: 8,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
   },
   applyButton: {
-    backgroundColor: '#006363',
+    backgroundColor: colors.primary,
     borderRadius: 16,
     paddingVertical: 18,
     alignItems: 'center',
@@ -1011,16 +1063,16 @@ const styles = StyleSheet.create({
   // Modal styles
   modalContainer: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: colors.background,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 16,
-    backgroundColor: '#FFF',
+    backgroundColor: colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: colors.border,
   },
   modalCloseButton: {
     width: 40,
@@ -1032,19 +1084,19 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 20,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     textAlign: 'center',
     marginRight: 40,
   },
   searchContainer: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#FFF',
+    backgroundColor: colors.card,
   },
   searchInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.surface,
     borderRadius: 12,
     paddingHorizontal: 12,
     height: 44,
@@ -1056,7 +1108,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 44,
     fontSize: 16,
-    color: '#333',
+    color: colors.text,
   },
   clearSearchButton: {
     padding: 4,
@@ -1069,21 +1121,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FFF',
+    backgroundColor: colors.card,
     marginHorizontal: 16,
     marginBottom: 8,
     padding: 16,
     borderRadius: 12,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
+    shadowOpacity: theme === 'dark' ? 0.15 : 0.04,
     shadowRadius: 4,
     elevation: 2,
   },
   modalItemText: {
     flex: 1,
     fontSize: 16,
-    color: '#1A1A1A',
+    color: colors.text,
     fontWeight: '500',
     marginRight: 12,
   },
@@ -1097,21 +1149,21 @@ const styles = StyleSheet.create({
   },
   yearItem: {
     flex: 1,
-    backgroundColor: '#FFF',
+    backgroundColor: colors.card,
     margin: 4,
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
+    shadowOpacity: theme === 'dark' ? 0.15 : 0.04,
     shadowRadius: 4,
     elevation: 2,
   },
   yearText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: colors.text,
   },
   loadingContainer: {
     flex: 1,
@@ -1122,7 +1174,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#666',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   emptyContainer: {
@@ -1134,7 +1186,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: '#666',
+    color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 24,
     marginTop: 12,
@@ -1150,7 +1202,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingHorizontal: 20,
     paddingVertical: 10,
-    backgroundColor: '#007AFF',
+    backgroundColor: colors.primary,
     borderRadius: 8,
   },
   retryButtonText: {
@@ -1161,21 +1213,21 @@ const styles = StyleSheet.create({
   
   // Selected items styles
   selectedContainer: {
-    backgroundColor: '#E6F4F4',
-    borderColor: '#006363',
+    backgroundColor: theme === 'dark' ? 'rgba(78, 165, 142, 0.2)' : '#E6F4F4',
+    borderColor: colors.primary,
     borderWidth: 2,
   },
   selectedItemText: {
-    color: '#006363',
+    color: colors.primary,
     fontWeight: '600',
   },
   selectedYearItem: {
-    backgroundColor: '#E6F4F4',
-    borderColor: '#006363',
+    backgroundColor: theme === 'dark' ? 'rgba(78, 165, 142, 0.2)' : '#E6F4F4',
+    borderColor: colors.primary,
     borderWidth: 2,
   },
   selectedYearText: {
-    color: '#006363',
+    color: colors.primary,
     fontWeight: '700',
   },
   
@@ -1184,7 +1236,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#006363',
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1219,10 +1271,10 @@ const styles = StyleSheet.create({
   
   // Safe area styles
   safeAreaTop: {
-    backgroundColor: '#006363',
+    backgroundColor: theme === 'dark' ? '#004040' : '#006363',
   },
   safeAreaBottom: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.card,
   },
 });
 

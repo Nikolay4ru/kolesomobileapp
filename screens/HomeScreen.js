@@ -540,9 +540,9 @@ const HomeScreen = () => {
 
         <View style={{ height: 100 }} />
       </ScrollView>
-      {authStore.isNotificationDenied && (
+     {/* {authStore.isNotificationDenied && (
         <BannerNotificationPermission onPressSettings={handleOpenSettings} />
-      )}
+      )} */}
       {/* Search Modal */}
       <SearchModal 
         isOpen={searchModalVisible}
