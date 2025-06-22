@@ -5,7 +5,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { observer } from "mobx-react-lite";
 import { useStores } from "./useStores";
 import { useTheme } from "./contexts/ThemeContext";
-import { View, StyleSheet, Platform, TouchableOpacity, SafeAreaView, Animated } from "react-native";
+import { View, StyleSheet, Platform, Text, TouchableOpacity, SafeAreaView, Animated } from "react-native";
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { BlurView } from "@react-native-community/blur";
 import { Linking } from 'react-native';
@@ -33,7 +33,7 @@ import StorageScreen from './screens/StorageScreen';
 import GarageScreen from './screens/GarageScreen';
 import AddToGarageScreen from './screens/AddToGarageScreen';
 import StorageDetailScreen from './screens/StorageDetailScreen';
-//import CartIconWithBadge from './components/CartIconWithBadge';
+import CartIconWithBadge1 from './components/CartIconWithBadge';
 import CheckoutScreen from './screens/CheckoutScreen';
 import OrderSuccessScreen from './screens/OrderSuccessScreen';
 import SettingsScreen from "./screens/SettingsScreen";
@@ -259,6 +259,9 @@ const ServicePages = () => {
   );
 };
 
+
+
+
 // Исправленный CustomTabBar с улучшенной поддержкой Android
 const CustomTabBar = observer(({ state, descriptors, navigation }) => {
   const { cartStore } = useStores();
@@ -279,6 +282,42 @@ const CustomTabBar = observer(({ state, descriptors, navigation }) => {
     ios: 0,
     android: insets.bottom > 0 ? insets.bottom : 0, // Учитываем системную навигацию
   });
+
+  const CartIconWithBadge = ({ count, focused }) => {
+  const { colors } = useTheme();
+  
+  return (
+    <View>
+      <Ionicons
+        name={focused ? 'cart' : 'cart-outline'}
+        size={24}
+        color={focused ? colors.primary : colors.textSecondary}
+      />
+      {count > 0 && (
+        <View style={{
+          position: 'absolute',
+          right: -8,
+          top: -4,
+          backgroundColor: colors.error,
+          borderRadius: 10,
+          minWidth: 20,
+          height: 20,
+          justifyContent: 'center',
+          alignItems: 'center',
+          paddingHorizontal: 4,
+        }}>
+          <Text style={{
+            color: '#FFFFFF',
+            fontSize: 12,
+            fontWeight: 'bold',
+          }}>
+            {count > 99 ? '99+' : count}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+};
 
   useEffect(() => {
     animatedValues.forEach((animatedValue, index) => {
@@ -456,16 +495,7 @@ const CustomTabBar = observer(({ state, descriptors, navigation }) => {
             }
           ]}
         >
-          {isFocused && (
-            <Animated.View 
-              style={[
-                styles.activeBackground,
-                {
-                  opacity: animatedValue,
-                }
-              ]} 
-            />
-          )}
+          
           {route.name === 'Cart' ? (
             <CartIconWithBadge 
               count={cartStore.totalItems} 
@@ -478,9 +508,9 @@ const CustomTabBar = observer(({ state, descriptors, navigation }) => {
                 size={24}
                 color={isFocused ? colors.primary : colors.textSecondary}
                 style={{
-                  textShadowColor: isFocused ? colors.primary : 'transparent',
+                  textShadowColor: isFocused ? 'transparent' : 'transparent',
                   textShadowOffset: { width: 0, height: 0 },
-                  textShadowRadius: isFocused ? 8 : 0,
+                  textShadowRadius: isFocused ? 0 : 0,
                 }}
               />
             </Animated.View>
@@ -535,51 +565,20 @@ const CustomTabBar = observer(({ state, descriptors, navigation }) => {
 
 // Функция для получения имени иконки
 const getIconName = (routeName, isFocused) => {
-  const icons = {
-    Home: isFocused ? 'home' : 'home-outline',
-    Services: isFocused ? 'build' : 'build-outline',
-    Cart: isFocused ? 'cart' : 'cart-outline',
-    Profile: isFocused ? 'person' : 'person-outline',
-  };
-  return icons[routeName] || 'help-circle-outline';
+   switch (routeName) {
+    case 'Home':
+      return isFocused ? 'home' : 'home-outline';
+    case 'Favorites':
+      return isFocused ? 'heart' : 'heart-outline';
+    case 'Cart':
+      return isFocused ? 'cart' : 'cart-outline';
+    case 'ProfileMenu':
+      return isFocused ? 'person' : 'person-outline';
+    default:
+      return 'help-circle-outline';
+  }
 };
 
-// Компонент иконки корзины с бейджем
-const CartIconWithBadge = ({ count, focused }) => {
-  const { colors } = useTheme();
-  
-  return (
-    <View>
-      <Ionicons
-        name={focused ? 'cart' : 'cart-outline'}
-        size={24}
-        color={focused ? colors.primary : colors.textSecondary}
-      />
-      {count > 0 && (
-        <View style={{
-          position: 'absolute',
-          right: -8,
-          top: -4,
-          backgroundColor: colors.error,
-          borderRadius: 10,
-          minWidth: 20,
-          height: 20,
-          justifyContent: 'center',
-          alignItems: 'center',
-          paddingHorizontal: 4,
-        }}>
-          <Text style={{
-            color: '#FFFFFF',
-            fontSize: 12,
-            fontWeight: 'bold',
-          }}>
-            {count > 99 ? '99+' : count}
-          </Text>
-        </View>
-      )}
-    </View>
-  );
-};
 
 const MainTabs = () => {
   const { colors } = useTheme();
@@ -605,7 +604,7 @@ const MainTabs = () => {
     >
       <Tab.Screen name="Home" component={HomeStack} />
       <Tab.Screen name="Favorites" component={FavoritesScreen} />
-      <Tab.Screen name="Cart" component={CartStack} />
+       <Tab.Screen name="Cart" component={CartStack} />
       <Tab.Screen name="ProfileMenu" component={ProfileStack} />
     </Tab.Navigator>
   );

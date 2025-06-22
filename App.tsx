@@ -148,7 +148,7 @@ const App = () => {
   };
   
   return (
-     <SafeAreaProvider>
+     
     <StoreProvider value={stores}>
       <ThemeProvider>
          <UpdateChecker/>
@@ -156,7 +156,7 @@ const App = () => {
         
       </ThemeProvider>
     </StoreProvider>
-    </SafeAreaProvider>
+   
   );
 };
 
