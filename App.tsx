@@ -17,6 +17,7 @@ import AppMetrica from '@appmetrica/react-native-analytics';
 import { OneSignal } from 'react-native-onesignal';
 import { navigationRef } from './services/NavigationService';
 import NavigationService from './services/NavigationService';
+import { UpdateChecker } from './services/UpdateService';
 // Импортируем useStores
 import { useStores } from "./useStores";
 
@@ -127,7 +128,9 @@ const FullApp = () => {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
       <PaperProvider>
+        
         <Navigation />
+       
       </PaperProvider>
     </GestureHandlerRootView>
   );
@@ -146,7 +149,9 @@ const App = () => {
   return (
     <StoreProvider value={stores}>
       <ThemeProvider>
+         <UpdateChecker/>
         <FullApp />
+        
       </ThemeProvider>
     </StoreProvider>
   );

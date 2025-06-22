@@ -24,6 +24,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSPhotoLibraryUsageDescription</key>
     <string>Для загрузки видеофайлов</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+<string>Приложение использует геолокацию для показа ближайших магазинов</string>
 	<key>NSFaceIDUsageDescription</key>
 <string>Для аутентификации и доступа к админ-панели</string>
 	<key>LSRequiresIPhoneOS</key>

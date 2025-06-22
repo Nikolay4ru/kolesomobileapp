@@ -180,8 +180,12 @@ const HomeScreen = () => {
     return () => clearTimeout(timer);
   }, [activeSlide]);
 
-  const renderSlide = ({ item }) => (
-    <TouchableOpacity style={styles.slide} activeOpacity={0.95}>
+const renderSlide = ({ item }) => (
+    <TouchableOpacity 
+      style={styles.slide} 
+      activeOpacity={0.95}
+      onPress={() => navigation.navigate('Promotions', { promo: item })}
+    >
       <Image 
         source={{ uri: item.image }} 
         style={styles.slideImage}
@@ -198,6 +202,7 @@ const HomeScreen = () => {
       </View>
     </TouchableOpacity>
   );
+
 
   const renderProduct = (item) => (
     <TouchableOpacity 
@@ -293,33 +298,37 @@ const HomeScreen = () => {
         </View>
 
 
-        <View style={styles.loyaltyCard}>
-  <View style={styles.loyaltyHeader}>
-    <View>
-      <Text style={styles.loyaltyTitle}>Ваша карта лояльности</Text>
-      <Text style={[styles.loyaltyStatValue, { fontSize: 20, marginTop: 4 }]}>12 450 <Text style={styles.loyaltyStatLabel}>баллов</Text></Text>
-    </View>
-    <TouchableOpacity style={styles.loyaltyButton}>
-      <Ionicons name="qr-code" size={24} color="#FFFFFF" />
-    </TouchableOpacity>
-  </View>
-  <View style={styles.loyaltyStats}>
-    <View style={styles.loyaltyStat}>
-      <Text style={styles.loyaltyStatValue}>3%</Text>
-      <Text style={styles.loyaltyStatLabel}>Оплата баллами</Text>
-    </View>
-    <View style={styles.loyaltyStatDivider} />
-    <View style={styles.loyaltyStat}>
-      <Text style={styles.loyaltyStatValue}>500</Text>
-      <Text style={styles.loyaltyStatLabel}>Приветственные баллы</Text>
-    </View>
-    <View style={styles.loyaltyStatDivider} />
-    <View style={styles.loyaltyStat}>
-      <Text style={styles.loyaltyStatValue}>-30%</Text>
-      <Text style={styles.loyaltyStatLabel}>на шиномонтаж</Text>
-    </View>
-  </View>
-</View>
+  <TouchableOpacity 
+          style={styles.loyaltyCard} 
+          activeOpacity={0.95}
+          onPress={() => navigation.navigate('LoyaltyCard')}
+        >
+          <View style={styles.loyaltyHeader}>
+            <View>
+              <Text style={styles.loyaltyTitle}>Ваша карта лояльности</Text>
+              <Text style={[styles.loyaltyStatValue, { fontSize: 20, marginTop: 4 }]}>12 450 <Text style={styles.loyaltyStatLabel}>баллов</Text></Text>
+            </View>
+            <View style={styles.loyaltyButton}>
+              <Ionicons name="qr-code" size={24} color="#FFFFFF" />
+            </View>
+          </View>
+          <View style={styles.loyaltyStats}>
+            <View style={styles.loyaltyStat}>
+              <Text style={styles.loyaltyStatValue}>3%</Text>
+              <Text style={styles.loyaltyStatLabel}>Оплата баллами</Text>
+            </View>
+            <View style={styles.loyaltyStatDivider} />
+            <View style={styles.loyaltyStat}>
+              <Text style={styles.loyaltyStatValue}>500</Text>
+              <Text style={styles.loyaltyStatLabel}>Приветственные баллы</Text>
+            </View>
+            <View style={styles.loyaltyStatDivider} />
+            <View style={styles.loyaltyStat}>
+              <Text style={styles.loyaltyStatValue}>-30%</Text>
+              <Text style={styles.loyaltyStatLabel}>на шиномонтаж</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
 
 
          {/* User Booking Card */}
@@ -433,7 +442,8 @@ const HomeScreen = () => {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.offersScrollView}
           >
-            <TouchableOpacity style={styles.offerCard} activeOpacity={0.9}>
+            <TouchableOpacity style={styles.offerCard} activeOpacity={0.9}
+            onPress={() => navigation.navigate('Promotions')}>
               <View style={[styles.offerBadge, { backgroundColor: colors.error }]}>
                 <Text style={styles.offerBadgeText}>-30%</Text>
               </View>
@@ -448,7 +458,8 @@ const HomeScreen = () => {
               </View>
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.offerCard} activeOpacity={0.9}>
+            <TouchableOpacity style={styles.offerCard} activeOpacity={0.9}
+            onPress={() => navigation.navigate('Promotions')}>
               <View style={[styles.offerBadge, { backgroundColor: '#5856D6' }]}>
                 <Text style={styles.offerBadgeText}>Акция</Text>
               </View>
@@ -476,7 +487,12 @@ const HomeScreen = () => {
               <Text style={styles.seeAllText}>Записаться</Text>
             </TouchableOpacity>
           </View>
-          <View style={styles.servicesContainer}>
+          <ScrollView 
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.servicesScrollView}
+            style={styles.servicesContainer}
+          >
             <TouchableOpacity 
               style={styles.serviceCard} 
               activeOpacity={0.7}
@@ -512,7 +528,9 @@ const HomeScreen = () => {
               <Text style={styles.serviceName}>Правка дисков</Text>
               <Text style={styles.servicePrice}>от 1 500 ₽</Text>
             </TouchableOpacity>
-          </View>
+            
+            {/* Можно добавить больше услуг здесь */}
+          </ScrollView>
         </View>
 
         {/* Info Cards */}
@@ -993,19 +1011,19 @@ const themedStyles = (colors, theme) => ({
   },
   
   // Services
-  servicesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+ servicesContainer: {
     paddingHorizontal: 20,
-    gap: 12,
-    justifyContent: 'space-between',
+  },
+  servicesScrollView: {
+    paddingVertical: 4,
   },
   serviceCard: {
-    width: (screenWidth - 40 - 24) / 3,
+    width: screenWidth < 380 ? 110 : 120, // Адаптивная ширина
     backgroundColor: colors.card,
     padding: 16,
     borderRadius: 16,
     alignItems: 'center',
+    marginRight: 12,
     shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: theme === 'dark' ? 0.2 : 0.1,

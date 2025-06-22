@@ -55,44 +55,49 @@ const ThemeSelector = ({ visible, onClose }) => {
         activeOpacity={1} 
         onPress={onClose}
       >
-        <SafeAreaView style={styles.safeArea}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>Выберите тему</Text>
-            
-            {themeOptions.map((option) => (
+        <TouchableOpacity 
+          activeOpacity={1} 
+          onPress={(e) => e.stopPropagation()}
+        >
+          <SafeAreaView style={styles.safeArea}>
+            <View style={styles.modalContainer}>
+              <Text style={styles.modalTitle}>Выберите тему</Text>
+              
+              {themeOptions.map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.themeOption,
+                    themeMode === option.value && styles.selectedThemeOption
+                  ]}
+                  onPress={() => handleThemeChange(option.value)}
+                >
+                  <Icon 
+                    name={option.icon} 
+                    size={24} 
+                    color={themeMode === option.value ? colors.primary : colors.text} 
+                  />
+                  <Text style={[
+                    styles.themeOptionText,
+                    themeMode === option.value && styles.selectedThemeText
+                  ]}>
+                    {option.label}
+                  </Text>
+                  {themeMode === option.value && (
+                    <Icon name="check" size={20} color={colors.primary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+              
               <TouchableOpacity
-                key={option.value}
-                style={[
-                  styles.themeOption,
-                  themeMode === option.value && styles.selectedThemeOption
-                ]}
-                onPress={() => handleThemeChange(option.value)}
+                style={styles.closeButton}
+                onPress={onClose}
               >
-                <Icon 
-                  name={option.icon} 
-                  size={24} 
-                  color={themeMode === option.value ? colors.primary : colors.text} 
-                />
-                <Text style={[
-                  styles.themeOptionText,
-                  themeMode === option.value && styles.selectedThemeText
-                ]}>
-                  {option.label}
-                </Text>
-                {themeMode === option.value && (
-                  <Icon name="check" size={20} color={colors.primary} />
-                )}
+                <Text style={styles.closeButtonText}>Закрыть</Text>
               </TouchableOpacity>
-            ))}
-            
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={onClose}
-            >
-              <Text style={styles.closeButtonText}>Закрыть</Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
+            </View>
+          </SafeAreaView>
+        </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
   );

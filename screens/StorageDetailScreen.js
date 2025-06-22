@@ -4,6 +4,8 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import LinearGradient from 'react-native-linear-gradient';
+// --- Добавляем контекст темы --- //
+import { useTheme } from '../contexts/ThemeContext';
 
 const { width } = Dimensions.get('window');
 
@@ -12,6 +14,9 @@ const StorageDetailScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { storage } = route.params;
+
+  // --- Тема --- //
+  const { colors, theme } = useTheme();
 
   const formatDate = (dateString) => {
     if (!dateString) return 'не указана';
@@ -29,41 +34,42 @@ const StorageDetailScreen = () => {
     return diffDays;
   };
 
+  // Цвета и иконки статуса с учетом темы
   const getStatusConfig = (status) => {
-    switch (status) {
-      case 'Хранение на складе':
-        return {
-          label: 'Активное хранение',
-          icon: 'inventory',
-          color: '#4CAF50',
-          bgColor: '#E8F5E9',
-          description: 'Товар находится на складе'
-        };
-      case 'completed':
-        return {
-          label: 'Завершен',
-          icon: 'check-circle',
-          color: '#2196F3',
-          bgColor: '#E3F2FD',
-          description: 'Договор успешно завершен'
-        };
-      case 'cancelled':
-        return {
-          label: 'Отменен',
-          icon: 'cancel',
-          color: '#F44336',
-          bgColor: '#FFEBEE',
-          description: 'Договор был отменен'
-        };
-      default:
-        return {
-          label: status,
-          icon: 'info',
-          color: '#757575',
-          bgColor: '#F5F5F5',
-          description: ''
-        };
+    if (status === 'Хранение на складе') {
+      return {
+        label: 'Активное хранение',
+        icon: 'inventory',
+        color: colors.success,
+        bgColor: theme === 'dark' ? colors.surface : '#E8F5E9',
+        description: 'Товар находится на складе'
+      };
     }
+    if (status === 'completed') {
+      return {
+        label: 'Завершен',
+        icon: 'check-circle',
+        color: colors.info || '#2196F3',
+        bgColor: theme === 'dark' ? colors.surface : '#E3F2FD',
+        description: 'Договор успешно завершен'
+      };
+    }
+    if (status === 'cancelled') {
+      return {
+        label: 'Отменен',
+        icon: 'cancel',
+        color: colors.error,
+        bgColor: theme === 'dark' ? colors.surface : '#FFEBEE',
+        description: 'Договор был отменен'
+      };
+    }
+    return {
+      label: status,
+      icon: 'info',
+      color: colors.textSecondary,
+      bgColor: theme === 'dark' ? colors.surface : '#F5F5F5',
+      description: ''
+    };
   };
 
   const handleCreateIssueRequest = () => {
@@ -74,45 +80,72 @@ const StorageDetailScreen = () => {
   const daysLeft = calculateDaysLeft(storage.end_date);
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+    <View style={[styles.container, { backgroundColor: theme === 'dark' ? colors.background : '#FFFFFF' }]}>
+      <View style={[
+        styles.header, 
+        { 
+          paddingTop: insets.top + 16,
+          backgroundColor: theme === 'dark' ? colors.card : '#FFFFFF',
+          borderBottomColor: theme === 'dark' ? colors.surface : '#F0F0F0'
+        }
+      ]}>
         <TouchableOpacity 
           onPress={() => navigation.goBack()}
-          style={styles.backButton}
+          style={[
+            styles.backButton,
+            { backgroundColor: theme === 'dark' ? colors.surface : '#F5F5F5' }
+          ]}
           activeOpacity={0.7}
         >
-          <Icon name="arrow-back" size={22} color="#1A1A1A" />
+          <Icon name="arrow-back" size={22} color={theme === 'dark' ? colors.text : "#1A1A1A"} />
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Договор хранения</Text>
-          <Text style={styles.contractNumber}>№ {storage.contract_number}</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Договор хранения</Text>
+          <Text style={[styles.contractNumber, { color: colors.textSecondary }]}>№ {storage.contract_number}</Text>
         </View>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView 
-        style={styles.scrollView}
+        style={[
+          styles.scrollView, 
+          { backgroundColor: theme === 'dark' ? colors.background : '#FAFAFA' }
+        ]}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
         {/* Status Section */}
-        <View style={[styles.statusSection, { backgroundColor: statusConfig.bgColor }]}>
+        <View style={[
+          styles.statusSection, 
+          { backgroundColor: statusConfig.bgColor, shadowColor: theme === 'dark' ? '#00000000' : '#000' }
+        ]}>
           <View style={styles.statusHeader}>
-            <View style={[styles.statusIconContainer, { backgroundColor: statusConfig.color }]}>
+            <View style={[
+              styles.statusIconContainer, 
+              { backgroundColor: statusConfig.color }
+            ]}>
               <Icon name={statusConfig.icon} size={24} color="#fff" />
             </View>
             <View style={styles.statusContent}>
               <Text style={[styles.statusTitle, { color: statusConfig.color }]}>
                 {statusConfig.label}
               </Text>
-              <Text style={styles.statusDescription}>{statusConfig.description}</Text>
+              <Text style={[styles.statusDescription, { color: theme === 'dark' ? colors.textSecondary : '#666' }]}>
+                {statusConfig.description}
+              </Text>
             </View>
           </View>
           
           {daysLeft !== null && storage.status === 'Хранение на складе' && (
-            <View style={styles.daysLeftContainer}>
-              <Icon name="access-time" size={18} color={daysLeft > 7 ? '#4CAF50' : '#FF9800'} />
-              <Text style={[styles.daysLeftText, { color: daysLeft > 7 ? '#4CAF50' : '#FF9800' }]}>
+            <View style={[
+              styles.daysLeftContainer, 
+              { borderTopColor: theme === 'dark' ? colors.surface : 'rgba(0, 0, 0, 0.05)' }
+            ]}>
+              <Icon name="access-time" size={18} color={daysLeft > 7 ? colors.success : colors.warning} />
+              <Text style={[
+                styles.daysLeftText, 
+                { color: daysLeft > 7 ? colors.success : colors.warning }
+              ]}>
                 Осталось {daysLeft} {daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дня' : 'дней'}
               </Text>
             </View>
@@ -120,58 +153,73 @@ const StorageDetailScreen = () => {
         </View>
 
         {/* Period Card */}
-        <View style={styles.periodCard}>
+        <View style={[
+          styles.periodCard,
+          { backgroundColor: theme === 'dark' ? colors.card : '#fff', shadowColor: theme === 'dark' ? '#00000000' : '#000' }
+        ]}>
           <View style={styles.periodHeader}>
-            <Icon name="date-range" size={20} color="#1976D2" />
-            <Text style={styles.periodTitle}>Период хранения</Text>
+            <Icon name="date-range" size={20} color={colors.primary} />
+            <Text style={[styles.periodTitle, { color: colors.text }]}>Период хранения</Text>
           </View>
           
           <View style={styles.periodContent}>
             <View style={styles.periodItem}>
-              <View style={styles.periodDot} />
+              <View style={[styles.periodDot, { backgroundColor: colors.success }]} />
               <View style={styles.periodInfo}>
-                <Text style={styles.periodLabel}>Начало</Text>
-                <Text style={styles.periodDate}>{formatDate(storage.start_date)}</Text>
+                <Text style={[styles.periodLabel, { color: colors.textSecondary }]}>Начало</Text>
+                <Text style={[styles.periodDate, { color: colors.text }]}>{formatDate(storage.start_date)}</Text>
               </View>
             </View>
             
-            <View style={styles.periodConnector} />
+            <View style={[
+              styles.periodConnector, 
+              { backgroundColor: theme === 'dark' ? colors.surface : '#E0E0E0' }
+            ]} />
             
             <View style={styles.periodItem}>
-              <View style={[styles.periodDot, { backgroundColor: '#F44336' }]} />
+              <View style={[styles.periodDot, { backgroundColor: colors.error }]} />
               <View style={styles.periodInfo}>
-                <Text style={styles.periodLabel}>Окончание</Text>
-                <Text style={styles.periodDate}>{formatDate(storage.end_date)}</Text>
+                <Text style={[styles.periodLabel, { color: colors.textSecondary }]}>Окончание</Text>
+                <Text style={[styles.periodDate, { color: colors.text }]}>{formatDate(storage.end_date)}</Text>
               </View>
             </View>
           </View>
         </View>
 
         {/* Products Section */}
-        <View style={styles.productsCard}>
+        <View style={[
+          styles.productsCard,
+          { backgroundColor: theme === 'dark' ? colors.card : '#fff', shadowColor: theme === 'dark' ? '#00000000' : '#000' }
+        ]}>
           <View style={styles.productsHeader}>
             <LinearGradient
-              colors={['#4CAF50', '#66BB6A']}
+              colors={[colors.success, colors.success + "cc"]}
               style={styles.productsIconGradient}
             >
               <Icon name="inventory-2" size={20} color="#fff" />
             </LinearGradient>
-            <Text style={styles.productsTitle}>Товары на хранении</Text>
+            <Text style={[styles.productsTitle, { color: colors.text }]}>Товары на хранении</Text>
           </View>
           
-          <View style={styles.productsContent}>
-            <Text style={styles.productsText}>{storage.nomenclature}</Text>
+          <View style={[
+            styles.productsContent,
+            { backgroundColor: theme === 'dark' ? colors.surface : '#F8FAF9' }
+          ]}>
+            <Text style={[styles.productsText, { color: colors.text }]}>{storage.nomenclature}</Text>
           </View>
         </View>
 
         {/* Description */}
         {storage.description && (
-          <View style={styles.descriptionCard}>
+          <View style={[
+            styles.descriptionCard,
+            { backgroundColor: theme === 'dark' ? colors.card : '#fff', shadowColor: theme === 'dark' ? '#00000000' : '#000' }
+          ]}>
             <View style={styles.descriptionHeader}>
-              <Icon name="description" size={20} color="#757575" />
-              <Text style={styles.descriptionTitle}>Примечания</Text>
+              <Icon name="description" size={20} color={theme === 'dark' ? colors.textSecondary : '#757575'} />
+              <Text style={[styles.descriptionTitle, { color: colors.text }]}>Примечания</Text>
             </View>
-            <Text style={styles.descriptionText}>{storage.description}</Text>
+            <Text style={[styles.descriptionText, { color: colors.textSecondary }]}>{storage.description}</Text>
           </View>
         )}
 
@@ -183,22 +231,28 @@ const StorageDetailScreen = () => {
             onPress={handleCreateIssueRequest}
           >
             <LinearGradient
-              colors={['#E8F5E9', '#C8E6C9']}
+              colors={[
+                theme === 'dark' ? colors.surface : '#E8F5E9', 
+                theme === 'dark' ? colors.success + '30' : '#C8E6C9'
+              ]}
               style={styles.actionGradient}
             >
-              <Icon name="local-shipping" size={24} color="#2E7D32" />
+              <Icon name="local-shipping" size={24} color={colors.success} />
             </LinearGradient>
-            <Text style={styles.actionLabel}>Заявка на выдачу</Text>
+            <Text style={[styles.actionLabel, { color: colors.textSecondary }]}>Заявка на выдачу</Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.actionCard} activeOpacity={0.7}>
             <LinearGradient
-              colors={['#F3E5F5', '#E1BEE7']}
+              colors={[
+                theme === 'dark' ? colors.surface : '#F3E5F5', 
+                theme === 'dark' ? colors.info + '30' : '#E1BEE7'
+              ]}
               style={styles.actionGradient}
             >
-              <Icon name="qr-code-scanner" size={24} color="#7B1FA2" />
+              <Icon name="qr-code-scanner" size={24} color={colors.info || "#7B1FA2"} />
             </LinearGradient>
-            <Text style={styles.actionLabel}>QR код</Text>
+            <Text style={[styles.actionLabel, { color: colors.textSecondary }]}>QR код</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -210,7 +264,7 @@ const StorageDetailScreen = () => {
         activeOpacity={0.8}
       >
         <LinearGradient
-          colors={['#4CAF50', '#45A049']}
+          colors={[colors.success, colors.success + 'CC']}
           style={styles.fabGradient}
         >
           <Icon name="add-shopping-cart" size={24} color="#fff" />
@@ -223,22 +277,18 @@ const StorageDetailScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F5F5F5',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -248,18 +298,15 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 17,
-    color: '#1A1A1A',
     fontWeight: '600',
     marginBottom: 2,
   },
   contractNumber: {
     fontSize: 13,
-    color: '#666666',
     fontWeight: '400',
   },
   scrollView: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
   },
   contentContainer: {
     paddingTop: 16,
@@ -271,7 +318,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     elevation: 1,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
@@ -298,7 +344,6 @@ const styles = StyleSheet.create({
   },
   statusDescription: {
     fontSize: 14,
-    color: '#666',
   },
   daysLeftContainer: {
     flexDirection: 'row',
@@ -306,7 +351,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0, 0, 0, 0.05)',
   },
   daysLeftText: {
     fontSize: 14,
@@ -314,13 +358,11 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   periodCard: {
-    backgroundColor: '#fff',
     marginHorizontal: 16,
     marginBottom: 16,
     borderRadius: 16,
     padding: 16,
     elevation: 1,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
@@ -333,7 +375,6 @@ const styles = StyleSheet.create({
   periodTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#333',
     marginLeft: 10,
   },
   periodContent: {
@@ -349,7 +390,6 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#4CAF50',
     marginRight: 12,
   },
   periodInfo: {
@@ -357,28 +397,23 @@ const styles = StyleSheet.create({
   },
   periodLabel: {
     fontSize: 12,
-    color: '#999',
     marginBottom: 4,
   },
   periodDate: {
     fontSize: 15,
-    color: '#333',
     fontWeight: '600',
   },
   periodConnector: {
     width: 30,
     height: 2,
-    backgroundColor: '#E0E0E0',
     marginHorizontal: 8,
   },
   productsCard: {
-    backgroundColor: '#fff',
     marginHorizontal: 16,
     marginBottom: 16,
     borderRadius: 16,
     padding: 16,
     elevation: 1,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
@@ -398,27 +433,22 @@ const styles = StyleSheet.create({
   productsTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#333',
     marginLeft: 12,
   },
   productsContent: {
-    backgroundColor: '#F8FAF9',
     borderRadius: 12,
     padding: 16,
   },
   productsText: {
     fontSize: 15,
-    color: '#444',
     lineHeight: 22,
   },
   descriptionCard: {
-    backgroundColor: '#fff',
     marginHorizontal: 20,
     marginBottom: 20,
     borderRadius: 20,
     padding: 20,
     elevation: 2,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
@@ -431,12 +461,10 @@ const styles = StyleSheet.create({
   descriptionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#333',
     marginLeft: 10,
   },
   descriptionText: {
     fontSize: 15,
-    color: '#666',
     lineHeight: 22,
   },
   quickActions: {
@@ -458,14 +486,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
     elevation: 3,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
   actionLabel: {
     fontSize: 13,
-    color: '#666',
     fontWeight: '600',
   },
   fab: {
@@ -473,7 +499,6 @@ const styles = StyleSheet.create({
     bottom: 24,
     right: 20,
     elevation: 6,
-    shadowColor: '#4CAF50',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,

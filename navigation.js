@@ -5,7 +5,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { observer } from "mobx-react-lite";
 import { useStores } from "./useStores";
 import { useTheme } from "./contexts/ThemeContext";
-import { View, StyleSheet, Platform, TouchableOpacity, Animated } from "react-native";
+import { View, StyleSheet, Platform, TouchableOpacity, SafeAreaView, Animated } from "react-native";
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { BlurView } from "@react-native-community/blur";
 import { Linking } from 'react-native';
@@ -36,6 +36,9 @@ import CartIconWithBadge from './components/CartIconWithBadge';
 import CheckoutScreen from './screens/CheckoutScreen';
 import OrderSuccessScreen from './screens/OrderSuccessScreen';
 import SettingsScreen from "./screens/SettingsScreen";
+import LoyaltyCardScreen from './screens/LoyaltyCardScreen';
+import PromotionsScreen from './screens/PromotionsScreen';
+import StoresMapScreen from './screens/StoresMapScreen';
 
 // Админские экраны
 import ScanProductsScreen from './screens/AdminOrdersScreen';
@@ -68,7 +71,9 @@ const HomeStack = () => {
       <Stack.Screen name="FilterAuto" component={FilterAutoScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Product" component={ProductScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ headerShown: false }}/>
-  
+       <Stack.Screen name="LoyaltyCard" component={LoyaltyCardScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Promotions" component={PromotionsScreen} options={{ headerShown: false }} />
+
        </Stack.Navigator>
   );
 };
@@ -174,6 +179,11 @@ const ProfileStack = () => {
         }}
       />
       <Stack.Screen 
+        name="StoresMap" 
+        component={StoresMapScreen} 
+        options={{ headerShown: false }} 
+      />
+      <Stack.Screen 
         name="Admin" 
         component={AdminStack} 
         options={{ headerShown: false }}
@@ -273,7 +283,7 @@ const CustomTabBar = observer(({ state, descriptors, navigation }) => {
       bottom: 0,
       left: 0,
       right: 0,
-      height: Platform.OS === 'ios' ? 88 : 70,
+      height: Platform.OS === 'ios' ? 88: null,
       backgroundColor: 'transparent',
       elevation: 0,
     },
@@ -303,7 +313,7 @@ const CustomTabBar = observer(({ state, descriptors, navigation }) => {
       shadowOffset: { width: 0, height: -4 },
       shadowOpacity: theme === 'dark' ? 0.2 : 0.08,
       shadowRadius: 16,
-      elevation: 20,
+     // elevation: 20,
       borderTopWidth: 0.5,
       borderTopColor: colors.tabBarBorder,
     },
@@ -352,7 +362,7 @@ const CustomTabBar = observer(({ state, descriptors, navigation }) => {
   });
 
   return (
-    <View style={styles.tabBarContainer}>
+    <SafeAreaView edges={['bottom']} style={styles.tabBarContainer}>
       {Platform.OS === 'ios' && (
         <BlurView
           style={styles.blurView}
@@ -464,7 +474,7 @@ const CustomTabBar = observer(({ state, descriptors, navigation }) => {
           );
         })}
       </View>
-    </View>
+    </SafeAreaView>
   );
 });
 

@@ -13,14 +13,46 @@ import {
   Modal,
   Platform,
   KeyboardAvoidingView,
+  Appearance,
+  StatusBar,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { BlurView } from '@react-native-community/blur';
+
 
 const { width, height } = Dimensions.get('window');
 
 const ServiceBookingFlow = ({ navigation, route }) => {
+  // Theme detection
+  const [isDarkMode, setIsDarkMode] = useState(Appearance.getColorScheme() === 'dark');
+
+  useEffect(() => {
+    const subscription = Appearance.addChangeListener(({ colorScheme }) => {
+      setIsDarkMode(colorScheme === 'dark');
+    });
+    return () => subscription?.remove();
+  }, []);
+
+  // Dynamic colors based on theme
+  const COLORS = {
+    primary: '#007AFF',
+    secondary: isDarkMode ? '#5AC8FA' : '#007AFF',
+    accent: '#FF9500',
+    background: isDarkMode ? '#000000' : '#F2F1F6',
+    elevated: isDarkMode ? '#1C1C1E' : '#FFFFFF',
+    elevatedSecondary: isDarkMode ? '#2C2C2E' : '#FFFFFF',
+    separator: isDarkMode ? '#3A3A3C' : '#E5E5EA',
+    text: isDarkMode ? '#FFFFFF' : '#000000',
+    textSecondary: isDarkMode ? '#8E8E93' : '#6E6E73',
+    textTertiary: isDarkMode ? '#48484A' : '#C7C7CC',
+    success: isDarkMode ? '#32D74B' : '#34C759',
+    warning: isDarkMode ? '#FF9F0A' : '#FF9500',
+    error: isDarkMode ? '#FF453A' : '#FF3B30',
+    modalOverlay: isDarkMode ? 'rgba(0,0,0,0.75)' : 'rgba(0,0,0,0.4)',
+    inputBackground: isDarkMode ? '#1C1C1E' : '#F2F2F7',
+    cardSelected: isDarkMode ? '#0A84FF' : '#007AFF',
+  };
+
   // Steps
   const STEPS = {
     SERVICE: 0,
@@ -41,15 +73,12 @@ const ServiceBookingFlow = ({ navigation, route }) => {
   const [carBrand, setCarBrand] = useState(null);
   const [carModel, setCarModel] = useState(null);
   const [licensePlate, setLicensePlate] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [modalType, setModalType] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
   const [carBrands, setCarBrands] = useState([]);
   const [carModels, setCarModels] = useState([]);
   const [loadingBrands, setLoadingBrands] = useState(false);
   const [loadingModels, setLoadingModels] = useState(false);
-  const [selectedBrand, setSelectedBrand] = useState(null); // для fetchCarModels
   const [showBrandModal, setShowBrandModal] = useState(false);
   const [showModelModal, setShowModelModal] = useState(false);
 
@@ -57,26 +86,10 @@ const ServiceBookingFlow = ({ navigation, route }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.97)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const buttonScaleAnim = useRef(new Animated.Value(1)).current;
 
-  // Colors (minimalist, modern)
-  const COLORS = {
-    primary: '#22223B',
-    secondary: '#4A4E69',
-    accent: '#F2E9E4',
-    background: '#FAFAFA',
-    text: '#22223B',
-    textSecondary: '#6E6E6E',
-    border: '#ECECEC',
-    card: '#FFFFFF',
-    cardSelected: '#F4F4F4',
-    success: '#38B000',
-    warning: '#FFAA00',
-    error: '#EF233C',
-  };
-
-
-   // --- Загрузка марок автомобилей ---
+  // Load car brands
   useEffect(() => {
     const fetchCarBrands = async () => {
       try {
@@ -92,11 +105,9 @@ const ServiceBookingFlow = ({ navigation, route }) => {
     fetchCarBrands();
   }, []);
 
-
-   // --- Загрузка моделей по выбранной марке ---
+  // Load car models
   const fetchCarModels = async (brand) => {
     setLoadingModels(true);
-    setSelectedBrand(brand);
     setShowBrandModal(false);
     try {
       const response = await fetch(`https://api.koleso.app/api/car-models.php?brand=${encodeURIComponent(brand)}`);
@@ -118,6 +129,7 @@ const ServiceBookingFlow = ({ navigation, route }) => {
       icon: 'tire-repair',
       duration: '30-60 мин',
       price: 'от 1500₽',
+      color: '#007AFF',
     },
     {
       id: 2,
@@ -126,15 +138,16 @@ const ServiceBookingFlow = ({ navigation, route }) => {
       icon: 'inventory',
       duration: '15-30 мин',
       price: 'бесплатно',
+      color: '#34C759',
     },
   ];
 
   // Car types
   const carTypes = [
-    { id: 1, name: 'Легковой', icon: 'directions-car' },
-    { id: 2, name: 'Кроссовер', icon: 'airport-shuttle' },
-    { id: 3, name: 'Внедорожник', icon: 'terrain' },
-    { id: 4, name: 'Легкогрузовой', icon: 'local-shipping' },
+    { id: 1, name: 'Легковой', icon: 'directions-car', emoji: '🚗' },
+    { id: 2, name: 'Кроссовер', icon: 'airport-shuttle', emoji: '🚙' },
+    { id: 3, name: 'Внедорожник', icon: 'terrain', emoji: '🚐' },
+    { id: 4, name: 'Легкогрузовой', icon: 'local-shipping', emoji: '🚚' },
   ];
 
   // Time slots
@@ -151,26 +164,26 @@ const ServiceBookingFlow = ({ navigation, route }) => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 220,
+        duration: 300,
         useNativeDriver: true,
       }),
       Animated.spring(slideAnim, {
         toValue: 0,
-        friction: 7,
-        tension: 38,
+        friction: 8,
+        tension: 40,
         useNativeDriver: true,
       }),
       Animated.spring(scaleAnim, {
         toValue: 1,
-        friction: 7,
-        tension: 38,
+        friction: 8,
+        tension: 40,
         useNativeDriver: true,
       }),
     ]).start();
 
     Animated.timing(progressAnim, {
       toValue: (currentStep + 1) / Object.keys(STEPS).length,
-      duration: 400,
+      duration: 500,
       useNativeDriver: false,
     }).start();
   }, [currentStep]);
@@ -234,12 +247,29 @@ const ServiceBookingFlow = ({ navigation, route }) => {
     return days;
   };
 
+  // Button animation
+  const animateButton = () => {
+    Animated.sequence([
+      Animated.timing(buttonScaleAnim, {
+        toValue: 0.95,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(buttonScaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
   // Step navigation
   const goToNextStep = () => {
     if (currentStep < Object.keys(STEPS).length - 1) {
+      animateButton();
       fadeAnim.setValue(0);
       slideAnim.setValue(50);
-      scaleAnim.setValue(0.97);
+      scaleAnim.setValue(0.95);
       setCurrentStep(currentStep + 1);
     }
   };
@@ -248,13 +278,14 @@ const ServiceBookingFlow = ({ navigation, route }) => {
     if (currentStep > 0) {
       fadeAnim.setValue(0);
       slideAnim.setValue(-50);
-      scaleAnim.setValue(0.97);
+      scaleAnim.setValue(0.95);
       setCurrentStep(currentStep - 1);
     }
   };
 
   // Submit booking
   const handleSubmit = () => {
+    animateButton();
     const bookingData = {
       service: selectedService,
       store: selectedStore,
@@ -265,8 +296,10 @@ const ServiceBookingFlow = ({ navigation, route }) => {
       date: selectedDate,
       time: selectedTime,
     };
-    alert('Запись успешно создана!');
-    navigation.goBack();
+    setTimeout(() => {
+      alert('Запись успешно создана!');
+      navigation.goBack();
+    }, 300);
   };
 
   // Service step
@@ -275,37 +308,49 @@ const ServiceBookingFlow = ({ navigation, route }) => {
       opacity: fadeAnim,
       transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
     }]}>
-      <Text style={styles.stepTitle}>Выберите услугу</Text>
-      <Text style={styles.stepSubtitle}>Какая услуга вас интересует?</Text>
+      <Text style={[styles.stepTitle, { color: COLORS.text }]}>Выберите услугу</Text>
+      <Text style={[styles.stepSubtitle, { color: COLORS.textSecondary }]}>
+        Какая услуга вас интересует?
+      </Text>
       <View style={styles.servicesGrid}>
         {services.map((service) => (
           <TouchableOpacity
             key={service.id}
             style={[
               styles.serviceCard,
-              selectedService?.id === service.id && styles.selectedCard,
+              { 
+                backgroundColor: COLORS.elevated,
+                borderColor: selectedService?.id === service.id ? COLORS.primary : COLORS.separator,
+              },
+              selectedService?.id === service.id && styles.selectedServiceCard,
             ]}
             onPress={() => setSelectedService(service)}
-            activeOpacity={0.8}
+            activeOpacity={0.7}
           >
-            <View style={styles.serviceIconContainer}>
+            <View style={[styles.serviceIconContainer, { backgroundColor: COLORS.primary + '15' }]}>
               <MaterialCommunityIcons
                 name={service.icon}
-                size={28}
-                color={selectedService?.id === service.id ? COLORS.primary : COLORS.secondary}
+                size={32}
+                color={COLORS.primary}
               />
             </View>
-            <View style={styles.serviceInfoBlock}>
-              <Text style={styles.serviceName}>{service.name}</Text>
-              <Text style={styles.serviceDescription}>{service.description}</Text>
-              <View style={styles.serviceInfoRow}>
-                <View style={styles.serviceInfoItem}>
-                  <Icon name="schedule" size={15} color={COLORS.textSecondary} />
-                  <Text style={styles.serviceInfoText}>{service.duration}</Text>
+            <View style={styles.serviceContent}>
+              <Text style={[styles.serviceName, { color: COLORS.text }]}>{service.name}</Text>
+              <Text style={[styles.serviceDescription, { color: COLORS.textSecondary }]}>
+                {service.description}
+              </Text>
+              <View style={styles.serviceMetaRow}>
+                <View style={styles.serviceMetaItem}>
+                  <Icon name="schedule" size={16} color={COLORS.textSecondary} />
+                  <Text style={[styles.serviceMetaText, { color: COLORS.textSecondary }]}>
+                    {service.duration}
+                  </Text>
                 </View>
-                <View style={styles.serviceInfoItem}>
-                  <Icon name="payments" size={15} color={COLORS.textSecondary} />
-                  <Text style={styles.serviceInfoText}>{service.price}</Text>
+                <View style={styles.serviceMetaItem}>
+                  <Icon name="payments" size={16} color={COLORS.textSecondary} />
+                  <Text style={[styles.serviceMetaText, { color: COLORS.textSecondary }]}>
+                    {service.price}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -321,43 +366,59 @@ const ServiceBookingFlow = ({ navigation, route }) => {
       opacity: fadeAnim,
       transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
     }]}>
-      <Text style={styles.stepTitle}>Выберите магазин</Text>
-      <Text style={styles.stepSubtitle}>Магазины с выбранной услугой</Text>
+      <Text style={[styles.stepTitle, { color: COLORS.text }]}>Выберите магазин</Text>
+      <Text style={[styles.stepSubtitle, { color: COLORS.textSecondary }]}>
+        Магазины с выбранной услугой
+      </Text>
       {loading ? (
         <View style={styles.loader}>
           <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
       ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storesScroll}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          contentContainerStyle={styles.storesScroll}
+        >
           {stores.map((store) => (
             <TouchableOpacity
               key={store.id}
               style={[
                 styles.storeCard,
+                { 
+                  backgroundColor: COLORS.elevated,
+                  borderColor: selectedStore?.id === store.id ? COLORS.primary : COLORS.separator,
+                },
                 selectedStore?.id === store.id && styles.selectedStoreCard,
               ]}
               onPress={() => setSelectedStore(store)}
-              activeOpacity={0.85}
+              activeOpacity={0.7}
             >
               <View style={styles.storeHeader}>
-                <View style={styles.storeIcon}>
-                  <Icon name="store" size={21} color={COLORS.primary} />
+                <View style={[styles.storeIconContainer, { backgroundColor: COLORS.primary + '15' }]}>
+                  <Icon name="store" size={24} color={COLORS.primary} />
                 </View>
-                <View style={styles.storeStatus}>
-                  <View style={styles.statusDot} />
-                  <Text style={styles.statusText}>Открыто</Text>
+                <View style={[styles.storeStatus, { backgroundColor: COLORS.success + '20' }]}>
+                  <View style={[styles.statusDot, { backgroundColor: COLORS.success }]} />
+                  <Text style={[styles.statusText, { color: COLORS.success }]}>Открыто</Text>
                 </View>
               </View>
-              <Text style={styles.storeName}>{store.name}</Text>
-              <Text style={styles.storeAddress}>{store.address}</Text>
-              <View style={styles.storeFooter}>
-                <View style={styles.storeInfoItem}>
-                  <Icon name="schedule" size={13} color={COLORS.textSecondary} />
-                  <Text style={styles.storeInfoText}>{store.working_hours || '9:00 - 21:00'}</Text>
+              <Text style={[styles.storeName, { color: COLORS.text }]}>{store.name}</Text>
+              <Text style={[styles.storeAddress, { color: COLORS.textSecondary }]}>
+                {store.address}
+              </Text>
+              <View style={styles.storeMetaContainer}>
+                <View style={styles.storeMetaItem}>
+                  <Icon name="schedule" size={14} color={COLORS.textSecondary} />
+                  <Text style={[styles.storeMetaText, { color: COLORS.textSecondary }]}>
+                    {store.working_hours || '9:00 - 21:00'}
+                  </Text>
                 </View>
-                <View style={styles.storeInfoItem}>
-                  <Icon name="near-me" size={13} color={COLORS.textSecondary} />
-                  <Text style={styles.storeInfoText}>2.5 км</Text>
+                <View style={styles.storeMetaItem}>
+                  <Icon name="near-me" size={14} color={COLORS.textSecondary} />
+                  <Text style={[styles.storeMetaText, { color: COLORS.textSecondary }]}>
+                    2.5 км
+                  </Text>
                 </View>
               </View>
             </TouchableOpacity>
@@ -368,74 +429,85 @@ const ServiceBookingFlow = ({ navigation, route }) => {
   );
 
   // Car step
-const renderCarStep = () => (
+  const renderCarStep = () => (
     <Animated.View style={[styles.stepContainer, {
       opacity: fadeAnim,
       transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
     }]}>
-      <Text style={styles.stepTitle}>Данные автомобиля</Text>
-      <Text style={styles.stepSubtitle}>Информация о вашем авто</Text>
-      <Text style={styles.fieldLabel}>Тип автомобиля</Text>
+      <Text style={[styles.stepTitle, { color: COLORS.text }]}>Данные автомобиля</Text>
+      <Text style={[styles.stepSubtitle, { color: COLORS.textSecondary }]}>
+        Информация о вашем авто
+      </Text>
+      
+      <Text style={[styles.sectionTitle, { color: COLORS.text }]}>Тип автомобиля</Text>
       <View style={styles.carTypesGrid}>
         {carTypes.map((type) => (
           <TouchableOpacity
             key={type.id}
             style={[
               styles.carTypeCard,
-              selectedCarType?.id === type.id && styles.selectedCarType,
+              {
+                backgroundColor: selectedCarType?.id === type.id ? COLORS.primary : COLORS.elevated,
+                borderColor: selectedCarType?.id === type.id ? COLORS.primary : COLORS.separator,
+              },
             ]}
             onPress={() => setSelectedCarType(type)}
-            activeOpacity={0.85}
+            activeOpacity={0.7}
           >
-            <Icon
-              name={type.icon}
-              size={24}
-              color={selectedCarType?.id === type.id ? COLORS.primary : COLORS.textSecondary}
-            />
+            <Text style={styles.carTypeEmoji}>{type.emoji}</Text>
             <Text style={[
               styles.carTypeName,
-              selectedCarType?.id === type.id && styles.selectedCarTypeName,
+              { color: selectedCarType?.id === type.id ? COLORS.elevated : COLORS.text }
             ]}>
               {type.name}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
-      <View style={styles.carDetailsContainer}>
-        {/* Выбор марки автомобиля */}
+
+      <View style={styles.inputSection}>
         <TouchableOpacity
-          style={styles.selectField}
+          style={[styles.inputField, { backgroundColor: COLORS.inputBackground }]}
           onPress={() => setShowBrandModal(true)}
+          activeOpacity={0.7}
         >
-          <Text style={[styles.selectFieldText, !carBrand && styles.placeholder]}>
+          <Icon name="directions-car" size={20} color={COLORS.textSecondary} />
+          <Text style={[
+            styles.inputFieldText,
+            { color: carBrand ? COLORS.text : COLORS.textSecondary }
+          ]}>
             {carBrand || 'Марка автомобиля'}
           </Text>
-          <Icon name="chevron-right" size={22} color={COLORS.textSecondary} />
+          <Icon name="chevron-right" size={24} color={COLORS.textSecondary} />
         </TouchableOpacity>
-        {/* Выбор модели автомобиля */}
+
         {carBrand && (
           <TouchableOpacity
-            style={styles.selectField}
-            onPress={() => {
-              fetchCarModels(carBrand);
-            }}
+            style={[styles.inputField, { backgroundColor: COLORS.inputBackground }]}
+            onPress={() => fetchCarModels(carBrand)}
+            activeOpacity={0.7}
           >
-            <Text style={[styles.selectFieldText, !carModel && styles.placeholder]}>
+            <Icon name="build" size={20} color={COLORS.textSecondary} />
+            <Text style={[
+              styles.inputFieldText,
+              { color: carModel ? COLORS.text : COLORS.textSecondary }
+            ]}>
               {carModel || 'Модель'}
             </Text>
-            <Icon name="chevron-right" size={22} color={COLORS.textSecondary} />
+            <Icon name="chevron-right" size={24} color={COLORS.textSecondary} />
           </TouchableOpacity>
         )}
-        <Text style={styles.fieldLabel}>Гос. номер</Text>
-        <View style={styles.licensePlateContainer}>
+
+        <View style={[styles.inputField, { backgroundColor: COLORS.inputBackground }]}>
+          <Icon name="confirmation-number" size={20} color={COLORS.textSecondary} />
           <TextInput
-            style={styles.licensePlateInput}
+            style={[styles.textInput, { color: COLORS.text }]}
             placeholder="А123АА777"
+            placeholderTextColor={COLORS.textSecondary}
             value={licensePlate}
             onChangeText={(text) => setLicensePlate(validateLicensePlate(text))}
             maxLength={9}
             autoCapitalize="characters"
-            placeholderTextColor={COLORS.textSecondary}
           />
         </View>
       </View>
@@ -448,8 +520,11 @@ const renderCarStep = () => (
       opacity: fadeAnim,
       transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
     }]}>
-      <Text style={styles.stepTitle}>Выберите дату и время</Text>
-      <Text style={styles.stepSubtitle}>Доступные слоты</Text>
+      <Text style={[styles.stepTitle, { color: COLORS.text }]}>Выберите дату и время</Text>
+      <Text style={[styles.stepSubtitle, { color: COLORS.textSecondary }]}>
+        Доступные слоты для записи
+      </Text>
+      
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -463,32 +538,48 @@ const renderCarStep = () => (
               key={index}
               style={[
                 styles.dateCard,
-                isSelected && styles.selectedDateCard,
-                isToday && styles.todayCard,
+                {
+                  backgroundColor: isSelected ? COLORS.primary : COLORS.elevated,
+                  borderColor: isToday && !isSelected ? COLORS.accent : COLORS.separator,
+                },
               ]}
               onPress={() => setSelectedDate(date)}
-              activeOpacity={0.87}
+              activeOpacity={0.7}
             >
-              <Text style={[styles.dateWeekday, isSelected && styles.selectedDateText]}>
+              <Text style={[
+                styles.dateWeekday,
+                { color: isSelected ? COLORS.elevated : COLORS.textSecondary }
+              ]}>
                 {date.toLocaleDateString('ru-RU', { weekday: 'short' })}
               </Text>
-              <Text style={[styles.dateDay, isSelected && styles.selectedDateText]}>
+              <Text style={[
+                styles.dateDay,
+                { color: isSelected ? COLORS.elevated : COLORS.text }
+              ]}>
                 {date.getDate()}
               </Text>
-              <Text style={[styles.dateMonth, isSelected && styles.selectedDateText]}>
+              <Text style={[
+                styles.dateMonth,
+                { color: isSelected ? COLORS.elevated : COLORS.textSecondary }
+              ]}>
                 {date.toLocaleDateString('ru-RU', { month: 'short' })}
               </Text>
-              {isToday && <Text style={styles.todayLabel}>Сегодня</Text>}
+              {isToday && (
+                <View style={[styles.todayBadge, { backgroundColor: COLORS.accent }]}>
+                  <Text style={styles.todayText}>Сегодня</Text>
+                </View>
+              )}
             </TouchableOpacity>
           );
         })}
       </ScrollView>
+
       {selectedDate && (
         <View style={styles.timeSlotsContainer}>
           {Object.entries(timeSlots).map(([period, slots]) => (
             <View key={period} style={styles.timePeriod}>
-              <Text style={styles.timePeriodTitle}>
-                {period === 'morning' ? 'Утро' : period === 'afternoon' ? 'День' : 'Вечер'}
+              <Text style={[styles.timePeriodTitle, { color: COLORS.text }]}>
+                {period === 'morning' ? '🌅 Утро' : period === 'afternoon' ? '☀️ День' : '🌙 Вечер'}
               </Text>
               <View style={styles.timeSlotsGrid}>
                 {slots.map((time) => (
@@ -496,15 +587,18 @@ const renderCarStep = () => (
                     key={time}
                     style={[
                       styles.timeSlot,
-                      selectedTime === time && styles.selectedTimeSlot,
+                      {
+                        backgroundColor: selectedTime === time ? COLORS.primary : COLORS.elevated,
+                        borderColor: selectedTime === time ? COLORS.primary : COLORS.separator,
+                      },
                     ]}
                     onPress={() => setSelectedTime(time)}
-                    activeOpacity={0.87}
+                    activeOpacity={0.7}
                   >
                     <Text
                       style={[
                         styles.timeSlotText,
-                        selectedTime === time && styles.selectedTimeSlotText,
+                        { color: selectedTime === time ? COLORS.elevated : COLORS.text }
                       ]}
                     >
                       {time}
@@ -519,7 +613,7 @@ const renderCarStep = () => (
     </Animated.View>
   );
 
-  // Can proceed?
+  // Can proceed check
   const canProceed = () => {
     switch (currentStep) {
       case STEPS.SERVICE:
@@ -552,31 +646,44 @@ const renderCarStep = () => (
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: COLORS.background }]}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      
       {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
+      <View style={[styles.header, { backgroundColor: COLORS.background }]}>
+        <View style={styles.headerContent}>>
           <TouchableOpacity
-            style={styles.headerBtn}
+            style={[styles.headerButton, { backgroundColor: COLORS.elevated }]}
             onPress={currentStep === 0 ? () => navigation.goBack() : goToPreviousStep}
+            activeOpacity={0.7}
           >
-            <Icon name="arrow-back" size={22} color={COLORS.primary} />
+            <Icon name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>Запись на сервис</Text>
-            <Text style={styles.headerSubtitle}>Шаг {currentStep + 1} из 4</Text>
+          
+          <View style={styles.headerTitleContainer}>
+            <Text style={[styles.headerTitle, { color: COLORS.text }]}>Запись на сервис</Text>
+            <Text style={[styles.headerSubtitle, { color: COLORS.textSecondary }]}>
+              Шаг {currentStep + 1} из 4
+            </Text>
           </View>
-          <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
-            <Icon name="close" size={22} color={COLORS.primary} />
+          
+          <TouchableOpacity
+            style={[styles.headerButton, { backgroundColor: COLORS.elevated }]}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+          >
+            <Icon name="close" size={24} color={COLORS.text} />
           </TouchableOpacity>
         </View>
-        {/* Progress Bar */}
+        
+        {/* Progress */}
         <View style={styles.progressContainer}>
-          <View style={styles.progressBar}>
+          <View style={[styles.progressBar, { backgroundColor: COLORS.separator }]}>
             <Animated.View
               style={[
                 styles.progressFill,
                 {
+                  backgroundColor: COLORS.primary,
                   width: progressAnim.interpolate({
                     inputRange: [0, 1],
                     outputRange: ['0%', '100%'],
@@ -584,25 +691,6 @@ const renderCarStep = () => (
                 },
               ]}
             />
-          </View>
-          <View style={styles.progressSteps}>
-            {Object.keys(STEPS).map((step, index) => (
-              <View
-                key={step}
-                style={[
-                  styles.progressStep,
-                  index <= currentStep && styles.progressStepActive,
-                ]}
-              >
-                <View style={[
-                  styles.progressStepDot,
-                  index <= currentStep && styles.progressStepDotActive,
-                ]} />
-                <Text style={styles.progressStepLabel}>
-                  {['Услуга', 'Магазин', 'Авто', 'Время'][index]}
-                </Text>
-              </View>
-            ))}
           </View>
         </View>
       </View>
@@ -621,475 +709,560 @@ const renderCarStep = () => (
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Bottom Actions */}
-      <View style={styles.bottomActions}>
-        <TouchableOpacity
-          style={[
-            styles.continueButton,
-            !canProceed() && styles.continueButtonDisabled,
-          ]}
-          onPress={currentStep === STEPS.DATETIME ? handleSubmit : goToNextStep}
-          disabled={!canProceed()}
-          activeOpacity={0.9}
-        >
-          <Text style={[
-            styles.continueButtonText,
-            !canProceed() && styles.continueButtonTextDisabled,
-          ]}>
-            {currentStep === STEPS.DATETIME ? 'Записаться' : 'Продолжить'}
-          </Text>
-          <Icon
-            name={currentStep === STEPS.DATETIME ? 'check' : 'arrow-forward'}
-            size={19}
-            color={canProceed() ? COLORS.primary : COLORS.textSecondary}
-          />
-        </TouchableOpacity>
+      {/* Bottom Action */}
+      <View style={[styles.bottomContainer, { backgroundColor: COLORS.background }]}>
+        <Animated.View style={{ transform: [{ scale: buttonScaleAnim }] }}>
+          <TouchableOpacity
+            style={[
+              styles.continueButton,
+              {
+                backgroundColor: canProceed() ? COLORS.primary : COLORS.separator,
+                opacity: canProceed() ? 1 : 0.5,
+              },
+            ]}
+            onPress={currentStep === STEPS.DATETIME ? handleSubmit : goToNextStep}
+            disabled={!canProceed()}
+            activeOpacity={0.8}
+          >
+            <Text style={[
+              styles.continueButtonText,
+              { color: canProceed() ? '#FFFFFF' : COLORS.textSecondary }
+            ]}>
+              {currentStep === STEPS.DATETIME ? 'Записаться' : 'Продолжить'}
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
       </View>
 
-      {/* Модальное окно выбора марки */}
-  <Modal
-    visible={showBrandModal}
-    animationType="slide"
-    transparent={true}
-    onRequestClose={() => setShowBrandModal(false)}
-  >
-    <View style={styles.modalOverlay}>
-      <View style={styles.modalContent}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Выберите марку</Text>
-          <TouchableOpacity onPress={() => setShowBrandModal(false)}>
-            <Icon name="close" size={22} color={COLORS.primary} />
-          </TouchableOpacity>
-        </View>
-        {loadingBrands ? (
-          <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 20 }} />
-        ) : (
-          <FlatList
-            data={carBrands}
-            keyExtractor={(item) => item}
-            renderItem={({ item }) => (
+      {/* Brand Modal */}
+      <Modal
+        visible={showBrandModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowBrandModal(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: COLORS.modalOverlay }]}>
+          <View style={[styles.modalContent, { backgroundColor: COLORS.elevated }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: COLORS.text }]}>Выберите марку</Text>
               <TouchableOpacity
-                style={styles.modalItem}
-                onPress={() => {
-                  setCarBrand(item);
-                  setCarModel(null);
-                  setShowBrandModal(false);
-                }}
+                style={[styles.modalCloseButton, { backgroundColor: COLORS.inputBackground }]}
+                onPress={() => setShowBrandModal(false)}
+                activeOpacity={0.7}
               >
-                <Text style={styles.modalItemText}>{item}</Text>
-                <Icon name="chevron-right" size={18} color={COLORS.textSecondary} />
+                <Icon name="close" size={20} color={COLORS.text} />
               </TouchableOpacity>
+            </View>
+            
+            <View style={[styles.searchContainer, { backgroundColor: COLORS.inputBackground }]}>
+              <Icon name="search" size={20} color={COLORS.textSecondary} />
+              <TextInput
+                style={[styles.searchInput, { color: COLORS.text }]}
+                placeholder="Поиск марки..."
+                placeholderTextColor={COLORS.textSecondary}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+            </View>
+            
+            {loadingBrands ? (
+              <ActivityIndicator size="large" color={COLORS.primary} style={styles.modalLoader} />
+            ) : (
+              <FlatList
+                data={carBrands.filter(brand => 
+                  brand.toLowerCase().includes(searchQuery.toLowerCase())
+                )}
+                keyExtractor={(item) => item}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[styles.modalItem, { backgroundColor: COLORS.elevated }]}
+                    onPress={() => {
+                      setCarBrand(item);
+                      setCarModel(null);
+                      setShowBrandModal(false);
+                      setSearchQuery('');
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.modalItemText, { color: COLORS.text }]}>{item}</Text>
+                    <Icon name="chevron-right" size={20} color={COLORS.textSecondary} />
+                  </TouchableOpacity>
+                )}
+                ItemSeparatorComponent={() => (
+                  <View style={[styles.modalSeparator, { backgroundColor: COLORS.separator }]} />
+                )}
+              />
             )}
-          />
-        )}
-      </View>
-    </View>
-  </Modal>
+          </View>
+        </View>
+      </Modal>
 
-  {/* Модальное окно выбора модели */}
-  <Modal
-    visible={showModelModal}
-    animationType="slide"
-    transparent={true}
-    onRequestClose={() => setShowModelModal(false)}
-  >
-    <View style={styles.modalOverlay}>
-      <View style={styles.modalContent}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Выберите модель</Text>
-          <TouchableOpacity onPress={() => setShowModelModal(false)}>
-            <Icon name="close" size={22} color={COLORS.primary} />
-          </TouchableOpacity>
-        </View>
-        {loadingModels ? (
-          <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 20 }} />
-        ) : (
-          <FlatList
-            data={carModels}
-            keyExtractor={(item) => item}
-            renderItem={({ item }) => (
+      {/* Model Modal */}
+      <Modal
+        visible={showModelModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowModelModal(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: COLORS.modalOverlay }]}>
+          <View style={[styles.modalContent, { backgroundColor: COLORS.elevated }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: COLORS.text }]}>Выберите модель</Text>
               <TouchableOpacity
-                style={styles.modalItem}
-                onPress={() => {
-                  setCarModel(item);
-                  setShowModelModal(false);
-                }}
+                style={[styles.modalCloseButton, { backgroundColor: COLORS.inputBackground }]}
+                onPress={() => setShowModelModal(false)}
+                activeOpacity={0.7}
               >
-                <Text style={styles.modalItemText}>{item}</Text>
-                <Icon name="chevron-right" size={18} color={COLORS.textSecondary} />
+                <Icon name="close" size={20} color={COLORS.text} />
               </TouchableOpacity>
+            </View>
+            
+            {loadingModels ? (
+              <ActivityIndicator size="large" color={COLORS.primary} style={styles.modalLoader} />
+            ) : (
+              <FlatList
+                data={carModels}
+                keyExtractor={(item) => item}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[styles.modalItem, { backgroundColor: COLORS.elevated }]}
+                    onPress={() => {
+                      setCarModel(item);
+                      setShowModelModal(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.modalItemText, { color: COLORS.text }]}>{item}</Text>
+                    <Icon name="chevron-right" size={20} color={COLORS.textSecondary} />
+                  </TouchableOpacity>
+                )}
+                ItemSeparatorComponent={() => (
+                  <View style={[styles.modalSeparator, { backgroundColor: COLORS.separator }]} />
+                )}
+              />
             )}
-          />
-        )}
-      </View>
-    </View>
-  </Modal>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFAFA' },
+  container: {
+    flex: 1,
+  },
   header: {
-    paddingTop: Platform.OS === 'ios' ? 44 : 24,
-    paddingBottom: 10,
-    backgroundColor: '#FAFAFA',
-    borderBottomWidth: 1,
-    borderBottomColor: '#ECECEC',
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    paddingBottom: 16,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    marginBottom: 8,
+    paddingHorizontal: 20,
+    marginBottom: 16,
   },
-  headerBtn: {
-    width: 38, height: 38, borderRadius: 19,
-    justifyContent: 'center', alignItems: 'center',
-    backgroundColor: '#F4F4F4'
+  headerButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  headerTextContainer: { alignItems: 'center' },
+  headerTitleContainer: {
+    alignItems: 'center',
+  },
   headerTitle: {
-    fontSize: 20, fontWeight: '700', color: '#22223B',
+    fontSize: 17,
+    fontWeight: '600',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
   headerSubtitle: {
-    fontSize: 13, color: '#6E6E6E', marginTop: 2,
+    fontSize: 13,
+    marginTop: 2,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  progressContainer: { paddingHorizontal: 18, marginBottom: 2 },
+  progressContainer: {
+    paddingHorizontal: 20,
+  },
   progressBar: {
-    height: 3,
-    backgroundColor: '#ECECEC',
-    borderRadius: 1.5,
+    height: 4,
+    borderRadius: 2,
     overflow: 'hidden',
-    marginBottom: 8,
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#22223B',
-    borderRadius: 1.5,
+    borderRadius: 2,
   },
-  progressSteps: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 0,
+  content: {
+    flex: 1,
+    marginTop: Platform.OS === 'ios' ? 120 : 100,
+    marginBottom: 100,
   },
-  progressStep: { alignItems: 'center', flex: 1 },
-  progressStepActive: {},
-  progressStepDot: {
-    width: 7, height: 7, borderRadius: 3.5,
-    backgroundColor: '#ECECEC', marginBottom: 2,
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 40,
   },
-  progressStepDotActive: {
-    backgroundColor: '#22223B',
+  stepContainer: {
+    flex: 1,
   },
-  progressStepLabel: {
-    fontSize: 11,
-    color: '#6E6E6E',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-    textAlign: 'center',
-  },
-  content: { flex: 1 },
-  scrollContent: { padding: 18, paddingBottom: 80 },
-  stepContainer: { flex: 1 },
   stepTitle: {
-    fontSize: 24, fontWeight: '700', color: '#22223B', marginBottom: 4,
+    fontSize: 24,
+    fontWeight: '700',
+    marginBottom: 8,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
   stepSubtitle: {
-    fontSize: 15, color: '#6E6E6E', marginBottom: 24,
+    fontSize: 17,
+    marginBottom: 32,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  servicesGrid: { gap: 12, marginBottom: 8 },
-  serviceCard: {
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#ECECEC',
-    marginBottom: 2,
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 16,
+    marginTop: 24,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
-  selectedCard: {
-    backgroundColor: '#F4F4F4',
-    borderColor: '#22223B',
+  // Service styles
+  servicesGrid: {
+    gap: 16,
+  },
+  serviceCard: {
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 2,
+    marginBottom: 4,
+  },
+  selectedServiceCard: {
+    transform: [{ scale: 0.98 }],
   },
   serviceIconContainer: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: '#F7F7F7',
-    justifyContent: 'center', alignItems: 'center', marginRight: 16,
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
   },
-  serviceInfoBlock: { flex: 1 },
+  serviceContent: {
+    flex: 1,
+  },
   serviceName: {
-    fontSize: 16, fontWeight: '700', color: '#22223B', marginBottom: 2,
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 4,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
   serviceDescription: {
-    fontSize: 13, color: '#6E6E6E', marginBottom: 8,
+    fontSize: 15,
+    marginBottom: 16,
+    lineHeight: 20,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  serviceInfoRow: { flexDirection: 'row', gap: 12 },
-  serviceInfoItem: { flexDirection: 'row', alignItems: 'center', marginRight: 16 },
-  serviceInfoText: {
-    fontSize: 12, color: '#6E6E6E', marginLeft: 4,
+  serviceMetaRow: {
+    flexDirection: 'row',
+    gap: 20,
+  },
+  serviceMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  serviceMetaText: {
+    fontSize: 13,
+    fontWeight: '500',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  loader: { flex: 1, justifyContent: 'center', alignItems: 'center', minHeight: 120 },
-  storesScroll: { paddingRight: 10 },
+  // Store styles
+  loader: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 200,
+  },
+  storesScroll: {
+    paddingRight: 20,
+  },
   storeCard: {
-    width: width * 0.78,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 15,
+    width: width * 0.8,
+    borderRadius: 16,
+    padding: 20,
     marginRight: 16,
-    borderWidth: 1,
-    borderColor: '#ECECEC',
+    borderWidth: 2,
   },
   selectedStoreCard: {
-    borderColor: '#22223B',
-    backgroundColor: '#F4F4F4',
+    transform: [{ scale: 0.98 }],
   },
   storeHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 7,
+    marginBottom: 12,
   },
-  storeIcon: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: '#F7F7F7',
-    justifyContent: 'center', alignItems: 'center',
+  storeIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  storeStatus: { flexDirection: 'row', alignItems: 'center' },
+  storeStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 6,
+  },
   statusDot: {
-    width: 6, height: 6, borderRadius: 3, backgroundColor: '#38B000', marginRight: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   statusText: {
-    fontSize: 11, color: '#38B000', fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '600',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   storeName: {
-    fontSize: 16, fontWeight: '700', color: '#22223B', marginBottom: 2,
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 4,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
   storeAddress: {
-    fontSize: 13, color: '#6E6E6E', marginBottom: 7, lineHeight: 17,
+    fontSize: 15,
+    marginBottom: 16,
+    lineHeight: 20,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  storeFooter: { gap: 5 },
-  storeInfoItem: { flexDirection: 'row', alignItems: 'center', marginRight: 12 },
-  storeInfoText: {
-    fontSize: 11, color: '#6E6E6E', marginLeft: 5,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  storeMetaContainer: {
+    flexDirection: 'row',
+    gap: 16,
   },
-  fieldLabel: {
-    fontSize: 15, fontWeight: '600', color: '#22223B', marginBottom: 8, marginTop: 17,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
-  },
-  carTypesGrid: {
-    flexDirection: 'row', flexWrap: 'wrap',
-    gap: 8, marginBottom: 14,
-  },
-  carTypeCard: {
-    width: (width - 64) / 2,
-    borderRadius: 9,
-    backgroundColor: '#F7F7F7',
-    alignItems: 'center',
-    paddingVertical: 13,
-    marginBottom: 5,
-    borderWidth: 1,
-    borderColor: '#ECECEC',
-  },
-  selectedCarType: {
-    backgroundColor: '#F4F4F4',
-    borderColor: '#22223B',
-  },
-  carTypeName: {
-    fontSize: 13, fontWeight: '500', color: '#6E6E6E', marginTop: 7,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  selectedCarTypeName: { color: '#22223B' },
-  carDetailsContainer: { gap: 13 },
-  selectField: {
+  storeMetaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    padding: 13,
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: '#ECECEC',
+    gap: 6,
   },
-  selectFieldText: {
-    fontSize: 15,
-    color: '#22223B',
+  storeMetaText: {
+    fontSize: 13,
     fontWeight: '500',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  placeholder: { color: '#6E6E6E' },
-  licensePlateContainer: {
+  // Car styles
+  carTypesGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: '#ECECEC',
-    paddingHorizontal: 13,
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 24,
   },
-  licensePlateInput: {
-    flex: 1,
+  carTypeCard: {
+    width: (width - 52) / 2,
+    borderRadius: 16,
+    paddingVertical: 20,
+    alignItems: 'center',
+    borderWidth: 2,
+  },
+  carTypeEmoji: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  carTypeName: {
     fontSize: 15,
-    color: '#22223B',
-    paddingVertical: 13,
     fontWeight: '600',
-    letterSpacing: 2,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  datesScroll: { paddingRight: 10, marginBottom: 18 },
-  dateCard: {
-    width: 62,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    padding: 12,
-    marginRight: 8,
+  inputSection: {
+    gap: 12,
+  },
+  inputField: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#ECECEC',
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
   },
-  selectedDateCard: {
-    borderColor: '#22223B',
-    backgroundColor: '#F4F4F4',
+  inputFieldText: {
+    flex: 1,
+    fontSize: 17,
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  todayCard: { borderColor: '#FFAA00' },
+  textInput: {
+    flex: 1,
+    fontSize: 17,
+    fontWeight: '600',
+    letterSpacing: 1,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  // Date/time styles
+  datesScroll: {
+    paddingRight: 20,
+    marginBottom: 32,
+  },
+  dateCard: {
+    width: 80,
+    borderRadius: 16,
+    padding: 16,
+    marginRight: 12,
+    alignItems: 'center',
+    borderWidth: 2,
+  },
   dateWeekday: {
-    fontSize: 11, color: '#6E6E6E', fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '600',
     textTransform: 'uppercase',
+    marginBottom: 4,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   dateDay: {
-    fontSize: 17, fontWeight: '700', color: '#22223B', marginVertical: 1,
+    fontSize: 24,
+    fontWeight: '700',
+    marginVertical: 4,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
   dateMonth: {
-    fontSize: 11, color: '#6E6E6E', fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '500',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  selectedDateText: { color: '#22223B', fontWeight: '700' },
-  todayLabel: {
-    fontSize: 8, color: '#FFAA00', fontWeight: '700', marginTop: 2,
-    textTransform: 'uppercase', fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  timeSlotsContainer: { gap: 18 },
-  timePeriod: { gap: 10 },
-  timePeriodTitle: {
-    fontSize: 16, fontWeight: '700', color: '#22223B',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
-    marginBottom: 5,
-  },
-  timeSlotsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  timeSlot: {
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    backgroundColor: '#F7F7F7',
-    borderRadius: 7,
-    borderWidth: 1,
-    borderColor: '#ECECEC',
-    marginBottom: 5,
-  },
-  selectedTimeSlot: {
-    backgroundColor: '#22223B',
-    borderColor: '#22223B',
-  },
-  timeSlotText: {
-    fontSize: 13, fontWeight: '500', color: '#22223B',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  selectedTimeSlotText: { color: '#FFFFFF' },
-  bottomActions: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: '#FFFFFF', padding: 18, paddingBottom: Platform.OS === 'ios' ? 24 : 18,
-    borderTopWidth: 1, borderTopColor: '#ECECEC',
-    alignItems: 'center',
-    zIndex: 2,
-  },
-  continueButton: {
+  todayBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: 10,
+  },
+  todayText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  timeSlotsContainer: {
+    gap: 24,
+  },
+  timePeriod: {
+    gap: 12,
+  },
+  timePeriodTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 4,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+  },
+  timeSlotsGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F4F4F4',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 26,
+    flexWrap: 'wrap',
     gap: 8,
   },
-  continueButtonDisabled: {
-    opacity: 0.6,
-    backgroundColor: '#F7F7F7',
+  timeSlot: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 2,
+  },
+  timeSlotText: {
+    fontSize: 15,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  // Bottom action
+  bottomContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    borderTopWidth: 0.5,
+    borderTopColor: 'rgba(0,0,0,0.1)',
+  },
+  continueButton: {
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
   },
   continueButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#22223B',
+    fontSize: 17,
+    fontWeight: '600',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-    marginRight: 5,
   },
-  continueButtonTextDisabled: {
-    color: '#6E6E6E',
-  },
+  // Modal styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(34,34,59,0.10)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     maxHeight: height * 0.8,
-    paddingTop: 14,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 14,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    marginBottom: 12,
+    paddingHorizontal: 20,
+    marginBottom: 16,
   },
   modalTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#22223B',
+    fontSize: 20,
+    fontWeight: '600',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
-  searchInput: {
-    backgroundColor: '#F7F7F7',
-    marginHorizontal: 16,
-    marginBottom: 10,
-    paddingHorizontal: 13,
-    paddingVertical: 10,
-    borderRadius: 7,
-    fontSize: 15,
-    color: '#22223B',
-    borderWidth: 1,
-    borderColor: '#ECECEC',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  modalItem: {
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F7F7F7',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  modalCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  modalItemText: {
-    fontSize: 15, color: '#22223B', fontWeight: '500',
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 17,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  modalLoader: {
+    marginTop: 40,
+  },
+  modalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  modalItemText: {
+    fontSize: 17,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  modalSeparator: {
+    height: 0.5,
+    marginLeft: 20,
   },
 });
 

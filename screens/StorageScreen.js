@@ -15,6 +15,8 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { observer } from "mobx-react-lite";
 import { useStores } from "../useStores";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+// --- Добавляем контекст темы --- //
+import { useTheme } from '../contexts/ThemeContext';
 
 const { width } = Dimensions.get('window');
 
@@ -24,7 +26,10 @@ const StorageScreen = observer(({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const insets = useSafeAreaInsets();
-  
+
+  // --- Тема --- //
+  const { colors, theme } = useTheme();
+
   // Анимации
   const fadeAnim = new Animated.Value(0);
 
@@ -63,14 +68,15 @@ const StorageScreen = observer(({ navigation }) => {
     setRefreshing(false);
   }, [fetchStorages]);
 
+  // --- Цвета статусов с учетом темы --- //
   const getStatusColor = (status) => {
     switch (status) {
       case 'cancelled':
-        return '#dc2626';
+        return colors.error || '#dc2626';
       case 'Выдано':
-        return '#0ea5e9';
+        return colors.info || '#0ea5e9';
       default:
-        return '#22c55e';
+        return colors.success || '#22c55e';
     }
   };
 
@@ -101,7 +107,7 @@ const StorageScreen = observer(({ navigation }) => {
   const renderStorageItem = ({ item, index }) => {
     const translateX = new Animated.Value(50);
     const itemOpacity = new Animated.Value(0);
-    
+
     Animated.parallel([
       Animated.timing(translateX, {
         toValue: 0,
@@ -125,32 +131,52 @@ const StorageScreen = observer(({ navigation }) => {
         transform: [{ translateX }]
       }}>
         <TouchableOpacity 
-          style={styles.storageItem}
+          style={[
+            styles.storageItem,
+            { backgroundColor: theme === 'dark' ? colors.card : '#fff', 
+              shadowColor: theme === 'dark' ? '#00000000' : '#000',
+            }
+          ]}
           onPress={() => navigation.navigate('StorageDetail', { storage: item })}
           activeOpacity={0.7}
         >
           <View style={[styles.statusIndicator, { backgroundColor: statusColor }]} />
-          
+
           <View style={styles.cardContent}>
             <View style={styles.cardHeader}>
               <View style={styles.contractContainer}>
-                <Text allowFontScaling={false} style={styles.contractLabel}>ДОГОВОР</Text>
-                <Text allowFontScaling={false} style={styles.contractNumber}>№{item.contract_number}</Text>
+                <Text allowFontScaling={false} style={[
+                  styles.contractLabel,
+                  { color: theme === 'dark' ? colors.textSecondary : '#94a3b8' }
+                ]}>ДОГОВОР</Text>
+                <Text allowFontScaling={false} style={[
+                  styles.contractNumber, 
+                  { color: theme === 'dark' ? colors.text : '#0f172a' }
+                ]}>№{item.contract_number}</Text>
               </View>
-              
-              <View style={[styles.statusContainer, { backgroundColor: `${statusColor}15` }]}>
+
+              <View style={[
+                styles.statusContainer, 
+                { backgroundColor: statusColor + (theme === 'dark' ? '33' : '15') }
+              ]}>
                 <Icon name={getStatusIcon(item.status)} size={18} color={statusColor} />
                 <Text style={[styles.statusText, { color: statusColor }]}>
                   {getStatusText(item.status)}
                 </Text>
               </View>
             </View>
-            
+
             <View style={styles.infoSection}>
               <View style={styles.dateContainer}>
-                <Icon name="schedule" size={16} color="#94a3b8" />
-                <Text style={styles.dateLabel}>Срок хранения до</Text>
-                <Text style={styles.dateValue}>
+                <Icon name="schedule" size={16} color={theme === 'dark' ? colors.textSecondary : "#94a3b8"} />
+                <Text style={[
+                  styles.dateLabel,
+                  { color: theme === 'dark' ? colors.textSecondary : '#64748b' }
+                ]}>Срок хранения до</Text>
+                <Text style={[
+                  styles.dateValue,
+                  { color: theme === 'dark' ? colors.text : '#0f172a' }
+                ]}>
                   {new Date(item.end_date).toLocaleDateString('ru-RU', { 
                     day: 'numeric',
                     month: 'short',
@@ -159,10 +185,16 @@ const StorageScreen = observer(({ navigation }) => {
                 </Text>
               </View>
             </View>
-            
-            <View style={styles.goodsSection}>
-              <Icon name="category" size={16} color="#94a3b8" />
-              <Text style={styles.goodsText} numberOfLines={2}>
+
+            <View style={[
+              styles.goodsSection,
+              { backgroundColor: theme === 'dark' ? colors.surface : '#f1f5f9' }
+            ]}>
+              <Icon name="category" size={16} color={theme === 'dark' ? colors.textSecondary : "#94a3b8"} />
+              <Text style={[
+                styles.goodsText,
+                { color: theme === 'dark' ? colors.textSecondary : '#475569' }
+              ]} numberOfLines={2}>
                 {item.nomenclature}
               </Text>
             </View>
@@ -174,17 +206,29 @@ const StorageScreen = observer(({ navigation }) => {
 
   if (!authStore.isLoggedIn) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={[styles.container, { paddingTop: insets.top, backgroundColor: theme === 'dark' ? colors.background : '#f8fafc' }]}>
         <View style={styles.centerContainer}>
-          <View style={styles.authIconWrapper}>
-            <Icon name="lock" size={48} color="#64748b" />
+          <View style={[
+            styles.authIconWrapper,
+            { backgroundColor: theme === 'dark' ? colors.surface : '#f1f5f9' }
+          ]}>
+            <Icon name="lock" size={48} color={theme === 'dark' ? colors.textSecondary : "#64748b"} />
           </View>
-          <Text style={styles.authTitle}>Авторизация</Text>
-          <Text style={styles.authMessage}>
+          <Text style={[
+            styles.authTitle, 
+            { color: theme === 'dark' ? colors.text : '#0f172a' }
+          ]}>Авторизация</Text>
+          <Text style={[
+            styles.authMessage,
+            { color: theme === 'dark' ? colors.textSecondary : '#64748b' }
+          ]}>
             Войдите в аккаунт для просмотра ваших договоров хранения
           </Text>
           <TouchableOpacity 
-            style={styles.loginButton}
+            style={[
+              styles.loginButton,
+              { backgroundColor: colors.primary }
+            ]}
             onPress={() => navigation.navigate('Login')}
           >
             <Text style={styles.loginButtonText}>Войти в систему</Text>
@@ -196,10 +240,13 @@ const StorageScreen = observer(({ navigation }) => {
 
   if (loading && !refreshing) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={[styles.container, { paddingTop: insets.top, backgroundColor: theme === 'dark' ? colors.background : '#f8fafc' }]}>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#3b82f6" />
-          <Text style={styles.loadingText}>Загрузка...</Text>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[
+            styles.loadingText,
+            { color: theme === 'dark' ? colors.textSecondary : '#64748b' }
+          ]}>Загрузка...</Text>
         </View>
       </View>
     );
@@ -207,15 +254,27 @@ const StorageScreen = observer(({ navigation }) => {
 
   if (error) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={[styles.container, { paddingTop: insets.top, backgroundColor: theme === 'dark' ? colors.background : '#f8fafc' }]}>
         <View style={styles.centerContainer}>
-          <View style={styles.errorIconWrapper}>
-            <Icon name="warning" size={48} color="#ef4444" />
+          <View style={[
+            styles.errorIconWrapper,
+            { backgroundColor: theme === 'dark' ? colors.surface : '#fee2e2' }
+          ]}>
+            <Icon name="warning" size={48} color={theme === 'dark' ? colors.error : "#ef4444"} />
           </View>
-          <Text style={styles.errorTitle}>Ошибка загрузки</Text>
-          <Text style={styles.errorMessage}>{error}</Text>
+          <Text style={[
+            styles.errorTitle,
+            { color: theme === 'dark' ? colors.text : '#0f172a' }
+          ]}>Ошибка загрузки</Text>
+          <Text style={[
+            styles.errorMessage,
+            { color: theme === 'dark' ? colors.textSecondary : '#64748b' }
+          ]}>{error}</Text>
           <TouchableOpacity 
-            style={styles.retryButton}
+            style={[
+              styles.retryButton,
+              { backgroundColor: theme === 'dark' ? colors.error : "#ef4444" }
+            ]}
             onPress={() => {
               setError(null);
               setLoading(true);
@@ -231,12 +290,21 @@ const StorageScreen = observer(({ navigation }) => {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: theme === 'dark' ? colors.background : '#f8fafc' }]}>
       <View style={styles.header}>
-        <Text style={styles.screenTitle}>Хранение</Text>
+        <Text style={[
+          styles.screenTitle, 
+          { color: theme === 'dark' ? colors.text : '#0f172a' }
+        ]}>Хранение</Text>
         <View style={styles.headerInfo}>
-          <Text style={styles.headerCount}>{storagesStore.storages.length}</Text>
-          <Text style={styles.headerLabel}>активных</Text>
+          <Text style={[
+            styles.headerCount,
+            { color: colors.primary }
+          ]}>{storagesStore.storages.length}</Text>
+          <Text style={[
+            styles.headerLabel,
+            { color: theme === 'dark' ? colors.textSecondary : '#64748b' }
+          ]}>активных</Text>
         </View>
       </View>
 
@@ -251,17 +319,26 @@ const StorageScreen = observer(({ navigation }) => {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              colors={['#3b82f6']}
-              tintColor="#3b82f6"
+              colors={[colors.primary]}
+              tintColor={colors.primary}
             />
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <View style={styles.emptyIconWrapper}>
-                <Icon name="inbox" size={64} color="#e2e8f0" />
+              <View style={[
+                styles.emptyIconWrapper,
+                { backgroundColor: theme === 'dark' ? colors.surface : '#f1f5f9' }
+              ]}>
+                <Icon name="inbox" size={64} color={theme === 'dark' ? colors.textSecondary : "#e2e8f0"} />
               </View>
-              <Text style={styles.emptyTitle}>Пусто</Text>
-              <Text style={styles.emptyMessage}>
+              <Text style={[
+                styles.emptyTitle,
+                { color: theme === 'dark' ? colors.text : '#0f172a' }
+              ]}>Пусто</Text>
+              <Text style={[
+                styles.emptyMessage,
+                { color: theme === 'dark' ? colors.textSecondary : '#64748b' }
+              ]}>
                 У вас пока нет договоров хранения
               </Text>
             </View>
@@ -275,7 +352,6 @@ const StorageScreen = observer(({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
   },
   centerContainer: {
     flex: 1,
@@ -294,7 +370,6 @@ const styles = StyleSheet.create({
   screenTitle: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#0f172a',
     letterSpacing: -0.5,
   },
   headerInfo: {
@@ -303,11 +378,9 @@ const styles = StyleSheet.create({
   headerCount: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#3b82f6',
   },
   headerLabel: {
     fontSize: 12,
-    color: '#64748b',
     marginTop: 2,
   },
   listContainer: {
@@ -318,12 +391,10 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   storageItem: {
-    backgroundColor: '#fff',
     borderRadius: 20,
     marginBottom: 16,
     overflow: 'hidden',
     elevation: 2,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
@@ -347,14 +418,12 @@ const styles = StyleSheet.create({
   contractLabel: {
     fontSize: moderateScale(11),
     fontWeight: '600',
-    color: '#94a3b8',
     letterSpacing: 1,
     marginBottom: 4,
   },
   contractNumber: {
     fontSize: moderateScale(18),
     fontWeight: '700',
-    color: '#0f172a',
   },
   statusContainer: {
     flexDirection: 'row',
@@ -378,25 +447,21 @@ const styles = StyleSheet.create({
   },
   dateLabel: {
     fontSize: moderateScale(14),
-    color: '#64748b',
     marginLeft: 8,
     marginRight: 8,
   },
   dateValue: {
     fontSize: moderateScale(14),
     fontWeight: '600',
-    color: '#0f172a',
   },
   goodsSection: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#f1f5f9',
     padding: 12,
     borderRadius: 12,
   },
   goodsText: {
     fontSize: moderateScale(14),
-    color: '#475569',
     marginLeft: 8,
     flex: 1,
     lineHeight: 20,
@@ -406,7 +471,6 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: '#f1f5f9',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
@@ -414,18 +478,15 @@ const styles = StyleSheet.create({
   authTitle: {
     fontSize: moderateScale(24),
     fontWeight: '700',
-    color: '#0f172a',
     marginBottom: 12,
   },
   authMessage: {
     fontSize: moderateScale(16),
     textAlign: 'center',
-    color: '#64748b',
     marginBottom: 32,
     lineHeight: 24,
   },
   loginButton: {
-    backgroundColor: '#3b82f6',
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 16,
@@ -438,13 +499,11 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#64748b',
   },
   errorIconWrapper: {
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: '#fee2e2',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
@@ -452,20 +511,17 @@ const styles = StyleSheet.create({
   errorTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#0f172a',
     marginBottom: 12,
   },
   errorMessage: {
     fontSize: 16,
     textAlign: 'center',
-    color: '#64748b',
     marginBottom: 32,
     lineHeight: 24,
   },
   retryButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ef4444',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 16,
@@ -484,7 +540,6 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#f1f5f9',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
@@ -492,13 +547,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#0f172a',
     marginBottom: 8,
+    textAlign: 'center',
   },
   emptyMessage: {
     fontSize: 16,
     textAlign: 'center',
-    color: '#64748b',
     lineHeight: 24,
   },
 });

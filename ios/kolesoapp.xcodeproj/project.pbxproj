@@ -8,9 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		6A98EFBFDDA6BC03D6264BF3 /* libPods-kolesoapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 4F8775D99F59452B793DEE6A /* libPods-kolesoapp.a */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
-		AECA1BECDF9973806E07AE1F /* libPods-kolesoapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F83F8D49DFD51AAC2E5C8638 /* libPods-kolesoapp.a */; };
 		E4003A262DBA1B5700F5E22C /* google-services.json in Resources */ = {isa = PBXBuildFile; fileRef = E4003A252DBA1B5700F5E22C /* google-services.json */; };
 		ED6D4A4F0A47FDF45C61831C /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
@@ -20,15 +20,15 @@
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = kolesoapp/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = kolesoapp/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = kolesoapp/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		4F8775D99F59452B793DEE6A /* libPods-kolesoapp.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-kolesoapp.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = kolesoapp/AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = kolesoapp/LaunchScreen.storyboard; sourceTree = "<group>"; };
-		D53E3507F11895EF0D95F353 /* Pods-kolesoapp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-kolesoapp.release.xcconfig"; path = "Target Support Files/Pods-kolesoapp/Pods-kolesoapp.release.xcconfig"; sourceTree = "<group>"; };
+		B5FF04FF936D6FEB7491A950 /* Pods-kolesoapp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-kolesoapp.debug.xcconfig"; path = "Target Support Files/Pods-kolesoapp/Pods-kolesoapp.debug.xcconfig"; sourceTree = "<group>"; };
+		BE336BD1C87AC2E4EB48D197 /* Pods-kolesoapp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-kolesoapp.release.xcconfig"; path = "Target Support Files/Pods-kolesoapp/Pods-kolesoapp.release.xcconfig"; sourceTree = "<group>"; };
 		E4003A252DBA1B5700F5E22C /* google-services.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "google-services.json"; sourceTree = "<group>"; };
 		E47EFBAD2DD3501000BEB385 /* ClickstreamAnalytics */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = ClickstreamAnalytics; path = "ClickstreamAnalytics.xcframework/ios-arm64/ClickstreamAnalytics.framework/ClickstreamAnalytics"; sourceTree = "<group>"; };
 		E4F7B7EE2DBB961F0050E117 /* kolesoapp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = kolesoapp.entitlements; path = kolesoapp/kolesoapp.entitlements; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
-		F83F8D49DFD51AAC2E5C8638 /* libPods-kolesoapp.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-kolesoapp.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		F9C54A7D05FB396D7F8F0BA4 /* Pods-kolesoapp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-kolesoapp.debug.xcconfig"; path = "Target Support Files/Pods-kolesoapp/Pods-kolesoapp.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -36,7 +36,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AECA1BECDF9973806E07AE1F /* libPods-kolesoapp.a in Frameworks */,
+				6A98EFBFDDA6BC03D6264BF3 /* libPods-kolesoapp.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -61,7 +61,7 @@
 			children = (
 				E47EFBAD2DD3501000BEB385 /* ClickstreamAnalytics */,
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				F83F8D49DFD51AAC2E5C8638 /* libPods-kolesoapp.a */,
+				4F8775D99F59452B793DEE6A /* libPods-kolesoapp.a */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -99,8 +99,8 @@
 		BBD78D7AC51CEA395F1C20DB /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				F9C54A7D05FB396D7F8F0BA4 /* Pods-kolesoapp.debug.xcconfig */,
-				D53E3507F11895EF0D95F353 /* Pods-kolesoapp.release.xcconfig */,
+				B5FF04FF936D6FEB7491A950 /* Pods-kolesoapp.debug.xcconfig */,
+				BE336BD1C87AC2E4EB48D197 /* Pods-kolesoapp.release.xcconfig */,
 			);
 			path = Pods;
 			sourceTree = "<group>";
@@ -112,13 +112,13 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "kolesoapp" */;
 			buildPhases = (
-				512104C719B690EBF6423FF4 /* [CP] Check Pods Manifest.lock */,
+				6C344F61E66BEEAF9482A51B /* [CP] Check Pods Manifest.lock */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
-				85FAB69B78C5EE32A61A1640 /* [CP] Embed Pods Frameworks */,
-				75BE7307EE3B7D43B450DAEF /* [CP] Copy Pods Resources */,
+				2142E6874E750699D70B0292 /* [CP] Embed Pods Frameworks */,
+				01D4CCB60F779D33F580112C /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
@@ -190,7 +190,41 @@
 			shellPath = /bin/sh;
 			shellScript = "set -e\n\nWITH_ENVIRONMENT=\"$REACT_NATIVE_PATH/scripts/xcode/with-environment.sh\"\nREACT_NATIVE_XCODE=\"$REACT_NATIVE_PATH/scripts/react-native-xcode.sh\"\n\n/bin/sh -c \"$WITH_ENVIRONMENT $REACT_NATIVE_XCODE\"\n";
 		};
-		512104C719B690EBF6423FF4 /* [CP] Check Pods Manifest.lock */ = {
+		01D4CCB60F779D33F580112C /* [CP] Copy Pods Resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-kolesoapp/Pods-kolesoapp-resources-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Copy Pods Resources";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-kolesoapp/Pods-kolesoapp-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-kolesoapp/Pods-kolesoapp-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		2142E6874E750699D70B0292 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-kolesoapp/Pods-kolesoapp-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-kolesoapp/Pods-kolesoapp-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-kolesoapp/Pods-kolesoapp-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		6C344F61E66BEEAF9482A51B /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -212,48 +246,6 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		75BE7307EE3B7D43B450DAEF /* [CP] Copy Pods Resources */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-kolesoapp/Pods-kolesoapp-resources-${CONFIGURATION}-input-files.xcfilelist",
-			);
-			inputPaths = (
-			);
-			name = "[CP] Copy Pods Resources";
-			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-kolesoapp/Pods-kolesoapp-resources-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-kolesoapp/Pods-kolesoapp-resources.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
-		85FAB69B78C5EE32A61A1640 /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-kolesoapp/Pods-kolesoapp-frameworks-${CONFIGURATION}-input-files.xcfilelist",
-			);
-			inputPaths = (
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-kolesoapp/Pods-kolesoapp-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-kolesoapp/Pods-kolesoapp-frameworks.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -270,7 +262,7 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = F9C54A7D05FB396D7F8F0BA4 /* Pods-kolesoapp.debug.xcconfig */;
+			baseConfigurationReference = B5FF04FF936D6FEB7491A950 /* Pods-kolesoapp.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
@@ -314,7 +306,7 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = D53E3507F11895EF0D95F353 /* Pods-kolesoapp.release.xcconfig */;
+			baseConfigurationReference = BE336BD1C87AC2E4EB48D197 /* Pods-kolesoapp.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
@@ -432,7 +424,10 @@
 					"-DFOLLY_CFG_NO_COROUTINES=1",
 					"-DFOLLY_HAVE_CLOCK_GETTIME=1",
 				);
-				OTHER_LDFLAGS = "$(inherited)  ";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					" ",
+				);
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
@@ -513,7 +508,10 @@
 					"-DFOLLY_CFG_NO_COROUTINES=1",
 					"-DFOLLY_HAVE_CLOCK_GETTIME=1",
 				);
-				OTHER_LDFLAGS = "$(inherited)  ";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					" ",
+				);
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
 				USE_HERMES = true;

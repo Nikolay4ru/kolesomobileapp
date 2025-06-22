@@ -333,10 +333,11 @@ const ProfileScreen = observer(() => {
               title="Промокоды" 
               subtitle="Скидки и акции"
             />
-            <MenuItem 
+             <MenuItem 
               icon="place" 
               title="Магазины" 
               subtitle="Найти ближайший"
+              onPress={() => navigation.navigate('StoresMap')}
             />
             <MenuItem 
               icon="settings" 
