@@ -10,6 +10,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { BlurView } from "@react-native-community/blur";
 import { Linking } from 'react-native';
 import { navigationRef } from './services/NavigationService';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Импортируем экраны
 import HomeScreen from "./screens/HomeScreen";
@@ -32,7 +33,7 @@ import StorageScreen from './screens/StorageScreen';
 import GarageScreen from './screens/GarageScreen';
 import AddToGarageScreen from './screens/AddToGarageScreen';
 import StorageDetailScreen from './screens/StorageDetailScreen';
-import CartIconWithBadge from './components/CartIconWithBadge';
+//import CartIconWithBadge from './components/CartIconWithBadge';
 import CheckoutScreen from './screens/CheckoutScreen';
 import OrderSuccessScreen from './screens/OrderSuccessScreen';
 import SettingsScreen from "./screens/SettingsScreen";
@@ -258,12 +259,26 @@ const ServicePages = () => {
   );
 };
 
+// Исправленный CustomTabBar с улучшенной поддержкой Android
 const CustomTabBar = observer(({ state, descriptors, navigation }) => {
   const { cartStore } = useStores();
   const { colors, theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const animatedValues = useRef(
     state.routes.map(() => new Animated.Value(0))
   ).current;
+
+  // Вычисляем высоту TabBar с учетом системной навигации
+  const tabBarHeight = Platform.select({
+    ios: 88,
+    android: 56,
+  });
+
+  // Добавляем отступ снизу для Android
+  const bottomPadding = Platform.select({
+    ios: 0,
+    android: insets.bottom > 0 ? insets.bottom : 0, // Учитываем системную навигацию
+  });
 
   useEffect(() => {
     animatedValues.forEach((animatedValue, index) => {
@@ -278,12 +293,15 @@ const CustomTabBar = observer(({ state, descriptors, navigation }) => {
   }, [state.index, animatedValues]);
 
   const styles = StyleSheet.create({
-    tabBarContainer: {
+    tabBarWrapper: {
       position: 'absolute',
       bottom: 0,
       left: 0,
       right: 0,
-      height: Platform.OS === 'ios' ? 88: null,
+      backgroundColor: 'transparent',
+    },
+    tabBarContainer: {
+      height: tabBarHeight + bottomPadding,
       backgroundColor: 'transparent',
       elevation: 0,
     },
@@ -301,23 +319,40 @@ const CustomTabBar = observer(({ state, descriptors, navigation }) => {
       flexDirection: 'row',
       justifyContent: 'space-around',
       alignItems: 'center',
-      height: Platform.OS === 'ios' ? 88 : 70,
-      backgroundColor: Platform.OS === 'ios' 
-        ? theme === 'dark' ? 'rgba(28, 28, 30, 0.9)' : 'rgba(255, 255, 255, 0.9)' 
-        : colors.tabBar,
+      height: tabBarHeight,
+      backgroundColor: Platform.select({
+        ios: theme === 'dark' ? 'rgba(28, 28, 30, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+        android: colors.tabBar,
+      }),
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
-      paddingBottom: Platform.OS === 'ios' ? 20 : 0,
       paddingTop: 8,
-      shadowColor: colors.shadow,
-      shadowOffset: { width: 0, height: -4 },
-      shadowOpacity: theme === 'dark' ? 0.2 : 0.08,
-      shadowRadius: 16,
-     // elevation: 20,
+      paddingBottom: Platform.select({
+        ios: 20,
+        android: 8,
+      }),
+      // Тени для Android
+      ...(Platform.OS === 'android' && {
+        elevation: 8,
+        shadowColor: colors.shadow,
+      }),
+      // Тени для iOS
+      ...(Platform.OS === 'ios' && {
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: theme === 'dark' ? 0.2 : 0.08,
+        shadowRadius: 16,
+      }),
       borderTopWidth: 0.5,
       borderTopColor: colors.tabBarBorder,
     },
+    // Дополнительный контейнер для безопасной области на Android
+    safeAreaPadding: {
+      height: bottomPadding,
+      backgroundColor: colors.tabBar,
+    },
     tabItem: {
+      flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
       minWidth: 44,
@@ -340,164 +375,233 @@ const CustomTabBar = observer(({ state, descriptors, navigation }) => {
       backgroundColor: theme === 'dark' 
         ? 'rgba(10, 132, 255, 0.15)' 
         : 'rgba(37, 235, 232, 0.1)',
-      shadowColor: colors.primary,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.15,
-      shadowRadius: 8,
-      elevation: 4,
+      // Упрощенные тени для Android
+      ...(Platform.OS === 'android' && {
+        elevation: 2,
+      }),
+      ...(Platform.OS === 'ios' && {
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+      }),
     },
     activeIndicator: {
       position: 'absolute',
-      bottom: -12,
+      bottom: -8,
       width: 24,
       height: 3,
       borderRadius: 2,
       backgroundColor: colors.primary,
-      shadowColor: colors.primary,
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.5,
-      shadowRadius: 4,
-      elevation: 2,
+      // Упрощенные тени для Android
+      ...(Platform.OS === 'android' && {
+        elevation: 1,
+      }),
+      ...(Platform.OS === 'ios' && {
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.5,
+        shadowRadius: 4,
+      }),
     },
   });
 
-  return (
-    <SafeAreaView edges={['bottom']} style={styles.tabBarContainer}>
-      {Platform.OS === 'ios' && (
-        <BlurView
-          style={styles.blurView}
-          blurType={theme === 'dark' ? 'dark' : 'ultraThinMaterial'}
-          blurAmount={25}
-          reducedTransparencyFallbackColor={
-            theme === 'dark' ? 'rgba(28, 28, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)'
-          }
-        />
-      )}
-      <View style={styles.tabBar}>
-        {state.routes.map((route, index) => {
-          const { options } = descriptors[route.key];
-          const isFocused = state.index === index;
-          const iconName = getIconName(route.name, isFocused);
-          const animatedValue = animatedValues[index];
+  const renderTabItem = (route, index) => {
+    const { options } = descriptors[route.key];
+    const isFocused = state.index === index;
+    const iconName = getIconName(route.name, isFocused);
+    const animatedValue = animatedValues[index];
 
-          const onPress = () => {
-            const event = navigation.emit({
-              type: 'tabPress',
-              target: route.key,
-              canPreventDefault: true,
-            });
+    const onPress = () => {
+      const event = navigation.emit({
+        type: 'tabPress',
+        target: route.key,
+        canPreventDefault: true,
+      });
 
-            if (!isFocused && !event.defaultPrevented) {
-              navigation.navigate(route.name);
+      if (!isFocused && !event.defaultPrevented) {
+        navigation.navigate(route.name);
+      }
+    };
+
+    const scaleValue = animatedValue.interpolate({
+      inputRange: [0, 1],
+      outputRange: [1, 1.1],
+    });
+
+    const translateY = animatedValue.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, -2],
+    });
+
+    return (
+      <TouchableOpacity
+        key={route.key}
+        accessibilityRole="button"
+        accessibilityState={isFocused ? { selected: true } : {}}
+        accessibilityLabel={options.tabBarAccessibilityLabel}
+        testID={options.tabBarTestID}
+        onPress={onPress}
+        style={styles.tabItem}
+        activeOpacity={0.7}
+      >
+        <Animated.View 
+          style={[
+            styles.tabIconContainer,
+            {
+              transform: [
+                { scale: scaleValue },
+                { translateY: translateY }
+              ]
             }
-          };
-
-          const scaleValue = animatedValue.interpolate({
-            inputRange: [0, 1],
-            outputRange: [1, 1.1],
-          });
-
-          const translateY = animatedValue.interpolate({
-            inputRange: [0, 1],
-            outputRange: [0, -2],
-          });
-
-          return (
-            <TouchableOpacity
-              key={route.key}
-              accessibilityRole="button"
-              accessibilityState={isFocused ? { selected: true } : {}}
-              accessibilityLabel={options.tabBarAccessibilityLabel}
-              testID={options.tabBarTestID}
-              onPress={onPress}
-              style={styles.tabItem}
-              activeOpacity={0.7}
-            >
-              <Animated.View 
-                style={[
-                  styles.tabIconContainer,
-                  {
-                    transform: [
-                      { scale: scaleValue },
-                      { translateY: translateY }
-                    ]
-                  }
-                ]}
-              >
-                {isFocused && (
-                  <Animated.View 
-                    style={[
-                      styles.activeBackground,
-                      {
-                        opacity: animatedValue,
-                      }
-                    ]} 
-                  />
-                )}
-                {route.name === 'Cart' ? (
-                  <CartIconWithBadge 
-                    count={cartStore.totalItems} 
-                    focused={isFocused} 
-                  />
-                ) : (
-                  <Animated.View>
-                    <Ionicons
-                      name={iconName}
-                      size={24}
-                      color={isFocused ? colors.primary : colors.textSecondary}
-                      style={{
-                        textShadowColor: isFocused ? colors.primary : 'transparent',
-                        textShadowOffset: { width: 0, height: 1 },
-                        textShadowRadius: 4,
-                      }}
-                    />
-                  </Animated.View>
-                )}
-              </Animated.View>
-              {isFocused && (
-                <Animated.View 
-                  style={[
-                    styles.activeIndicator,
+          ]}
+        >
+          {isFocused && (
+            <Animated.View 
+              style={[
+                styles.activeBackground,
+                {
+                  opacity: animatedValue,
+                }
+              ]} 
+            />
+          )}
+          {route.name === 'Cart' ? (
+            <CartIconWithBadge 
+              count={cartStore.totalItems} 
+              focused={isFocused} 
+            />
+          ) : (
+            <Animated.View>
+              <Ionicons
+                name={iconName}
+                size={24}
+                color={isFocused ? colors.primary : colors.textSecondary}
+                style={{
+                  textShadowColor: isFocused ? colors.primary : 'transparent',
+                  textShadowOffset: { width: 0, height: 0 },
+                  textShadowRadius: isFocused ? 8 : 0,
+                }}
+              />
+            </Animated.View>
+          )}
+          {isFocused && (
+            <Animated.View 
+              style={[
+                styles.activeIndicator,
+                {
+                  opacity: animatedValue,
+                  transform: [
                     {
-                      opacity: animatedValue,
-                      transform: [{
-                        scaleX: animatedValue.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [0, 1],
-                        })
-                      }]
+                      scaleX: animatedValue.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.3, 1],
+                      })
                     }
-                  ]} 
-                />
-              )}
-            </TouchableOpacity>
-          );
-        })}
+                  ]
+                }
+              ]} 
+            />
+          )}
+        </Animated.View>
+      </TouchableOpacity>
+    );
+  };
+
+  return (
+    <View style={styles.tabBarWrapper}>
+      <View style={styles.tabBarContainer}>
+        {Platform.OS === 'ios' && (
+          <BlurView
+            style={styles.blurView}
+            blurType={theme === 'dark' ? 'dark' : 'ultraThinMaterial'}
+            blurAmount={25}
+            reducedTransparencyFallbackColor={
+              theme === 'dark' ? 'rgba(28, 28, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)'
+            }
+          />
+        )}
+        <View style={styles.tabBar}>
+          {state.routes.map((route, index) => renderTabItem(route, index))}
+        </View>
+        {/* Дополнительный отступ для Android с системной навигацией */}
+        {Platform.OS === 'android' && bottomPadding > 0 && (
+          <View style={styles.safeAreaPadding} />
+        )}
       </View>
-    </SafeAreaView>
+    </View>
   );
 });
 
+// Функция для получения имени иконки
 const getIconName = (routeName, isFocused) => {
-  switch (routeName) {
-    case 'Home':
-      return isFocused ? 'home' : 'home-outline';
-    case 'Favorites':
-      return isFocused ? 'heart' : 'heart-outline';
-    case 'Cart':
-      return isFocused ? 'cart' : 'cart-outline';
-    case 'ProfileMenu':
-      return isFocused ? 'person' : 'person-outline';
-    default:
-      return 'home';
-  }
+  const icons = {
+    Home: isFocused ? 'home' : 'home-outline',
+    Services: isFocused ? 'build' : 'build-outline',
+    Cart: isFocused ? 'cart' : 'cart-outline',
+    Profile: isFocused ? 'person' : 'person-outline',
+  };
+  return icons[routeName] || 'help-circle-outline';
+};
+
+// Компонент иконки корзины с бейджем
+const CartIconWithBadge = ({ count, focused }) => {
+  const { colors } = useTheme();
+  
+  return (
+    <View>
+      <Ionicons
+        name={focused ? 'cart' : 'cart-outline'}
+        size={24}
+        color={focused ? colors.primary : colors.textSecondary}
+      />
+      {count > 0 && (
+        <View style={{
+          position: 'absolute',
+          right: -8,
+          top: -4,
+          backgroundColor: colors.error,
+          borderRadius: 10,
+          minWidth: 20,
+          height: 20,
+          justifyContent: 'center',
+          alignItems: 'center',
+          paddingHorizontal: 4,
+        }}>
+          <Text style={{
+            color: '#FFFFFF',
+            fontSize: 12,
+            fontWeight: 'bold',
+          }}>
+            {count > 99 ? '99+' : count}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
 };
 
 const MainTabs = () => {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+
   return (
     <Tab.Navigator
       tabBar={(props) => <CustomTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
+      screenOptions={{
+        headerShown: false,
+        // Важно: отключаем стандартные safe area для Android
+        tabBarHideOnKeyboard: true,
+        // Добавляем отступ для контента
+        sceneContainerStyle: {
+          backgroundColor: colors.background,
+          // Добавляем отступ снизу для контента, чтобы он не перекрывался TabBar
+          paddingBottom: Platform.select({
+            ios: 0,
+            android: 56 + insets.bottom, // высота TabBar + системная навигация
+          }),
+        },
+      }}
     >
       <Tab.Screen name="Home" component={HomeStack} />
       <Tab.Screen name="Favorites" component={FavoritesScreen} />

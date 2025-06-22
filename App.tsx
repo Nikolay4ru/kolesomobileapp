@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Platform, StatusBar, SafeAreaView } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Platform, StatusBar } from "react-native";
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Navigation from "./navigation";
@@ -18,6 +18,7 @@ import { OneSignal } from 'react-native-onesignal';
 import { navigationRef } from './services/NavigationService';
 import NavigationService from './services/NavigationService';
 import { UpdateChecker } from './services/UpdateService';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 // Импортируем useStores
 import { useStores } from "./useStores";
 
@@ -147,6 +148,7 @@ const App = () => {
   };
   
   return (
+     <SafeAreaProvider>
     <StoreProvider value={stores}>
       <ThemeProvider>
          <UpdateChecker/>
@@ -154,6 +156,7 @@ const App = () => {
         
       </ThemeProvider>
     </StoreProvider>
+    </SafeAreaProvider>
   );
 };
 
