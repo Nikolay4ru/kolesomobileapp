@@ -28,12 +28,17 @@ import { useStores } from '../useStores';
 import { Haptics } from 'react-native-nitro-haptics';
 import { useTheme } from '../contexts/ThemeContext';
 import { useThemedStyles } from '../hooks/useThemedStyles';
+import { MMKV } from 'react-native-mmkv';
 
 const { width, height } = Dimensions.get('window');
 const CARD_MARGIN = 12;
 const CARD_WIDTH = (width - CARD_MARGIN * 3) / 2;
+const LIST_ITEM_HEIGHT = 140; // высота элемента в режиме списка
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
+
+// Инициализация MMKV
+const storage = new MMKV();
 
 const ProductListScreen = observer(() => {
   const navigation = useNavigation();
@@ -47,6 +52,8 @@ const ProductListScreen = observer(() => {
   const [localFavorites, setLocalFavorites] = useState({});
   const [lastScrollY, setLastScrollY] = useState(0);
   const [scrollDirection, setScrollDirection] = useState('up');
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' или 'list'
+  const [stores, setStores] = useState([]); // Информация о магазинах
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -64,6 +71,24 @@ const ProductListScreen = observer(() => {
 
   // Создаем refs на уровне компонента для хранения ссылок на элементы
   const badgeRefs = useRef({}).current;
+
+  // Загрузка сохраненного режима отображения
+  useEffect(() => {
+    const savedViewMode = storage.getString('productListViewMode');
+    if (savedViewMode) {
+      setViewMode(savedViewMode);
+    }
+  }, []);
+
+  // Функция переключения режима отображения
+  const toggleViewMode = useCallback(() => {
+    Haptics.impact('light');
+    const newMode = viewMode === 'grid' ? 'list' : 'grid';
+    setViewMode(newMode);
+    
+    // Сохраняем выбор пользователя
+    storage.set('productListViewMode', newMode);
+  }, [viewMode]);
 
   // Функция для получения или создания ref для элемента
   const getBadgeRef = useCallback((itemId, badgeType) => {
@@ -208,6 +233,21 @@ const ProductListScreen = observer(() => {
   useEffect(() => {
     const loadData = async () => {
       try {
+        // Загружаем информацию о магазинах
+        const storesResponse = await fetch('https://api.koleso.app/api/stores_products.php', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authStore.token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (storesResponse.ok) {
+          const storesData = await storesResponse.json();
+          setStores(storesData);
+        }
+
+        // Загружаем товары
         await productStore.fetchProducts(true);
         
         Animated.spring(fadeAnim, {
@@ -217,7 +257,7 @@ const ProductListScreen = observer(() => {
           useNativeDriver: true,
         }).start();
       } catch (error) {
-        console.error('Error loading products:', error);
+        console.error('Error loading data:', error);
         fadeAnim.setValue(1);
       }
     };
@@ -228,7 +268,7 @@ const ProductListScreen = observer(() => {
       productStore.reset();
       fadeAnim.setValue(0);
     };
-  }, []);
+  }, [authStore.token]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -335,7 +375,223 @@ const ProductListScreen = observer(() => {
     return numPrice;
   }, []);
 
-  const renderItem = useCallback(({ item, index }) => {
+  // Рендер элемента в режиме списка (1 колонка)
+  const renderListItem = useCallback(({ item }) => {
+    const animatedStyle = {
+      transform: [{ scale: getCardAnimation(item.id) }],
+      opacity: fadeAnim,
+    };
+
+    const discount = item.old_price && item.old_price > item.price
+      ? Math.round(((item.old_price - item.price) / item.old_price) * 100)
+      : 0;
+
+    const cashback = parseFloat(item.cashback) || 0;
+    const hasCashback = cashback > 0;
+    const finalPrice = calculatePriceWithCashback(item.price, cashback);
+
+    // Получаем остатки с названиями магазинов
+    const stocksData = [];
+if (item.stocks && typeof item.stocks === 'object') {
+  Object.entries(item.stocks).forEach(([storeId, quantity]) => {
+    if (quantity > 0) { // Только если quantity > 0
+      const store = stores.find(s => s.id === storeId);
+      stocksData.push({
+        id: storeId,
+        name: store ? store.name : `Магазин ${storeId}`,
+        available: true, // quantity точно > 0
+        quantity: quantity,
+        isActive: store ? store.is_active === '1' : true
+      });
+    }
+  });
+}
+
+// Сортируем: сначала активные магазины с наличием, потом остальные
+stocksData.sort((a, b) => {
+  if (a.isActive && !b.isActive) return -1;
+  if (!a.isActive && b.isActive) return 1;
+  if (a.available && !b.available) return -1;
+  if (!a.available && b.available) return 1;
+  return b.quantity - a.quantity;
+});
+
+    return (
+      <AnimatedTouchableOpacity
+        style={[styles.listItemContainer, animatedStyle]}
+        onPress={() => navigation.navigate('Product', { productId: item.id })}
+        onPressIn={() => handleCardPressIn(item.id)}
+        onPressOut={() => handleCardPressOut(item.id)}
+        activeOpacity={1}
+      >
+        <View style={styles.listItemContent}>
+          {/* Изображение товара */}
+          <View style={styles.listItemImageContainer}>
+            <FastImage
+              style={styles.listItemImage}
+              source={{ uri: item.image_url || DEFAULT_IMAGE }}
+              resizeMode="contain"
+            />
+            {item.out_of_stock && (
+              <View style={styles.listItemOutOfStock}>
+                <Text style={styles.listItemOutOfStockText}>Нет в наличии</Text>
+              </View>
+            )}
+            {discount > 0 && (
+              <View style={styles.listItemDiscountBadge}>
+                <Text style={styles.discountText}>-{discount}%</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Информация о товаре */}
+          <View style={styles.listItemInfo}>
+            <View style={styles.listItemHeader}>
+              <View style={styles.listItemTitleSection}>
+                <Text style={styles.listItemBrand} numberOfLines={1}>
+                  {item.brand || ''}{item.model ? ` • ${item.model}` : ''}
+                </Text>
+                <Text style={styles.listItemName} numberOfLines={2}>
+                  {item.name || ''}
+                </Text>
+              </View>
+              
+              <TouchableOpacity
+                style={styles.listItemFavoriteButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  toggleFavorite(item);
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons
+                  name={isFavorite(item.id) ? "heart" : "heart-outline"}
+                  size={24}
+                  color={isFavorite(item.id) ? colors.error : colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* Характеристики для шин */}
+            {item.category === 'Автошины' && (
+              <View style={styles.listItemSpecs}>
+                <View style={styles.specBadge}>
+                  <Text style={styles.specText}>
+                    {formatTireSize(item.width || 0, item.profile || 0, item.diameter || 0)}
+                  </Text>
+                </View>
+                {item.season && (
+                  <View style={styles.specBadge}>
+                    {renderSeasonIcon(item.season)}
+                    <Text style={styles.specText}>{item.season}</Text>
+                  </View>
+                )}
+                {item.spiked === 1 && (
+                  <View style={styles.specBadge}>
+                    <Text style={styles.specText}>Шипы</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Характеристики для дисков */}
+            {item.category === 'Диски' && (
+              <View style={styles.listItemSpecs}>
+                <View style={styles.specBadge}>
+                  <Text style={styles.specText}>
+                    {item.width}x{item.diameter} {item.pcd}
+                  </Text>
+                </View>
+                {item.et && (
+                  <View style={styles.specBadge}>
+                    <Text style={styles.specText}>ET{item.et}</Text>
+                  </View>
+                )}
+                {item.dia && (
+                  <View style={styles.specBadge}>
+                    <Text style={styles.specText}>DIA{item.dia}</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Цена и кешбек */}
+            <View style={styles.listItemPriceSection}>
+              <View>
+                <Text style={styles.listItemPrice}>
+                  {item.price ? parseFloat(item.price).toLocaleString('ru-RU') + ' ₽' : 'Цена не указана'}
+                </Text>
+                {item.old_price && item.old_price > item.price && (
+                  <Text style={styles.listItemOldPrice}>
+                    {parseFloat(item.old_price).toLocaleString('ru-RU')} ₽
+                  </Text>
+                )}
+              </View>
+              {hasCashback && (
+                <View style={styles.listItemCashback}>
+                  <Ionicons name="refresh-circle" size={16} color={colors.success} />
+                  <Text style={styles.listItemCashbackText}>
+                    Цена с кешбеком: {finalPrice.toLocaleString('ru-RU')} ₽
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Наличие в магазинах - отображаем все */}
+            {stocksData.length > 0 && (
+              <View style={styles.listItemStores}>
+                <View style={styles.listItemStoresHeader}>
+                  <Text style={styles.listItemStoresTitle}>Наличие в магазинах:</Text>
+                  {item.total_store_stock > 0 && (
+                    <Text style={styles.listItemTotalStock}>
+                      Всего: {item.total_store_stock} шт.
+                    </Text>
+                  )}
+                </View>
+                <View style={styles.listItemStoresFullList}>
+                  {stocksData.map((store) => (
+                    <View key={store.id} style={styles.listItemStoreRow}>
+                      <View style={[
+                        styles.listItemStoreIndicator,
+                        { backgroundColor: store.available ? colors.success : colors.textTertiary }
+                      ]} />
+                      <Text style={[
+                        styles.listItemStoreNameFull,
+                        { 
+                          color: store.available ? colors.text : colors.textTertiary,
+                          opacity: store.isActive ? 1 : 0.6
+                        }
+                      ]} numberOfLines={1}>
+                        {store.name}
+                      </Text>
+                      <Text style={styles.listItemStoreQuantity}>
+    {store.quantity} шт.
+  </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+      </AnimatedTouchableOpacity>
+    );
+  }, [
+    toggleFavorite,
+    getCardAnimation,
+    handleCardPressIn,
+    handleCardPressOut,
+    formatTireSize,
+    renderSeasonIcon,
+    navigation,
+    fadeAnim,
+    calculatePriceWithCashback,
+    colors,
+    stores
+  ]);
+
+  // Оригинальный рендер элемента в режиме сетки (2 колонки)
+  const renderGridItem = useCallback(({ item, index }) => {
     const animatedStyle = {
       transform: [{ scale: getCardAnimation(item.id) }],
       opacity: fadeAnim,
@@ -522,6 +778,9 @@ const ProductListScreen = observer(() => {
     colors
   ]);
 
+  // Выбор функции рендера в зависимости от режима
+  const renderItem = viewMode === 'grid' ? renderGridItem : renderListItem;
+
   const keyExtractor = useCallback((item) => `product-${item.id}-${item.sku}`, []);
 
   const openFilters = useCallback(() => {
@@ -546,6 +805,13 @@ const ProductListScreen = observer(() => {
   }, []);
 
   const filtersList = useMemo(() => [
+     {
+      id: 'view',
+      icon: viewMode === 'grid' ? 'list' : 'grid',
+      onPress: toggleViewMode,
+      active: false,
+      label: viewMode === 'grid' ? 'Список' : 'Сетка'
+    },
     { 
       id: 'sort', 
       icon: 'swap-vertical-outline', 
@@ -569,7 +835,7 @@ const ProductListScreen = observer(() => {
       active: productStore.carFilter !== null,
       label: 'Авто'
     },
-  ], [productStore.filters, productStore.carFilter, openFilters, navigation]);
+  ], [productStore.filters, productStore.carFilter, openFilters, navigation, viewMode, toggleViewMode]);
 
   const ListHeaderComponent = useMemo(() => (
     <View style={styles.listHeader}>
@@ -606,7 +872,8 @@ const ProductListScreen = observer(() => {
                 key={filter.id}
                 style={[
                   styles.filterChip,
-                  filter.active && styles.filterChipActive
+                  filter.active && styles.filterChipActive,
+                  filter.id === 'view' && styles.viewModeChip
                 ]}
                 onPress={filter.onPress}
                 activeOpacity={0.7}
@@ -614,12 +881,13 @@ const ProductListScreen = observer(() => {
                 <Ionicons
                   name={filter.icon}
                   size={18}
-                  color={filter.active ? '#FFFFFF' : colors.text}
+                  color={filter.active ? '#FFFFFF' : (filter.id === 'view' ? colors.primary : colors.text)}
                   style={styles.filterIcon}
                 />
                 <Text style={[
                   styles.filterLabel,
-                  filter.active && styles.filterLabelActive
+                  filter.active && styles.filterLabelActive,
+                  filter.id === 'view' && styles.viewModeLabel
                 ]}>
                   {filter.label}
                 </Text>
@@ -655,8 +923,9 @@ const ProductListScreen = observer(() => {
               data={productStore.products}
               renderItem={renderItem}
               keyExtractor={keyExtractor}
-              numColumns={2}
-              columnWrapperStyle={styles.columnWrapper}
+              numColumns={viewMode === 'grid' ? 2 : 1}
+              key={viewMode} // Важно для переключения количества колонок
+              columnWrapperStyle={viewMode === 'grid' ? styles.columnWrapper : null}
               contentContainerStyle={styles.listContent}
               ListHeaderComponent={ListHeaderComponent}
               onScroll={handleScroll}
@@ -807,6 +1076,10 @@ const themedStyles = (colors, theme) => ({
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
+  viewModeChip: {
+    backgroundColor: theme === 'dark' ? 'rgba(0, 122, 255, 0.15)' : '#E5F1FF',
+    borderColor: colors.primary,
+  },
   filterIcon: {
     marginRight: 6,
   },
@@ -817,6 +1090,9 @@ const themedStyles = (colors, theme) => ({
   },
   filterLabelActive: {
     color: '#FFFFFF',
+  },
+  viewModeLabel: {
+    color: colors.primary,
   },
   activeFilterChip: {
     flexDirection: 'row',
@@ -860,6 +1136,8 @@ const themedStyles = (colors, theme) => ({
     justifyContent: 'space-between',
     paddingHorizontal: CARD_MARGIN,
   },
+  
+  // Стили для режима сетки (2 колонки)
   itemContainer: {
     width: CARD_WIDTH,
     backgroundColor: colors.card,
@@ -878,6 +1156,8 @@ const themedStyles = (colors, theme) => ({
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'visible',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
   },
   productImage: {
     width: '85%',
@@ -907,6 +1187,8 @@ const themedStyles = (colors, theme) => ({
     backgroundColor: theme === 'dark' ? 'rgba(0, 0, 0, 0.85)' : 'rgba(255, 255, 255, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
   },
   outOfStockText: {
     fontSize: 14,
@@ -943,22 +1225,10 @@ const themedStyles = (colors, theme) => ({
   priceContainer: {
     flex: 1,
   },
-  priceWithCashback: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
   productPrice: {
     fontSize: 17,
     fontWeight: '700',
     color: colors.text,
-  },
-  originalPrice: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: colors.textSecondary,
-    textDecorationLine: 'line-through',
-    marginLeft: 6,
   },
   productOldPrice: {
     fontSize: 13,
@@ -1049,6 +1319,168 @@ const themedStyles = (colors, theme) => ({
   seasonIcon: {
     marginRight: 2,
   },
+  
+  // Стили для режима списка (1 колонка)
+  listItemContainer: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    marginHorizontal: CARD_MARGIN,
+    marginBottom: CARD_MARGIN,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: theme === 'dark' ? 0.2 : 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  listItemContent: {
+    flexDirection: 'row',
+    padding: 12,
+  },
+  listItemImageContainer: {
+    width: 100,
+    height: 100,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    position: 'relative',
+  },
+  listItemImage: {
+    width: '85%',
+    height: '85%',
+  },
+  listItemOutOfStock: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: theme === 'dark' ? 'rgba(0, 0, 0, 0.85)' : 'rgba(255, 255, 255, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 12,
+  },
+  listItemOutOfStockText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.error,
+  },
+  listItemDiscountBadge: {
+    position: 'absolute',
+    top: -4,
+    left: -4,
+    backgroundColor: colors.error,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  listItemInfo: {
+    flex: 1,
+  },
+  listItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 4,
+  },
+  listItemTitleSection: {
+    flex: 1,
+    marginRight: 8,
+  },
+  listItemBrand: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    marginBottom: 2,
+  },
+  listItemName: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: colors.text,
+    lineHeight: 20,
+  },
+  listItemFavoriteButton: {
+    padding: 4,
+  },
+  listItemSpecs: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginVertical: 8,
+    marginHorizontal: -2,
+  },
+  listItemPriceSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  listItemPrice: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  listItemOldPrice: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textDecorationLine: 'line-through',
+    marginTop: 2,
+  },
+  listItemCashback: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme === 'dark' ? 'rgba(52, 199, 89, 0.15)' : '#F0F9F0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  listItemCashbackText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: colors.success,
+    marginLeft: 4,
+  },
+  listItemStores: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingTop: 8,
+  },
+  listItemStoresHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  listItemStoresTitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: colors.textSecondary,
+  },
+  listItemTotalStock: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.success,
+  },
+  listItemStoresList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  listItemStore: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 16,
+    marginBottom: 4,
+  },
+  listItemStoreIndicator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
+  },
+  listItemMoreStores: {
+    fontSize: 11,
+    color: colors.textTertiary,
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
+  
+  // Остальные стили
   fullscreenLoader: {
     flex: 1,
     justifyContent: 'center',
@@ -1138,6 +1570,30 @@ const themedStyles = (colors, theme) => ({
     left: 0,
     zIndex: 2,
   },
+  listItemStoreRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  paddingVertical: 2,
+  // можно добавить marginBottom: 2, если хочется немного разделить строки
+},
+listItemStoreNameFull: {
+  flex: 1,
+  fontSize: 13,
+  color: colors.text,
+  fontWeight: '500',
+  marginRight: 8,
+  opacity: 1, // если нужно менять прозрачность для неактивных магазинов, делай это inline
+},
+
+listItemStoreQuantity: {
+  fontSize: 13,
+  color: colors.success,
+  fontWeight: '600',
+  minWidth: 48, // чтобы числа были выровнены по правому краю
+  textAlign: 'right',
+},
+
 });
 
 export default React.memo(ProductListScreen);

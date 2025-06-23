@@ -10,6 +10,7 @@ import {
   Share,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -20,8 +21,10 @@ import { useThemedStyles } from '../hooks/useThemedStyles';
 import { useStores } from '../useStores';
 import CustomHeader from '../components/CustomHeader';
 
-const { width } = Dimensions.get('window');
-const QR_SIZE = width * 0.6;
+const { width, height } = Dimensions.get('window');
+const CARD_WIDTH = width - 40;
+const CARD_HEIGHT = Math.min(CARD_WIDTH * 0.63, 220); // Соотношение сторон банковской карты
+const QR_SIZE = Math.min(width * 0.6, 200);
 
 const LoyaltyCardScreen = () => {
   const navigation = useNavigation();
@@ -44,7 +47,7 @@ const LoyaltyCardScreen = () => {
     try {
       await Share.share({
         message: `Моя карта лояльности Колесо: ${userCard.cardNumber}`,
-        title: 'Карта лояльности КОЛЕСО',
+        title: 'Карта лояльности Колесо',
       });
     } catch (error) {
       console.error('Error sharing:', error);
@@ -56,16 +59,18 @@ const LoyaltyCardScreen = () => {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar 
         barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
         backgroundColor={colors.background}
+        translucent={false}
       />
       
-      <CustomHeader 
-        title="Карта лояльности"
-        showBackButton={true}
-      />
+   <CustomHeader 
+  title="Кастомный заголовок"
+ 
+//  theme="dark" // для правильного цвета текста в StatusBar
+/>
 
       <ScrollView 
         showsVerticalScrollIndicator={false}
@@ -79,31 +84,36 @@ const LoyaltyCardScreen = () => {
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
           >
-            {/* Card Header */}
-            <View style={styles.cardHeader}>
-              <View>
-                <Text style={styles.cardBrand}>КОЛЕСО</Text>
-                <Text style={styles.cardType}>Premium Card</Text>
+            {/* Card Content */}
+            <View style={styles.cardContent}>
+              {/* Header */}
+              <View style={styles.cardHeader}>
+                <View style={styles.cardBrandContainer}>
+                  <Text style={styles.cardBrand}>КОЛЕСО</Text>
+                  <Text style={styles.cardType}>Premium Card</Text>
+                </View>
+                <View style={styles.cardLogo}>
+                  <Ionicons name="shield-checkmark" size={24} color="#FFD700" />
+                </View>
               </View>
-              <View style={styles.cardLogo}>
-                <Ionicons name="shield-checkmark" size={32} color="#FFD700" />
-              </View>
-            </View>
 
-            {/* Card Number */}
-            <Text style={styles.cardNumber}>
-              {formatCardNumber(userCard.cardNumber)}
-            </Text>
+              {/* Number */}
+              <Text style={styles.cardNumber}>
+                {formatCardNumber(userCard.cardNumber)}
+              </Text>
 
-            {/* Card Holder */}
-            <View style={styles.cardFooter}>
-              <View>
-                <Text style={styles.cardLabel}>Владелец карты</Text>
-                <Text style={styles.cardHolder}>{userCard.userName}</Text>
-              </View>
-              <View style={styles.cardPoints}>
-                <Text style={styles.pointsValue}>{userCard.points.toLocaleString()}</Text>
-                <Text style={styles.pointsLabel}>баллов</Text>
+              {/* Footer */}
+              <View style={styles.cardFooter}>
+                <View style={styles.cardHolderContainer}>
+                  <Text style={styles.cardLabel}>Владелец карты</Text>
+                  <Text style={styles.cardHolder} numberOfLines={1} ellipsizeMode="tail">
+                    {userCard.userName}
+                  </Text>
+                </View>
+                <View style={styles.cardPointsContainer}>
+                  <Text style={styles.pointsValue}>{userCard.points.toLocaleString()}</Text>
+                  <Text style={styles.pointsLabel}>баллов</Text>
+                </View>
               </View>
             </View>
           </LinearGradient>
@@ -186,7 +196,7 @@ const LoyaltyCardScreen = () => {
           </TouchableOpacity>
         </View>
       </ScrollView>
-    </View>
+   </SafeAreaView>
   );
 };
 
@@ -206,9 +216,9 @@ const themedStyles = (colors, theme) => ({
     marginBottom: 32,
   },
   loyaltyCard: {
-    borderRadius: 20,
-    padding: 24,
-    aspectRatio: 1.586,
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
+    borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -217,68 +227,80 @@ const themedStyles = (colors, theme) => ({
     shadowOpacity: 0.3,
     shadowRadius: 16,
     elevation: 10,
+    overflow: 'hidden',
+  },
+  cardContent: {
+    flex: 1,
+    padding: 20,
+    justifyContent: 'space-between',
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 24,
+  },
+  cardBrandContainer: {
+    flex: 1,
   },
   cardBrand: {
-    fontSize: 24,
+    fontSize: Platform.OS === 'ios' ? 20 : 22,
     fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: 2,
+    letterSpacing: 1,
   },
   cardType: {
-    fontSize: 12,
+    fontSize: Platform.OS === 'ios' ? 10 : 11,
     color: 'rgba(255, 255, 255, 0.7)',
     marginTop: 2,
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
   cardLogo: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 215, 0, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   cardNumber: {
-    fontSize: 20,
+    fontSize: Platform.OS === 'ios' ? 16 : 18,
     fontWeight: '600',
     color: '#FFFFFF',
-    letterSpacing: 2,
-    marginBottom: 'auto',
+    letterSpacing: 1,
+    alignSelf: 'center',
   },
   cardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
   },
+  cardHolderContainer: {
+    flex: 1,
+    marginRight: 10,
+  },
   cardLabel: {
-    fontSize: 10,
+    fontSize: Platform.OS === 'ios' ? 9 : 10,
     color: 'rgba(255, 255, 255, 0.6)',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 4,
+    letterSpacing: 0.3,
   },
   cardHolder: {
-    fontSize: 16,
+    fontSize: Platform.OS === 'ios' ? 13 : 14,
     fontWeight: '600',
     color: '#FFFFFF',
+    marginTop: 2,
   },
-  cardPoints: {
+  cardPointsContainer: {
     alignItems: 'flex-end',
   },
   pointsValue: {
-    fontSize: 24,
+    fontSize: Platform.OS === 'ios' ? 18 : 20,
     fontWeight: '700',
     color: '#FFD700',
   },
   pointsLabel: {
-    fontSize: 12,
+    fontSize: Platform.OS === 'ios' ? 10 : 11,
     color: 'rgba(255, 215, 0, 0.8)',
   },
   
@@ -423,6 +445,7 @@ const themedStyles = (colors, theme) => ({
     borderRadius: 16,
     paddingVertical: 16,
     gap: 8,
+    marginBottom: 12,
   },
   secondaryButton: {
     backgroundColor: colors.surface,

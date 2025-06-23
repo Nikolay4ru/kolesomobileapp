@@ -83,7 +83,7 @@ android {
         applicationId "com.kolesoapp"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 33
+        versionCode 35
         versionName "1.0"
     }
     signingConfigs {
