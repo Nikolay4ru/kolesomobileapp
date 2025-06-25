@@ -26,6 +26,7 @@ import { useStores } from '../useStores';
 import CustomHeader from "../components/CustomHeader";
 import ShareHelper from '../components/Share';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Carousel, {
   ICarouselInstance,
   Pagination,
@@ -64,7 +65,7 @@ const ProductScreen = observer(() => {
   const [localFavorites, setLocalFavorites] = useState({});
   const [quantity, setQuantity] = useState(1);
   const [isUpdatingQuantity, setIsUpdatingQuantity] = useState(false);
-  
+  const [bottomPanelHeight, setBottomPanelHeight] = useState(0);
   const mapRef = useRef(null);
   const scrollY = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -748,13 +749,8 @@ const ProductScreen = observer(() => {
     : 0;
 
   return (
-    <View style={[styles.container, { paddingTop: statusBarHeight }]}>
-      <StatusBar 
-        barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
-        backgroundColor={colors.headerBackground}
-        translucent={false} 
-      />
-      
+    
+    <View style={[styles.container]}>
       <CustomHeader 
         title=""
         navigation={navigation}
@@ -785,10 +781,16 @@ const ProductScreen = observer(() => {
         withBackButton
       />
      
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.headerBackground }}>
+      
+      
+     
       <ScrollView 
-        contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + 140 }]}
-        showsVerticalScrollIndicator={false}
-      >
+  contentContainerStyle={[styles.content, { 
+    paddingBottom: bottomPanelHeight || 140
+  }]}
+  showsVerticalScrollIndicator={false}
+>
         {/* Карусель изображений */}
         <View style={styles.carouselWrapper}>
           <LinearGradient
@@ -1289,14 +1291,14 @@ const ProductScreen = observer(() => {
       </ScrollView>
 
       {/* Фиксированная панель покупки */}
-      <View style={[styles.bottomPanel, { paddingBottom: tabBarHeight }]}>
-        <LinearGradient
-          colors={theme === 'dark' 
-            ? ['rgba(0,0,0,0)', 'rgba(0,0,0,0.8)', 'rgba(0,0,0,1)']
-            : ['rgba(255,255,255,0)', 'rgba(255,255,255,0.8)', 'rgba(255,255,255,1)']
-          }
-          style={styles.bottomPanelGradient}
-        />
+      <View 
+  style={[styles.bottomPanel, { paddingBottom: tabBarHeight }]}
+  onLayout={(event) => {
+    const { height } = event.nativeEvent.layout;
+    setBottomPanelHeight(height);
+  }}
+>
+       
         
         <View style={styles.bottomContent}>
           <View style={styles.bottomPriceInfo}>
@@ -1389,6 +1391,7 @@ const ProductScreen = observer(() => {
           </View>
         </View>
       </View>
+      </SafeAreaView>
     </View>
   );
 });
@@ -1932,13 +1935,6 @@ const themedStyles = (colors, theme) => ({
     shadowOpacity: theme === 'dark' ? 0.4 : 0.15,
     shadowRadius: 10,
     elevation: 10,
-  },
-  bottomPanelGradient: {
-    position: 'absolute',
-    top: -60,
-    left: 0,
-    right: 0,
-    height: 60,
   },
   bottomContent: {
     paddingHorizontal: 20,

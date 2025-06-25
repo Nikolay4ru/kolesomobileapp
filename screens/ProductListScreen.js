@@ -512,8 +512,18 @@ stocksData.sort((a, b) => {
                     <Text style={styles.specText}>DIA{item.dia}</Text>
                   </View>
                 )}
+                
               </View>
             )}
+            {hasCashback && (
+                <View style={styles.listItemCashback}>
+                  <Ionicons name="refresh-circle" size={16} color={colors.success} />
+                  <Text style={styles.listItemCashbackText}>
+                    Цена с кешбеком: {finalPrice.toLocaleString('ru-RU')} ₽
+                  </Text>
+                </View>
+              )}
+            
 
             {/* Цена и кешбек */}
             <View style={styles.listItemPriceSection}>
@@ -527,14 +537,7 @@ stocksData.sort((a, b) => {
                   </Text>
                 )}
               </View>
-              {hasCashback && (
-                <View style={styles.listItemCashback}>
-                  <Ionicons name="refresh-circle" size={16} color={colors.success} />
-                  <Text style={styles.listItemCashbackText}>
-                    Цена с кешбеком: {finalPrice.toLocaleString('ru-RU')} ₽
-                  </Text>
-                </View>
-              )}
+              
             </View>
 
             {/* Наличие в магазинах - отображаем все */}
@@ -542,11 +545,7 @@ stocksData.sort((a, b) => {
               <View style={styles.listItemStores}>
                 <View style={styles.listItemStoresHeader}>
                   <Text style={styles.listItemStoresTitle}>Наличие в магазинах:</Text>
-                  {item.total_store_stock > 0 && (
-                    <Text style={styles.listItemTotalStock}>
-                      Всего: {item.total_store_stock} шт.
-                    </Text>
-                  )}
+                  
                 </View>
                 <View style={styles.listItemStoresFullList}>
                   {stocksData.map((store) => (

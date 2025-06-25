@@ -1,607 +1,466 @@
-import React, { useState, useEffect, useRef } from 'react';
+// CheckoutScreen.js - Экран оформления заказа с интеграцией СБП
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
+  TouchableOpacity,
   ActivityIndicator,
-  Animated,
-  Dimensions,
-  Linking
+  Alert,
+  Image,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { observer } from 'mobx-react-lite';
-import { useStores } from '../useStores';
-import Ionicons from 'react-native-vector-icons/Ionicons';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import axios from 'axios';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { MMKV } from 'react-native-mmkv';
 
-const { width } = Dimensions.get('window');
+const storage = new MMKV();
 
-const CheckoutScreen = observer(() => {
-  const { cartStore, authStore } = useStores();
+const CheckoutScreen = () => {
   const navigation = useNavigation();
+  const route = useRoute();
   
-  // Состояния формы
-  const [name, setName] = useState(authStore.user?.name || '');
-  const [phone, setPhone] = useState(authStore.user?.phone || '');
-  const [email, setEmail] = useState(authStore.user?.email || '');
-  const [deliveryType, setDeliveryType] = useState('pickup');
-  const [address, setAddress] = useState('');
-  const [comment, setComment] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('card');
-  const [deliveryDate, setDeliveryDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
-  
-  // Анимация
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
+  const [cartItems, setCartItems] = useState([]);
+  const [totalAmount, setTotalAmount] = useState(0);
+  const [deliveryMethod, setDeliveryMethod] = useState('pickup');
+  const [selectedStore, setSelectedStore] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('sbp');
+  const [user, setUser] = useState(null);
 
-  // Запуск анимации при монтировании
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      })
-    ]).start();
+    loadCartAndUser();
   }, []);
 
-  // Создание платежа в Сбербанке
-  const createSberbankPayment = async (orderId, amount) => {
+  const loadCartAndUser = async () => {
     try {
-      setLoading(true);
+      // Загружаем корзину
+      const cartData = route.params?.cartItems || [];
+      setCartItems(cartData);
       
-      // Отправка запроса на ваш бэкенд для создания платежа
-      const response = await axios.post('https://your-backend-api.com/create-payment', {
-        orderId,
-        amount,
-        currency: 'RUB',
-        description: `Оплата заказа №${orderId}`,
-        returnUrl: 'your-app-scheme://payment-result', // URL для возврата после оплаты
-      }, {
-        headers: {
-          'Authorization': `Bearer ${authStore.token}`
-        }
-      });
-
-      const { paymentUrl } = response.data;
+      // Считаем общую сумму
+      const total = cartData.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      setTotalAmount(total);
       
-      // Открываем платежную страницу Сбербанка
-      const canOpen = await Linking.canOpenURL(paymentUrl);
-      if (canOpen) {
-        await Linking.openURL(paymentUrl);
-      } else {
-        throw new Error('Не удалось открыть платежную страницу');
+      // Загружаем данные пользователя
+      const userData = storage.getString('user');
+      if (userData) {
+        setUser(JSON.parse(userData));
       }
     } catch (error) {
-      Alert.alert('Ошибка', 'Не удалось инициировать платеж');
-      console.error('Payment error:', error);
-      setLoading(false);
+      console.error('Error loading data:', error);
     }
   };
 
-  // Обработчик оформления заказа
   const handleCheckout = async () => {
-    if (!name || !phone) {
-      Alert.alert('Ошибка', 'Пожалуйста, заполните обязательные поля');
+    if (!user) {
+      Alert.alert('Ошибка', 'Необходимо авторизоваться');
+      navigation.navigate('Login');
+      return;
+    }
+
+    if (cartItems.length === 0) {
+      Alert.alert('Ошибка', 'Корзина пуста');
+      return;
+    }
+
+    if (deliveryMethod === 'pickup' && !selectedStore) {
+      Alert.alert('Ошибка', 'Выберите магазин для самовывоза');
       return;
     }
 
     setLoading(true);
-    
+
     try {
+      // Формируем данные заказа
       const orderData = {
-        userId: authStore.user.id,
-        items: cartStore.items.map(item => ({
-          id: item.id,
+        user_id: user.id,
+        items: cartItems.map(item => ({
+          product_id: item.id,
           quantity: item.quantity,
-          price: item.price
+          price: item.price,
         })),
-        customer: { name, phone, email },
-        delivery: {
-          type: deliveryType,
-          address: deliveryType === 'delivery' ? address : null,
-          date: deliveryDate.toISOString()
-        },
-        payment: {
-          method: paymentMethod
-        },
-        comment,
-        promoCode: cartStore.appliedPromo?.code || null,
-        totalAmount: cartStore.totalAmount
+        delivery_method: deliveryMethod,
+        store_id: selectedStore?.id,
+        payment_method: paymentMethod,
       };
-      console.log(JSON.stringify(orderData));
-      // Создаем заказ на бэкенде
-      const response = await axios.post('https://your-backend-api.com/orders', orderData, {
+
+      // Отправляем запрос на создание заказа
+      const response = await fetch(`${API_URL}/order-checkout.php?action=create-order-with-sbp`, {
+        method: 'POST',
         headers: {
-          'Authorization': `Bearer ${authStore.token}`,
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(orderData),
       });
 
-      const { orderId } = response.data;
+      const result = await response.json();
 
-      if (paymentMethod === 'sberbank') {
-        // Для оплаты через Сбербанк - создаем платеж
-        await createSberbankPayment(orderId, cartStore.totalAmount);
+      if (result.success) {
+        // Очищаем корзину
+        storage.delete('cart');
+        
+        // Переходим к оплате СБП
+        if (paymentMethod === 'sbp') {
+          navigation.navigate('SBPPayment', {
+            paymentData: result,
+            orderNumber: result.orderNumber,
+          });
+        }
       } else {
-        // Для других способов оплаты просто очищаем корзину
-        await cartStore.clearCart(authStore.token);
-        navigation.navigate('OrderSuccess', { 
-          orderId,
-          deliveryType,
-          deliveryDate
-        });
+        Alert.alert('Ошибка', result.error || 'Не удалось создать заказ');
       }
     } catch (error) {
-      Alert.alert('Ошибка', error.response?.data?.message || 'Ошибка оформления заказа');
       console.error('Checkout error:', error);
+      Alert.alert('Ошибка', 'Произошла ошибка при оформлении заказа');
     } finally {
       setLoading(false);
     }
   };
 
-  // Обработчик глубокой ссылки для возврата из платежной системы
-  useEffect(() => {
-    const handleDeepLink = async (url) => {
-      if (!url) return;
+  const renderCartItem = (item) => (
+    <View key={item.id} style={styles.cartItem}>
+      <Image source={{ uri: item.image_url }} style={styles.itemImage} />
+      <View style={styles.itemInfo}>
+        <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
+        <Text style={styles.itemBrand}>{item.brand}</Text>
+        <View style={styles.itemBottom}>
+          <Text style={styles.itemQuantity}>x{item.quantity}</Text>
+          <Text style={styles.itemPrice}>{item.price * item.quantity} ₽</Text>
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderDeliveryOptions = () => (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Способ получения</Text>
       
-      // Обрабатываем возврат из платежной системы
-      if (url.includes('payment-result')) {
-        const success = url.includes('success=true');
-        
-        if (success) {
-          await cartStore.clearCart(authStore.token);
-          navigation.navigate('OrderSuccess', { 
-            orderId: url.match(/orderId=([^&]+)/)?.[1],
-            deliveryType,
-            deliveryDate
-          });
-        } else {
-          Alert.alert('Ошибка', 'Платеж не был завершен');
-        }
-      }
-    };
+      <TouchableOpacity
+        style={[styles.option, deliveryMethod === 'pickup' && styles.optionSelected]}
+        onPress={() => setDeliveryMethod('pickup')}
+      >
+        <View style={styles.radioButton}>
+          {deliveryMethod === 'pickup' && <View style={styles.radioButtonInner} />}
+        </View>
+        <View style={styles.optionInfo}>
+          <Text style={styles.optionTitle}>Самовывоз</Text>
+          <Text style={styles.optionDescription}>Бесплатно</Text>
+        </View>
+      </TouchableOpacity>
 
-    // Получаем начальную ссылку при открытии приложения
-    Linking.getInitialURL().then(handleDeepLink).catch(console.error);
-    
-    // Подписываемся на события глубоких ссылок
-    Linking.addEventListener('url', ({ url }) => handleDeepLink(url));
-    
-    return () => {
-      Linking.removeAllListeners('url');
-    };
-  }, []);
+      <TouchableOpacity
+        style={[styles.option, deliveryMethod === 'delivery' && styles.optionSelected]}
+        onPress={() => setDeliveryMethod('delivery')}
+      >
+        <View style={styles.radioButton}>
+          {deliveryMethod === 'delivery' && <View style={styles.radioButtonInner} />}
+        </View>
+        <View style={styles.optionInfo}>
+          <Text style={styles.optionTitle}>Доставка</Text>
+          <Text style={styles.optionDescription}>от 300 ₽</Text>
+        </View>
+      </TouchableOpacity>
+    </View>
+  );
 
-  // Форматирование даты
-  const formatDate = (date) => {
-    return date.toLocaleDateString('ru-RU', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    });
-  };
+  const renderPaymentOptions = () => (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Способ оплаты</Text>
+      
+      <TouchableOpacity
+        style={[styles.option, paymentMethod === 'sbp' && styles.optionSelected]}
+        onPress={() => setPaymentMethod('sbp')}
+      >
+        <View style={styles.radioButton}>
+          {paymentMethod === 'sbp' && <View style={styles.radioButtonInner} />}
+        </View>
+        <View style={styles.optionInfo}>
+          <Text style={styles.optionTitle}>Система быстрых платежей</Text>
+          <Text style={styles.optionDescription}>Мгновенная оплата через банк</Text>
+          <View style={styles.sbpBanks}>
+            <Text style={styles.sbpBanksText}>Сбербанк, Тинькофф, Альфа-Банк и др.</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
 
-  // Обработчик изменения даты
-  const handleDateChange = (event, selectedDate) => {
-    setShowDatePicker(false);
-    if (selectedDate) {
-      setDeliveryDate(selectedDate);
-    }
-  };
+      <TouchableOpacity
+        style={[styles.option, paymentMethod === 'cash' && styles.optionSelected]}
+        onPress={() => setPaymentMethod('cash')}
+      >
+        <View style={styles.radioButton}>
+          {paymentMethod === 'cash' && <View style={styles.radioButtonInner} />}
+        </View>
+        <View style={styles.optionInfo}>
+          <Text style={styles.optionTitle}>Наличными при получении</Text>
+          <Text style={styles.optionDescription}>Оплата в магазине или курьеру</Text>
+        </View>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.option, paymentMethod === 'card' && styles.optionSelected]}
+        onPress={() => setPaymentMethod('card')}
+      >
+        <View style={styles.radioButton}>
+          {paymentMethod === 'card' && <View style={styles.radioButtonInner} />}
+        </View>
+        <View style={styles.optionInfo}>
+          <Text style={styles.optionTitle}>Банковской картой</Text>
+          <Text style={styles.optionDescription}>При получении</Text>
+        </View>
+      </TouchableOpacity>
+    </View>
+  );
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <Animated.View 
-          style={[
-            styles.content,
-            { 
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }] 
-            }
-          ]}
+    <ScrollView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Оформление заказа</Text>
+      </View>
+
+      {/* Товары в заказе */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Товары ({cartItems.length})</Text>
+        {cartItems.map(renderCartItem)}
+      </View>
+
+      {/* Способ получения */}
+      {renderDeliveryOptions()}
+
+      {/* Выбор магазина для самовывоза */}
+      {deliveryMethod === 'pickup' && (
+        <TouchableOpacity
+          style={styles.selectStore}
+          onPress={() => navigation.navigate('StoreSelection', {
+            onSelect: (store) => setSelectedStore(store)
+          })}
         >
-          {/* Заголовок */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Оформление заказа</Text>
-            <Text style={styles.subtitle}>
-              {cartStore.items.length} товара на {cartStore.totalAmount} ₽
-            </Text>
-          </View>
+          <Text style={styles.selectStoreText}>
+            {selectedStore ? selectedStore.name : 'Выбрать магазин'}
+          </Text>
+          <Text style={styles.selectStoreArrow}>›</Text>
+        </TouchableOpacity>
+      )}
 
-          {/* Контактная информация */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Контактная информация</Text>
-            <View style={styles.inputContainer}>
-              <Ionicons name="person-outline" size={20} color="#666" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Имя *"
-                value={name}
-                onChangeText={setName}
-              />
-            </View>
-            <View style={styles.inputContainer}>
-              <Ionicons name="call-outline" size={20} color="#666" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Телефон *"
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-              />
-            </View>
-            <View style={styles.inputContainer}>
-              <Ionicons name="mail-outline" size={20} color="#666" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-              />
-            </View>
-          </View>
+      {/* Способ оплаты */}
+      {renderPaymentOptions()}
 
-          {/* Способ получения */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Способ получения</Text>
-            <View style={styles.deliveryOptions}>
-              <TouchableOpacity
-                style={[
-                  styles.deliveryOption,
-                  deliveryType === 'pickup' && styles.deliveryOptionActive
-                ]}
-                onPress={() => setDeliveryType('pickup')}
-              >
-                <Ionicons 
-                  name="storefront-outline" 
-                  size={24} 
-                  color={deliveryType === 'pickup' ? '#006363' : '#666'} 
-                />
-                <Text style={styles.deliveryOptionText}>Самовывоз</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.deliveryOption,
-                  deliveryType === 'delivery' && styles.deliveryOptionActive
-                ]}
-                onPress={() => setDeliveryType('delivery')}
-              >
-                <Ionicons 
-                  name="car-outline" 
-                  size={24} 
-                  color={deliveryType === 'delivery' ? '#006363' : '#666'} 
-                />
-                <Text style={styles.deliveryOptionText}>Доставка</Text>
-              </TouchableOpacity>
-            </View>
+      {/* Итого */}
+      <View style={styles.summary}>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Товары:</Text>
+          <Text style={styles.summaryValue}>{totalAmount} ₽</Text>
+        </View>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Доставка:</Text>
+          <Text style={styles.summaryValue}>
+            {deliveryMethod === 'pickup' ? 'Бесплатно' : 'от 300 ₽'}
+          </Text>
+        </View>
+        <View style={[styles.summaryRow, styles.summaryTotal]}>
+          <Text style={styles.summaryTotalLabel}>Итого:</Text>
+          <Text style={styles.summaryTotalValue}>{totalAmount} ₽</Text>
+        </View>
+      </View>
 
-            {deliveryType === 'delivery' && (
-              <>
-                <View style={styles.inputContainer}>
-                  <Ionicons name="location-outline" size={20} color="#666" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Адрес доставки *"
-                    value={address}
-                    onChangeText={setAddress}
-                  />
-                </View>
-                
-                <TouchableOpacity 
-                  style={styles.datePickerButton}
-                  onPress={() => setShowDatePicker(true)}
-                >
-                  <Ionicons name="calendar-outline" size={20} color="#006363" />
-                  <Text style={styles.dateText}>
-                    {formatDate(deliveryDate)}
-                  </Text>
-                  <Ionicons name="chevron-down" size={16} color="#666" />
-                </TouchableOpacity>
+      {/* Кнопка оформления */}
+      <TouchableOpacity
+        style={[styles.checkoutButton, loading && styles.checkoutButtonDisabled]}
+        onPress={handleCheckout}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="white" />
+        ) : (
+          <Text style={styles.checkoutButtonText}>
+            {paymentMethod === 'sbp' ? 'Перейти к оплате' : 'Оформить заказ'}
+          </Text>
+        )}
+      </TouchableOpacity>
 
-                {showDatePicker && (
-                  <DateTimePicker
-                    value={deliveryDate}
-                    mode="date"
-                    display="default"
-                    onChange={handleDateChange}
-                    minimumDate={new Date()}
-                  />
-                )}
-              </>
-            )}
-          </View>
-
-          {/* Способ оплаты */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Способ оплаты</Text>
-            
-            <View style={styles.paymentOptions}>
-              <TouchableOpacity
-                style={[
-                  styles.paymentOption,
-                  paymentMethod === 'card' && styles.paymentOptionActive
-                ]}
-                onPress={() => setPaymentMethod('card')}
-              >
-                <Ionicons 
-                  name="card-outline" 
-                  size={24} 
-                  color={paymentMethod === 'card' ? '#006363' : '#666'} 
-                />
-                <Text style={styles.paymentOptionText}>Картой онлайн</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.paymentOption,
-                  paymentMethod === 'sberbank' && styles.paymentOptionActive
-                ]}
-                onPress={() => setPaymentMethod('sberbank')}
-              >
-                <Ionicons 
-                  name="logo-ruble" 
-                  size={24} 
-                  color={paymentMethod === 'sberbank' ? '#006363' : '#666'} 
-                />
-                <Text style={styles.paymentOptionText}>Сбербанк</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.paymentOption,
-                  paymentMethod === 'cash' && styles.paymentOptionActive
-                ]}
-                onPress={() => setPaymentMethod('cash')}
-              >
-                <Ionicons 
-                  name="cash-outline" 
-                  size={24} 
-                  color={paymentMethod === 'cash' ? '#006363' : '#666'} 
-                />
-                <Text style={styles.paymentOptionText}>Наличными</Text>
-              </TouchableOpacity>
-              
-              {deliveryType === 'pickup' && (
-                <TouchableOpacity
-                  style={[
-                    styles.paymentOption,
-                    paymentMethod === 'card_on_delivery' && styles.paymentOptionActive
-                  ]}
-                  onPress={() => setPaymentMethod('card_on_delivery')}
-                >
-                  <Ionicons 
-                    name="card-outline" 
-                    size={24} 
-                    color={paymentMethod === 'card_on_delivery' ? '#006363' : '#666'} 
-                  />
-                  <Text style={styles.paymentOptionText}>Картой при получении</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            
-            {paymentMethod === 'sberbank' && (
-              <View style={styles.paymentNotice}>
-                <Ionicons name="information-circle-outline" size={20} color="#006363" />
-                <Text style={styles.paymentNoticeText}>
-                  После оформления заказа вы будете перенаправлены на безопасную платежную страницу Сбербанка
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Комментарий */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Комментарий к заказу</Text>
-            <TextInput
-              style={[styles.input, styles.commentInput]}
-              placeholder="Ваши пожелания..."
-              value={comment}
-              onChangeText={setComment}
-              multiline
-              numberOfLines={4}
-            />
-          </View>
-
-          {/* Кнопка оформления */}
-          <TouchableOpacity
-            style={styles.checkoutButton}
-            onPress={handleCheckout}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text style={styles.checkoutButtonText}>
-                Оформить заказ • {cartStore.totalAmount} ₽
-              </Text>
-            )}
-          </TouchableOpacity>
-        </Animated.View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <View style={styles.footer} />
+    </ScrollView>
   );
-});
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
-  },
-  scrollContainer: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  content: {
-    flex: 1,
+    backgroundColor: '#F5F5F7',
   },
   header: {
-    marginBottom: 30,
+    backgroundColor: 'white',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E7',
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 5,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: 20,
+    fontWeight: '600',
   },
   section: {
     backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    marginTop: 16,
+    padding: 16,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 15,
+    marginBottom: 16,
   },
-  inputContainer: {
+  cartItem: {
     flexDirection: 'row',
-    alignItems: 'center',
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    marginBottom: 20,
-    paddingBottom: 10,
+    borderBottomColor: '#F0F0F0',
   },
-  inputIcon: {
-    marginRight: 10,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    color: '#333',
-    paddingVertical: 8,
-  },
-  commentInput: {
-    borderWidth: 1,
-    borderColor: '#eee',
+  itemImage: {
+    width: 60,
+    height: 60,
     borderRadius: 8,
-    padding: 15,
-    height: 100,
-    textAlignVertical: 'top',
+    marginRight: 12,
   },
-  deliveryOptions: {
+  itemInfo: {
+    flex: 1,
+  },
+  itemName: {
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  itemBrand: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 8,
+  },
+  itemBottom: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 20,
   },
-  deliveryOption: {
-    flex: 1,
+  itemQuantity: {
+    fontSize: 14,
+    color: '#666',
+  },
+  itemPrice: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  option: {
     flexDirection: 'row',
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E5E7',
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  optionSelected: {
+    borderColor: '#007AFF',
+    backgroundColor: '#F0F8FF',
+  },
+  radioButton: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#007AFF',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 15,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#eee',
-    marginHorizontal: 5,
+    marginRight: 12,
   },
-  deliveryOptionActive: {
-    borderColor: '#006363',
-    backgroundColor: '#f0faf9',
+  radioButtonInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#007AFF',
   },
-  deliveryOptionText: {
-    marginLeft: 8,
+  optionInfo: {
+    flex: 1,
+  },
+  optionTitle: {
     fontSize: 16,
-    color: '#333',
+    fontWeight: '500',
+    marginBottom: 4,
   },
-  paymentOptions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  paymentOption: {
-    width: '48%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#eee',
-    marginBottom: 10,
-  },
-  paymentOptionActive: {
-    borderColor: '#006363',
-    backgroundColor: '#f0faf9',
-  },
-  paymentOptionText: {
-    marginLeft: 8,
+  optionDescription: {
     fontSize: 14,
-    color: '#333',
+    color: '#666',
   },
-  paymentNotice: {
+  sbpBanks: {
+    marginTop: 8,
+  },
+  sbpBanksText: {
+    fontSize: 12,
+    color: '#007AFF',
+  },
+  selectStore: {
+    backgroundColor: 'white',
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#f0faf9',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 10,
+    padding: 16,
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#E5E5E7',
   },
-  paymentNoticeText: {
-    marginLeft: 8,
-    fontSize: 13,
-    color: '#006363',
-    flex: 1,
-  },
-  datePickerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 15,
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 8,
-    marginBottom: 20,
-  },
-  dateText: {
-    flex: 1,
-    marginLeft: 10,
+  selectStoreText: {
     fontSize: 16,
-    color: '#333',
+    color: '#007AFF',
+  },
+  selectStoreArrow: {
+    fontSize: 24,
+    color: '#C7C7CC',
+  },
+  summary: {
+    backgroundColor: 'white',
+    marginTop: 16,
+    padding: 16,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  summaryLabel: {
+    fontSize: 16,
+    color: '#666',
+  },
+  summaryValue: {
+    fontSize: 16,
+  },
+  summaryTotal: {
+    marginTop: 8,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5E7',
+  },
+  summaryTotalLabel: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  summaryTotalValue: {
+    fontSize: 20,
+    fontWeight: '700',
   },
   checkoutButton: {
-    backgroundColor: '#006363',
-    borderRadius: 8,
-    padding: 18,
+    backgroundColor: '#007AFF',
+    margin: 16,
+    padding: 16,
+    borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 10,
+  },
+  checkoutButtonDisabled: {
+    opacity: 0.6,
   },
   checkoutButtonText: {
     color: 'white',
     fontSize: 18,
     fontWeight: '600',
   },
+  footer: {
+    height: 50,
+  },
 });
+
+// Константы
+const API_URL = 'https://koleso.app/api';
 
 export default CheckoutScreen;

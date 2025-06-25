@@ -11,12 +11,14 @@ import { BlurView } from "@react-native-community/blur";
 import { Linking } from 'react-native';
 import { navigationRef } from './services/NavigationService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import SBPPaymentScreen from './screens/SBPPaymentScreen';
 
 // Импортируем экраны
 import HomeScreen from "./screens/HomeScreen";
 import FavoritesScreen from "./screens/FavoritesScreen";
 import CartScreen from "./screens/CartScreen";
 import ProfileScreen from "./screens/ProfileScreen";
+import EditProfileScreen from './screens/EditProfileScreen';
 import AuthScreen from "./screens/AuthScreen";
 import NotificationsScreen from "./screens/NotificationsScreen";
 import CodeVerificationScreen from "./screens/CodeVerificationScreen";
@@ -154,6 +156,14 @@ const ProfileStack = () => {
     >
       <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
       <Stack.Screen 
+        name="EditProfile" 
+        component={EditProfileScreen} 
+        options={{ 
+          headerShown: false,
+          animation: 'slide_from_right'
+        }} 
+      />
+      <Stack.Screen 
         name="Orders" 
         component={OrdersScreen} 
         options={{ headerShown: false }} 
@@ -224,17 +234,11 @@ const CartStack = () => {
         name="Checkout" 
         component={CheckoutScreen} 
         options={{ 
-          headerShown: true,
-          headerTitle: 'Оформление заказа',
-          headerBackTitleVisible: false,
-          headerStyle: {
-            backgroundColor: colors.headerBackground,
-            elevation: 0,
-            shadowOpacity: 0,
-            borderBottomWidth: 0,
-          }
+          headerShown: false,
+          
         }} 
       />
+      <Stack.Screen name="SBPPayment" component={SBPPaymentScreen} options={{ headerShown: false }}/>
       <Stack.Screen 
         name="OrderSuccess" 
         component={OrderSuccessScreen} 
