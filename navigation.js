@@ -17,6 +17,7 @@ import SBPPaymentScreen from './screens/SBPPaymentScreen';
 import HomeScreen from "./screens/HomeScreen";
 import FavoritesScreen from "./screens/FavoritesScreen";
 import CartScreen from "./screens/CartScreen";
+import StoreSelectionScreen from "./screens/StoreSelectionScreen";
 import ProfileScreen from "./screens/ProfileScreen";
 import EditProfileScreen from './screens/EditProfileScreen';
 import AuthScreen from "./screens/AuthScreen";
@@ -229,6 +230,14 @@ const CartStack = () => {
           cardOverlayEnabled: true,
           gestureEnabled: true
         }}
+      />
+      <Stack.Screen 
+        name="StoreSelection" 
+        component={StoreSelectionScreen} 
+        options={{ 
+          headerShown: false,
+          
+        }} 
       />
       <Stack.Screen 
         name="Checkout" 

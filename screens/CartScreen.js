@@ -32,7 +32,7 @@ const CartScreen = observer(({ navigation }) => {
   const { cartStore, authStore } = useStores();
   const { colors, theme } = useTheme();
   const styles = useThemedStyles(themedStyles);
-  
+
   const [loading, setLoading] = useState(true);
   const [forceUpdate, setForceUpdate] = useState(false);
   const [deliveryOption, setDeliveryOption] = useState('pickup');
@@ -78,9 +78,9 @@ const CartScreen = observer(({ navigation }) => {
   useEffect(() => {
     const loadStores = async () => {
       if (!authStore.token || cartStore.items.length === 0) return;
-      
+
       if (isUpdatingQuantity.current) return;
-      
+
       setLoadingStores(true);
       try {
         const response = await fetch('https://api.koleso.app/api/stores.php', {
@@ -95,7 +95,7 @@ const CartScreen = observer(({ navigation }) => {
             lng: null
           })
         });
-        
+
         const data = await response.json();
         if (data.success && data.data?.stores) {
           const normalizedStores = data.data.stores.map(store => ({
@@ -106,7 +106,7 @@ const CartScreen = observer(({ navigation }) => {
               in_stock: parseInt(item.in_stock) || 0
             })) || []
           }));
-          
+
           setStores(normalizedStores);
         }
       } catch (error) {
@@ -115,22 +115,22 @@ const CartScreen = observer(({ navigation }) => {
         setLoadingStores(false);
       }
     };
-    
+
     loadStores();
   }, [authStore.token, cartStore.items, deliveryOption]);
 
   // Проверка действительности промокода для выбранных товаров
   const checkPromoValidity = useCallback(() => {
     if (!appliedPromo) return true;
-    
+
     if (!appliedPromo.validItems || appliedPromo.validItems.length === 0) {
       return true;
     }
-    
+
     const hasValidItems = selectedItems.some(itemId => {
       return appliedPromo.validItems.includes(itemId.toString());
     });
-    
+
     return hasValidItems;
   }, [appliedPromo, selectedItems]);
 
@@ -158,43 +158,45 @@ const CartScreen = observer(({ navigation }) => {
     setDeliveryOption(option);
     if (option === 'delivery') {
       setSelectedStoreId(null);
+      cartStore.setSelectedStore(null);
     }
-  }, []);
+  }, [cartStore]);
 
   // Обработчик выбора магазина
   const handleStoreSelect = useCallback((storeId) => {
     if (isScrolling.current) return;
-    
     setSelectedStoreId(storeId);
-    
+    const store = stores.find(s => s.id === storeId);
+    if (store) cartStore.setSelectedStore(store);
+    // ... скроллинг и т.д.
     requestAnimationFrame(() => {
       if (storePositions.current[storeId] && storeScrollViewRef.current) {
         const { x, width } = storePositions.current[storeId];
         const scrollViewWidth = Dimensions.get('window').width;
         const scrollToX = x - (scrollViewWidth / 2) + (width / 2);
-        
+
         isScrolling.current = true;
         storeScrollViewRef.current.scrollTo({
           x: Math.max(0, scrollToX),
           y: 0,
           animated: true
         });
-        
+
         setTimeout(() => {
           isScrolling.current = false;
         }, 300);
       }
     });
-  }, []);
+  }, [stores]);
 
   // Проверка доступности товара
   const checkAvailability = useCallback((productId, requiredQuantity = 1) => {
     if (!stores || stores.length === 0) return false;
-    
+
     if (deliveryOption === 'delivery') {
       const warehouse = stores.find(store => store.id === 8);
       if (!warehouse) return false;
-      
+
       const stockItem = warehouse?.stock_info?.find(
         si => si.product_id.toString() === productId.toString()
       );
@@ -202,24 +204,24 @@ const CartScreen = observer(({ navigation }) => {
     }
 
     if (!selectedStoreId) return false;
-    
+
     const store = stores.find(s => s.id === selectedStoreId);
     if (!store) return false;
-    
+
     const stockItem = store.stock_info?.find(
       item => item.product_id.toString() === productId.toString()
     );
-    
+
     if (stockItem && stockItem.in_stock >= requiredQuantity) {
       return true;
     }
-    
+
     // Проверяем комбинацию магазин + склад
     const warehouse = stores.find(store => store.id === 8);
     const warehouseStockItem = warehouse?.stock_info?.find(
       si => si.product_id.toString() === productId.toString()
     );
-    
+
     const totalAvailable = (stockItem?.in_stock || 0) + (warehouseStockItem?.in_stock || 0);
     return totalAvailable >= requiredQuantity;
   }, [deliveryOption, selectedStoreId, stores]);
@@ -234,21 +236,21 @@ const CartScreen = observer(({ navigation }) => {
       if(stockItem?.in_stock >= 20) return 20;
       return stockItem?.in_stock || 0;
     }
-    
+
     if (!selectedStoreId) return 0;
-    
+
     const store = stores.find(s => s.id === selectedStoreId);
     if (!store) return 0;
-    
+
     const stockItem = store.stock_info?.find(
       item => item.product_id.toString() === productId.toString()
     );
-    
+
     const warehouse = stores.find(store => store.id === 8);
     const warehouseStockItem = warehouse?.stock_info?.find(
       si => si.product_id.toString() === productId.toString()
     );
-    
+
     const totalAvailable = (stockItem?.in_stock || 0) + (warehouseStockItem?.in_stock || 0);
     return totalAvailable >= 20 ? 20 : totalAvailable;
   }, [deliveryOption, selectedStoreId, stores]);
@@ -257,36 +259,36 @@ const CartScreen = observer(({ navigation }) => {
   const getDeliveryStatus = useCallback((productId, requiredQuantity = 1) => {
     if (deliveryOption === 'delivery') return '1-2 дня';
     if (!selectedStoreId) return 'Недоступно';
-    
+
     const store = stores.find(s => s.id === selectedStoreId);
     if (!store) return 'Недоступно';
-    
+
     const stockItem = store.stock_info?.find(
       item => item.product_id.toString() === productId.toString()
     );
-    
+
     const warehouse = stores.find(store => store.id === 8);
     const warehouseStockItem = warehouse?.stock_info?.find(
       si => si.product_id.toString() === productId.toString()
     );
-    
+
     if (stockItem && stockItem.in_stock >= requiredQuantity) return 'Сегодня';
-    if (stockItem && warehouseStockItem && 
+    if (stockItem && warehouseStockItem &&
         (stockItem.in_stock + warehouseStockItem.in_stock) >= requiredQuantity) return 'до 7 дней';
     if (warehouseStockItem && warehouseStockItem.in_stock >= requiredQuantity) return 'до 7 дней';
-    
+
     return 'Недоступно';
   }, [deliveryOption, selectedStoreId, stores]);
 
   // Переключение выбора товара
   const toggleSelectItem = useCallback((itemId) => {
     if (isSwiping) return;
-    
+
     const item = cartStore.items.find(i => i.id === itemId);
     if (!item) return;
 
     const isCurrentlySelected = selectedItems.includes(itemId);
-    
+
     if (isCurrentlySelected) {
       setSelectedItems(prev => prev.filter(id => id !== itemId));
       return;
@@ -299,14 +301,14 @@ const CartScreen = observer(({ navigation }) => {
       );
       return;
     }
-  
+
     setSelectedItems(prev => [...prev, itemId]);
   }, [isSwiping, cartStore.items, checkAvailability, getAvailableQuantity, selectedItems]);
 
   // Очистка выбранных товаров при удалении из корзины
   useEffect(() => {
     setSelectedItems(prev => {
-      const validItems = prev.filter(itemId => 
+      const validItems = prev.filter(itemId =>
         cartStore.items.some(item => item.id === itemId)
       );
       return validItems;
@@ -316,12 +318,12 @@ const CartScreen = observer(({ navigation }) => {
   // Обновление количества товара
   const updateQuantity = async (itemId, newQuantity) => {
     if (newQuantity < 1) return;
-    
+
     const item = cartStore.items.find(i => i.id === itemId);
     if (!item) return;
 
     const maxAvailable = getAvailableQuantity(item.product_id);
-    
+
     if (newQuantity > maxAvailable && maxAvailable > 0) {
       newQuantity = maxAvailable;
       Alert.alert('Недостаточно товара', `Установлено максимально доступное количество: ${maxAvailable} шт.`);
@@ -329,19 +331,19 @@ const CartScreen = observer(({ navigation }) => {
 
     try {
       setUpdatingItems(prev => ({ ...prev, [itemId]: true }));
-      
+
       if (storeScrollViewRef.current) {
         currentScrollPosition.current = storeScrollViewRef.current.scrollLeft || 0;
       }
-      
+
       isUpdatingQuantity.current = true;
-      
+
       await cartStore.updateItemQuantity(itemId, newQuantity, authStore.token);
-      
+
       setTimeout(() => {
         isUpdatingQuantity.current = false;
       }, 100);
-      
+
     } catch (error) {
       Alert.alert('Ошибка', 'Не удалось обновить количество');
     } finally {
@@ -422,15 +424,15 @@ const CartScreen = observer(({ navigation }) => {
 
   // Оформление заказа
   const checkout = async () => {
-    const validSelectedItems = selectedItems.filter(itemId => 
+    const validSelectedItems = selectedItems.filter(itemId =>
       cartStore.items.some(item => item.id === itemId)
     );
-    
+
     if (validSelectedItems.length === 0) {
       Alert.alert('Ошибка', 'Выберите товары для оформления');
       return;
     }
-    
+
     if (deliveryOption === 'pickup' && !selectedStoreId) {
       Alert.alert('Выберите магазин', 'Для самовывоза необходимо выбрать магазин');
       return;
@@ -445,7 +447,7 @@ const CartScreen = observer(({ navigation }) => {
       Alert.alert('Ошибка', 'Некоторые товары стали недоступны');
       return;
     }
-    
+
     setLoading(true);
     try {
       const response = await fetch('https://api.koleso.app/api/checkout.php', {
@@ -464,13 +466,12 @@ const CartScreen = observer(({ navigation }) => {
       });
 
       const result = await response.json();
-      
+
       if (response.ok && result.success) {
         await cartStore.loadCart(authStore.token);
-        navigation.navigate('Checkout', { 
-          items: validSelectedItems, 
-          delivery: deliveryOption,  
-          storeId: deliveryOption === 'pickup' ? selectedStoreId : null,
+        navigation.navigate('Checkout', {
+          cartItems: cartStore.items.filter(item => selectedItems.includes(item.id)),
+          deliveryMethod: deliveryOption,
           orderId: result.orderId
         });
       } else {
@@ -486,7 +487,7 @@ const CartScreen = observer(({ navigation }) => {
   // Плейсхолдер для выбора магазина
   const renderStoreSelectionPlaceholder = () => {
     if (deliveryOption !== 'pickup' || loadingStores) return null;
-    
+
     if (!selectedStoreId && stores.length > 0) {
       return (
         <View style={styles.storeSelectionPlaceholder}>
@@ -494,28 +495,28 @@ const CartScreen = observer(({ navigation }) => {
         </View>
       );
     }
-    
+
     return null;
   };
 
   // Расчет цены товара со скидкой
   const calculateItemDiscountPrice = useCallback((item) => {
     if (!appliedPromo) return parseFloat(item.price || 0);
-    
-    const isDiscountApplicable = !appliedPromo.validItems || 
+
+    const isDiscountApplicable = !appliedPromo.validItems ||
       appliedPromo.validItems.includes(item.id.toString());
-    
+
     if (!isDiscountApplicable) return parseFloat(item.price || 0);
-    
+
     const itemPrice = parseFloat(item.price || 0);
-    
+
     if (appliedPromo.type === 'percentage') {
       return itemPrice * (1 - parseFloat(appliedPromo.value || 0) / 100);
     } else {
       const selectedItemsData = cartStore.items.filter(i => selectedItems.includes(i.id));
       const total = selectedItemsData.reduce((sum, i) => sum + (parseFloat(i.price || 0) * parseInt(i.quantity || 1)), 0);
       if (total <= 0) return itemPrice;
-      
+
       const itemRatio = (itemPrice * parseInt(item.quantity || 1)) / total;
       const discountValue = parseFloat(appliedPromo.value || 0) * itemRatio;
       return Math.max(0, itemPrice - discountValue);
@@ -524,13 +525,13 @@ const CartScreen = observer(({ navigation }) => {
 
   // Расчет общей суммы со скидкой
   const calculateTotalWithDiscount = useMemo(() => {
-    const selectedCartItems = cartStore.items.filter(item => 
+    const selectedCartItems = cartStore.items.filter(item =>
       selectedItems.includes(item.id)
     );
 
     if (!appliedPromo) {
       return selectedCartItems.reduce(
-        (sum, item) => sum + (parseFloat(item.price || 0) * parseInt(item.quantity || 1)), 
+        (sum, item) => sum + (parseFloat(item.price || 0) * parseInt(item.quantity || 1)),
         0
       );
     }
@@ -540,22 +541,22 @@ const CartScreen = observer(({ navigation }) => {
       itemsToApplyDiscount = selectedCartItems.filter(item =>
         appliedPromo.validItems.includes(item.id.toString())
       );
-      
+
       if (itemsToApplyDiscount.length === 0) {
         return selectedCartItems.reduce(
-          (sum, item) => sum + (parseFloat(item.price || 0) * parseInt(item.quantity || 1)), 
+          (sum, item) => sum + (parseFloat(item.price || 0) * parseInt(item.quantity || 1)),
           0
         );
       }
     }
 
     const subtotal = selectedCartItems.reduce(
-      (sum, item) => sum + (parseFloat(item.price || 0) * parseInt(item.quantity || 1)), 
+      (sum, item) => sum + (parseFloat(item.price || 0) * parseInt(item.quantity || 1)),
       0
     );
 
     const discountSubtotal = itemsToApplyDiscount.reduce(
-      (sum, item) => sum + (parseFloat(item.price || 0) * parseInt(item.quantity || 1)), 
+      (sum, item) => sum + (parseFloat(item.price || 0) * parseInt(item.quantity || 1)),
       0
     );
 
@@ -569,15 +570,15 @@ const CartScreen = observer(({ navigation }) => {
   // Проверка валидности скидки
   const hasValidDiscount = useMemo(() => {
     if (!appliedPromo) return false;
-    
+
     if (!appliedPromo.validItems || appliedPromo.validItems.length === 0) {
       return true;
     }
-    
-    const selectedCartItems = cartStore.items.filter(item => 
+
+    const selectedCartItems = cartStore.items.filter(item =>
       selectedItems.includes(item.id)
     );
-    
+
     return selectedCartItems.some(item =>
       appliedPromo.validItems.includes(item.id.toString())
     );
@@ -594,7 +595,7 @@ const CartScreen = observer(({ navigation }) => {
   // Рендер элемента корзины
   const renderItem = useCallback(({ item }) => {
     if (!item) return null;
-    
+
     const isSelected = selectedItems.includes(item.id);
     const isAvailable = checkAvailability(item.product_id, item.quantity);
     const maxAvailable = getAvailableQuantity(item.product_id);
@@ -603,7 +604,7 @@ const CartScreen = observer(({ navigation }) => {
     const hasDiscount = appliedPromo && Math.abs(discountedPrice - item.price) > 0.01;
 
     const handleProductPress = () => {
-      navigation.navigate('ProductModal', { 
+      navigation.navigate('ProductModal', {
         productId: item.product_id,
         fromCart: true,
         modal: true
@@ -615,7 +616,7 @@ const CartScreen = observer(({ navigation }) => {
         friction={2}
         rightThreshold={40}
         renderRightActions={() => (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.deleteAction}
             onPress={() => removeSingleItem(item.id)}
             activeOpacity={0.8}
@@ -650,7 +651,7 @@ const CartScreen = observer(({ navigation }) => {
             <TouchableOpacity onPress={handleProductPress} activeOpacity={0.7}>
               <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
             </TouchableOpacity>
-            
+
             <View style={styles.itemDetails}>
               <View style={styles.priceContainer}>
                 {hasDiscount ? (
@@ -662,8 +663,8 @@ const CartScreen = observer(({ navigation }) => {
                   <Text style={styles.itemPrice}>{item.price}₽</Text>
                 )}
               </View>
-              
-              <View style={[styles.statusBadge, 
+
+              <View style={[styles.statusBadge,
                 deliveryStatus === 'Сегодня' && styles.statusToday,
                 deliveryStatus === '1-2 дня' && styles.statusDelivery,
                 deliveryStatus === 'до 7 дней' && styles.statusLater,
@@ -679,14 +680,14 @@ const CartScreen = observer(({ navigation }) => {
 
             <View style={styles.quantitySection}>
               <View style={styles.quantityControls}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={[styles.quantityButton, item.quantity <= 1 && styles.quantityButtonDisabled]}
                   onPress={() => updateQuantity(item.id, item.quantity - 1)}
                   disabled={item.quantity <= 1 || updatingItems[item.id]}
                 >
                   <Ionicons name="remove" size={20} color={item.quantity <= 1 ? colors.textTertiary : colors.text} />
                 </TouchableOpacity>
-                
+
                 <View style={styles.quantityDisplay}>
                   {updatingItems[item.id] ? (
                     <ActivityIndicator size="small" color={colors.text} />
@@ -694,8 +695,8 @@ const CartScreen = observer(({ navigation }) => {
                     <Text style={styles.quantityText}>{item.quantity}</Text>
                   )}
                 </View>
-                
-                <TouchableOpacity 
+
+                <TouchableOpacity
                   style={[styles.quantityButton, item.quantity >= maxAvailable && styles.quantityButtonDisabled]}
                   onPress={() => updateQuantity(item.id, item.quantity + 1)}
                   disabled={item.quantity >= maxAvailable || updatingItems[item.id]}
@@ -703,7 +704,7 @@ const CartScreen = observer(({ navigation }) => {
                   <Ionicons name="add" size={20} color={item.quantity >= maxAvailable ? colors.textTertiary : colors.text} />
                 </TouchableOpacity>
               </View>
-              
+
               <Text style={styles.totalPrice}>
                 {(hasDiscount ? discountedPrice * item.quantity : item.price * item.quantity).toFixed(0)}₽
               </Text>
@@ -721,19 +722,19 @@ const CartScreen = observer(({ navigation }) => {
       let allAvailable = true;
       let someAvailable = false;
       let someAvailableFromWarehouse = false;
-      
+
       for (const item of allItems) {
         const stockItem = store.stock_info?.find(
           si => si.product_id.toString() === item.product_id.toString()
         );
-        
+
         const warehouse = stores.find(s => s.id === 8);
         const warehouseStockItem = warehouse?.stock_info?.find(
           si => si.product_id.toString() === item.product_id.toString()
         );
-        
+
         const totalAvailable = (stockItem?.in_stock || 0) + (warehouseStockItem?.in_stock || 0);
-        
+
         if (totalAvailable >= item.quantity) {
           someAvailable = true;
           if (warehouseStockItem && warehouseStockItem.in_stock > 0) {
@@ -746,15 +747,15 @@ const CartScreen = observer(({ navigation }) => {
           allAvailable = false;
         }
       }
-      
+
       if (allAvailable) return { status: 'full', text: 'Все есть' };
       if (someAvailableFromWarehouse) return { status: 'partial', text: 'Частично' };
       if (someAvailable) return { status: 'partial', text: 'Частично' };
       return { status: 'none', text: 'Нет' };
     };
-    
+
     const availability = calculateAvailability(store);
-    
+
     return (
       <Pressable
         style={({ pressed }) => [
@@ -778,10 +779,10 @@ const CartScreen = observer(({ navigation }) => {
   const StoreSelection = React.memo(({ stores, selectedStoreId, onStoreSelect }) => {
     const [isLayoutReady, setIsLayoutReady] = useState(false);
     const [forceScrollUpdate, setForceScrollUpdate] = useState(0);
-    
+
     const handleStoreLayout = useCallback((storeId, layout) => {
       storePositions.current[storeId] = layout;
-      
+
       if (Object.keys(storePositions.current).length === stores.length) {
         setIsLayoutReady(true);
       }
@@ -793,7 +794,7 @@ const CartScreen = observer(({ navigation }) => {
         const { x, width } = storePositions.current[selectedStoreId];
         const scrollViewWidth = Dimensions.get('window').width;
         const scrollToX = x - (scrollViewWidth / 2) + (width / 2);
-        
+
         setTimeout(() => {
           if (storeScrollViewRef.current && !isUpdatingQuantity.current) {
             storeScrollViewRef.current.scrollTo({
@@ -844,7 +845,7 @@ const CartScreen = observer(({ navigation }) => {
         }}
       >
         {stores.map(store => (
-          <StoreItem 
+          <StoreItem
             key={`store-${store.id}`}
             store={store}
             isSelected={selectedStoreId === store.id}
@@ -861,7 +862,7 @@ const CartScreen = observer(({ navigation }) => {
     return (
       <View style={styles.deliverySection}>
         <View style={styles.deliveryTabs}>
-          <Pressable 
+          <Pressable
             style={({ pressed }) => [
               styles.deliveryTab,
               deliveryOption === 'pickup' && styles.deliveryTabActive,
@@ -869,10 +870,10 @@ const CartScreen = observer(({ navigation }) => {
             ]}
             onPress={() => onSelectOption('pickup')}
           >
-            <Ionicons 
-              name="storefront-outline" 
-              size={22} 
-              color={deliveryOption === 'pickup' ? '#fff' : colors.textSecondary} 
+            <Ionicons
+              name="storefront-outline"
+              size={22}
+              color={deliveryOption === 'pickup' ? '#fff' : colors.textSecondary}
             />
             <Text style={[
               styles.deliveryTabText,
@@ -881,8 +882,8 @@ const CartScreen = observer(({ navigation }) => {
               Самовывоз
             </Text>
           </Pressable>
-          
-          <Pressable 
+
+          <Pressable
             style={({ pressed }) => [
               styles.deliveryTab,
               deliveryOption === 'delivery' && styles.deliveryTabActive,
@@ -890,10 +891,10 @@ const CartScreen = observer(({ navigation }) => {
             ]}
             onPress={() => onSelectOption('delivery')}
           >
-            <Ionicons 
-              name="car-outline" 
-              size={22} 
-              color={deliveryOption === 'delivery' ? '#fff' : colors.textSecondary} 
+            <Ionicons
+              name="car-outline"
+              size={22}
+              color={deliveryOption === 'delivery' ? '#fff' : colors.textSecondary}
             />
             <Text style={[
               styles.deliveryTabText,
@@ -946,7 +947,7 @@ const CartScreen = observer(({ navigation }) => {
                 autoCapitalize="characters"
                 autoCorrect={false}
               />
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[
                   styles.promoButton,
                   (!promoCode || isCheckingPromo) && styles.promoButtonDisabled
@@ -971,7 +972,7 @@ const CartScreen = observer(({ navigation }) => {
                   Промокод "{appliedPromo.code}" • Скидка {appliedPromo.value}{appliedPromo.type === 'percentage' ? '%' : '₽'}
                 </Text>
               </View>
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={clearPromo}
                 style={styles.clearPromoButton}
                 activeOpacity={0.7}
@@ -997,7 +998,7 @@ const CartScreen = observer(({ navigation }) => {
               </View>
             </View>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.checkoutButton, loading && styles.checkoutButtonDisabled]}
               onPress={checkout}
               disabled={loading}
@@ -1016,7 +1017,7 @@ const CartScreen = observer(({ navigation }) => {
 
   // Выбрать все товары
   const selectAllItems = () => {
-    const availableItems = cartStore.items.filter(item => 
+    const availableItems = cartStore.items.filter(item =>
       checkAvailability(item.product_id, item.quantity)
     );
     setSelectedItems(availableItems.map(item => item.id));
@@ -1043,15 +1044,15 @@ const CartScreen = observer(({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
-      
+
       {cartStore.items.length === 0 ? (
         <View style={styles.emptyCart}>
           <View style={styles.emptyIconWrapper}>
-                   <Ionicons name="bag-outline" size={64} color={colors.textTertiary} />
+            <Ionicons name="bag-outline" size={64} color={colors.textTertiary} />
           </View>
           <Text style={styles.emptyTitle}>Корзина пуста</Text>
           <Text style={styles.emptySubtitle}>Добавьте товары для оформления заказа</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.shopButton}
             onPress={() => navigation.goBack()}
           >
@@ -1065,7 +1066,7 @@ const CartScreen = observer(({ navigation }) => {
             <Text style={styles.headerTitle}>Корзина</Text>
             <View style={styles.headerActions}>
               {selectedItems.length > 0 && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={removeItems}
                   style={styles.deleteButton}
                 >
@@ -1090,7 +1091,7 @@ const CartScreen = observer(({ navigation }) => {
             keyExtractor={item => `cart-${item.id}`}
             contentContainerStyle={styles.listContent}
             ListHeaderComponent={
-              <DeliveryOptions 
+              <DeliveryOptions
                 deliveryOption={deliveryOption}
                 onSelectOption={handleDeliveryOptionChange}
               />

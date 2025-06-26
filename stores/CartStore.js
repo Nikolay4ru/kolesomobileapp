@@ -1,9 +1,9 @@
 import { makeAutoObservable } from 'mobx';
 
-
 class CartStore {
   items = [];
   loading = false;
+  selectedStore = null; // <-- Добавили выбранный магазин
 
   constructor() {
     makeAutoObservable(this);
@@ -67,9 +67,22 @@ class CartStore {
     }
   }
 
+  // Метод для установки выбранного магазина
+  setSelectedStore(store) {
+    this.selectedStore = store;
+  }
+
+  // Метод для очистки выбранного магазина (по желанию)
+  clearSelectedStore() {
+    this.selectedStore = null;
+  }
 
   get totalItems() {
     return this.items.reduce((sum, item) => sum + item.quantity, 0);
+  }
+
+  get totalAmount() {
+    return this.items.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 1), 0);
   }
 
   async updateItemQuantity(itemId, quantity, token) {
@@ -115,6 +128,11 @@ class CartStore {
     } catch (error) {
       throw error;
     }
+  }
+
+  clearCart() {
+    this.items = [];
+    this.selectedStore = null;
   }
 }
 
