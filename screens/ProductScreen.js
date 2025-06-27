@@ -25,6 +25,7 @@ import { observer } from 'mobx-react-lite';
 import { useStores } from '../useStores';
 import CustomHeader from "../components/CustomHeader";
 import ShareHelper from '../components/Share';
+import CompatibleCarsSection from '../components/CompatibleCarsSection';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Carousel, {
   ICarouselInstance,
@@ -70,10 +71,46 @@ const ProductScreen = observer(() => {
   const scrollY = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
+
+
+  // --- Список совместимости автомобилей ---
+  const [compatibleCars, setCompatibleCars] = useState([]);
+  const [compatibleCarsLoading, setCompatibleCarsLoading] = useState(false);
+  const [compatibleCarsError, setCompatibleCarsError] = useState(null);
+
   
   const width = Dimensions.get("window").width;
   const ref = useRef(null);
   const animatedIndex = useSharedValue(0);
+
+
+
+  // Загрузка совместимых автомобилей
+  useEffect(() => {
+    if (!product) return;
+    setCompatibleCars([]);
+    setCompatibleCarsError(null);
+
+    const fetchCompatibleCars = async () => {
+      setCompatibleCarsLoading(true);
+      try {
+        const resp = await fetch(`https://api.koleso.app/api/product.php?action=compatible_cars&product_id=${product.id}`);
+        const data = await resp.json();
+        if (data.success) {
+          setCompatibleCars(data.cars || []);
+        } else {
+          setCompatibleCarsError(data.error || 'Не удалось получить совместимость');
+        }
+      } catch (e) {
+        setCompatibleCarsError('Ошибка загрузки совместимости');
+      } finally {
+        setCompatibleCarsLoading(false);
+      }
+    };
+
+    fetchCompatibleCars();
+  }, [product?.id]);
+
 
   // Получение максимального доступного количества товара
   const getMaxAvailableQuantity = useCallback(() => {
@@ -1246,27 +1283,13 @@ const ProductScreen = observer(() => {
           </View>
         )}
 
-        {/* Товары той же модели (для шин) */}
-        {sameBrandProducts.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionIcon}>
-                <Ionicons name="layers-outline" size={22} color={colors.primary} />
-              </View>
-              <Text style={styles.sectionTitle}>Та же модель</Text>
-            </View>
-            <FlatList
-              data={sameBrandProducts}
-              renderItem={renderProductItem}
-              keyExtractor={(item) => item.id.toString()}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.productsList}
-              snapToInterval={width * 0.45 + 12}
-              decelerationRate="fast"
-            />
-          </View>
-        )}
+        <CompatibleCarsSection
+  cars={compatibleCars}
+  loading={compatibleCarsLoading}
+  error={compatibleCarsError}
+  colors={colors}
+  theme={theme}
+/>
 
         {/* Похожие товары */}
         {similarProducts.length > 0 && (
