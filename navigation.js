@@ -363,8 +363,8 @@ const CustomTabBar = observer(({ state, descriptors, navigation }) => {
       left: 0,
       right: 0,
       bottom: 0,
-      borderTopLeftRadius: 24,
-      borderTopRightRadius: 24,
+      borderTopLeftRadius: 5,
+      borderTopRightRadius: 5,
       overflow: 'hidden',
     },
     tabBar: {
@@ -376,8 +376,8 @@ const CustomTabBar = observer(({ state, descriptors, navigation }) => {
         ios: theme === 'dark' ? 'rgba(28, 28, 30, 0.9)' : 'rgba(255, 255, 255, 0.9)',
         android: colors.tabBar,
       }),
-      borderTopLeftRadius: 24,
-      borderTopRightRadius: 24,
+      borderTopLeftRadius: 5,
+      borderTopRightRadius: 5,
       paddingTop: 8,
       paddingBottom: Platform.select({
         ios: 20,

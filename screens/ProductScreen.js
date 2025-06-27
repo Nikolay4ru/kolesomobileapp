@@ -750,7 +750,7 @@ const ProductScreen = observer(() => {
 
   return (
     
-    <View style={[styles.container]}>
+    <View style={[styles.container, { paddingTop: statusBarHeight }]}>
       <CustomHeader 
         title=""
         navigation={navigation}
@@ -781,9 +781,7 @@ const ProductScreen = observer(() => {
         withBackButton
       />
      
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.headerBackground }}>
-      
-      
+    
      
       <ScrollView 
     contentContainerStyle={[
@@ -1402,7 +1400,7 @@ const ProductScreen = observer(() => {
           </View>
         </View>
       </View>
-      </SafeAreaView>
+      
     </View>
   );
 });
