@@ -194,6 +194,7 @@ const CheckoutScreen = observer(() => {
         ? 'https://api.koleso.app/api/order-checkout.php?action=create-order-with-sbp'
         : 'https://api.koleso.app/api/order-checkout.php?action=create-order';
         console.log(apiUrl);
+        console.log(JSON.stringify(orderData));
       // Создаем заказ
       const response = await axios.post(
         apiUrl,
@@ -205,33 +206,38 @@ const CheckoutScreen = observer(() => {
           },
         }
       );
-
+      
       if (response.data && response.data.success) {
         const orderId = response.data.orderId;
 
-        if (paymentMethod === 'sbp' && response.data.sbpData) {
-          navigation.navigate('SBPPayment', {
-  paymentData: {
-    orderId,
-    qrCode: response.data.sbpData.qrCode,
-    amount: cartStore.totalAmount,
-    sbpOrderId: orderId // если нужно
-  },
-  orderNumber: orderId,
-  onSuccess: () => {
-    cartStore.clearCart();
-    navigation.replace('OrderSuccess', { 
-      orderId,
-      deliveryType,
-      deliveryDate: deliveryType === 'delivery' ? deliveryDate : null
+        if (paymentMethod === 'sbp' && response.data.qrCode) {
+    // Переходим на экран оплаты СБП
+    navigation.navigate('SBPPayment', {
+      paymentData: {
+        orderId,
+        qrCode: response.data.qrCode.image, // Используем изображение QR-кода
+        amount: response.data.amount || cartStore.totalAmount,
+        sbpOrderId: response.data.sbpOrderId,
+        qrPayload: response.data.qrCode.payload, // Сохраняем payload для открытия в банке
+        expiresAt: response.data.expiresAt
+      },
+      orderNumber: response.data.orderNumber || orderId,
+      onSuccess: () => {
+        cartStore.clearCart();
+        navigation.replace('OrderSuccess', { 
+          orderId,
+          deliveryType,
+          orderNumber: response.data.orderNumber || orderId,
+          deliveryDate: deliveryType === 'delivery' ? deliveryDate : null
+        });
+      }
     });
-  }
-});
-        } else {
+  } else {
           cartStore.clearCart();
           navigation.replace('OrderSuccess', { 
             orderId,
             deliveryType,
+             orderNumber: response.data.orderNumber || orderId,
             deliveryDate: deliveryType === 'delivery' ? deliveryDate : null
           });
         }

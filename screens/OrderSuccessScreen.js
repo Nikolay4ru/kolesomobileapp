@@ -1,451 +1,493 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  ActivityIndicator,
+  SafeAreaView,
   Animated,
-  Dimensions
+  Dimensions,
+  ScrollView,
+  Platform,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { observer } from 'mobx-react-lite';
-import { useStores } from '../useStores';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { useTheme } from '../contexts/ThemeContext';
+import { useThemedStyles } from '../hooks/useThemedStyles';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { Picker } from '@react-native-picker/picker';
+import LottieView from 'lottie-react-native';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
-const CheckoutScreen = observer(() => {
-  const { cartStore, authStore } = useStores();
+const OrderSuccessScreen = () => {
   const navigation = useNavigation();
+  const route = useRoute();
+  const insets = useSafeAreaInsets();
+  const { colors, theme } = useTheme();
+  const styles = useThemedStyles(themedStyles);
   
-  // Состояния формы
-  const [name, setName] = useState(authStore.user?.name || '');
-  const [phone, setPhone] = useState(authStore.user?.phone || '');
-  const [email, setEmail] = useState(authStore.user?.email || '');
-  const [deliveryType, setDeliveryType] = useState('pickup');
-  const [address, setAddress] = useState('');
-  const [comment, setComment] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('card');
-  const [deliveryDate, setDeliveryDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const { orderId, orderNumber, deliveryType, deliveryDate } = route.params || {};
   
-  // Анимация
+  // Анимации
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
-
-  // Запуск анимации при монтировании
+  const scaleAnim = useRef(new Animated.Value(0.3)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+  const checkmarkScale = useRef(new Animated.Value(0)).current;
+  
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
+    // Запускаем анимации последовательно
+    Animated.sequence([
+      // Сначала показываем основной контент
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          tension: 20,
+          friction: 7,
+          useNativeDriver: true,
+        }),
+      ]),
+      // Затем анимируем галочку
+      Animated.spring(checkmarkScale, {
         toValue: 1,
-        duration: 500,
+        tension: 50,
+        friction: 3,
+        delay: 200,
         useNativeDriver: true,
       }),
+      // И наконец, показываем детали
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 500,
+        duration: 400,
+        delay: 100,
         useNativeDriver: true,
-      })
+      }),
     ]).start();
   }, []);
-
-  // Обработчик оформления заказа
-  const handleCheckout = async () => {
-    if (!name || !phone) {
-      Alert.alert('Ошибка', 'Пожалуйста, заполните обязательные поля');
-      return;
-    }
-
-    setLoading(true);
-    
-    try {
-      const orderData = {
-        userId: authStore.user.id,
-        items: cartStore.items.map(item => ({
-          id: item.id,
-          quantity: item.quantity
-        })),
-        customer: { name, phone, email },
-        delivery: {
-          type: deliveryType,
-          address: deliveryType === 'delivery' ? address : null,
-          date: deliveryDate.toISOString()
-        },
-        payment: {
-          method: paymentMethod
-        },
-        comment,
-        promoCode: cartStore.appliedPromo?.code || null
-      };
-
-      // Здесь должен быть реальный API-запрос
-      const response = await fetch('https://api.yourstore.com/checkout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authStore.token}`
-        },
-        body: JSON.stringify(orderData)
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        // Очищаем корзину после успешного оформления
-        await cartStore.clearCart(authStore.token);
-        
-        // Переходим на экран успешного оформления
-        navigation.navigate('OrderSuccess', { 
-          orderId: result.orderId,
-          deliveryType,
-          deliveryDate
-        });
-      } else {
-        throw new Error(result.message || 'Ошибка оформления заказа');
-      }
-    } catch (error) {
-      Alert.alert('Ошибка', error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Форматирование даты
-  const formatDate = (date) => {
-    return date.toLocaleDateString('ru-RU', {
+  
+  const formatDeliveryDate = (date) => {
+    if (!date) return null;
+    const d = new Date(date);
+    return d.toLocaleDateString('ru-RU', {
       day: 'numeric',
       month: 'long',
       year: 'numeric'
     });
   };
-
-  // Обработчик изменения даты
-  const handleDateChange = (event, selectedDate) => {
-    setShowDatePicker(false);
-    if (selectedDate) {
-      setDeliveryDate(selectedDate);
-    }
+  
+  const handleGoHome = () => {
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Home' }],
+    });
   };
-
+  
+  const handleViewOrder = () => {
+    navigation.reset({
+      index: 1,
+      routes: [
+        { name: 'Home' },
+        { name: 'Profile', params: { screen: 'Orders' } }
+      ],
+    });
+  };
+  
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <Animated.View 
-          style={[
-            styles.content,
-            { 
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }] 
-            }
-          ]}
+    <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.gradient}>
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
         >
-          {/* Заголовок */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Оформление заказа</Text>
-            <Text style={styles.subtitle}>
-              {cartStore.items.length} товара на {cartStore.totalAmount.toFixed(0)} ₽
-            </Text>
-          </View>
-
-          {/* Контактная информация */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Контактная информация</Text>
-            <View style={styles.inputContainer}>
-              <Ionicons name="person-outline" size={20} color="#666" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Имя *"
-                value={name}
-                onChangeText={setName}
-              />
-            </View>
-            <View style={styles.inputContainer}>
-              <Ionicons name="call-outline" size={20} color="#666" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Телефон *"
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-              />
-            </View>
-            <View style={styles.inputContainer}>
-              <Ionicons name="mail-outline" size={20} color="#666" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-              />
-            </View>
-          </View>
-
-          {/* Способ получения */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Способ получения</Text>
-            <View style={styles.deliveryOptions}>
-              <TouchableOpacity
-                style={[
-                  styles.deliveryOption,
-                  deliveryType === 'pickup' && styles.deliveryOptionActive
-                ]}
-                onPress={() => setDeliveryType('pickup')}
+          {/* Success Animation */}
+          <Animated.View 
+            style={[
+              styles.successContainer,
+              {
+                opacity: fadeAnim,
+                transform: [{ scale: scaleAnim }]
+              }
+            ]}
+          >
+            <View style={styles.checkmarkContainer}>
+              <View
+                style={styles.checkmarkGradient}
               >
-                <Ionicons 
-                  name="storefront-outline" 
-                  size={24} 
-                  color={deliveryType === 'pickup' ? '#006363' : '#666'} 
-                />
-                <Text style={styles.deliveryOptionText}>Самовывоз</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.deliveryOption,
-                  deliveryType === 'delivery' && styles.deliveryOptionActive
-                ]}
-                onPress={() => setDeliveryType('delivery')}
-              >
-                <Ionicons 
-                  name="car-outline" 
-                  size={24} 
-                  color={deliveryType === 'delivery' ? '#006363' : '#666'} 
-                />
-                <Text style={styles.deliveryOptionText}>Доставка</Text>
-              </TouchableOpacity>
-            </View>
-
-            {deliveryType === 'delivery' && (
-              <>
-                <View style={styles.inputContainer}>
-                  <Ionicons name="location-outline" size={20} color="#666" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Адрес доставки *"
-                    value={address}
-                    onChangeText={setAddress}
+                <Animated.View
+                  style={{
+                    transform: [{ scale: checkmarkScale }]
+                  }}
+                >
+                  <Ionicons 
+                    name="checkmark-sharp" 
+                    size={60} 
+                    color="#ffffff"
                   />
+                </Animated.View>
+              </View>
+              
+              {/* Ripple effect */}
+              <Animated.View 
+                style={[
+                  styles.ripple,
+                  {
+                    transform: [{ scale: checkmarkScale }],
+                    opacity: fadeAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.6, 0],
+                    }),
+                  }
+                ]}
+              />
+            </View>
+            
+            <Text style={styles.successTitle}>Заказ успешно оформлен!</Text>
+            <Text style={styles.successSubtitle}>
+              Спасибо за ваш заказ
+            </Text>
+          </Animated.View>
+          
+          {/* Order Details */}
+          <Animated.View 
+            style={[
+              styles.detailsContainer,
+              {
+                opacity: fadeAnim,
+                transform: [{ translateY: slideAnim }]
+              }
+            ]}
+          >
+            <View style={styles.orderCard}>
+              <View style={styles.orderHeader}>
+                <Text style={styles.orderNumberLabel}>Номер заказа</Text>
+                <Text style={styles.orderNumber}>№ {orderNumber || orderId}</Text>
+              </View>
+              
+              <View style={styles.divider} />
+              
+              <View style={styles.orderDetails}>
+                <View style={styles.detailRow}>
+                  <View style={styles.detailIcon}>
+                    <Ionicons 
+                      name={deliveryType === 'delivery' ? 'car-outline' : 'storefront-outline'} 
+                      size={24} 
+                      color={colors.primary} 
+                    />
+                  </View>
+                  <View style={styles.detailContent}>
+                    <Text style={styles.detailLabel}>Способ получения</Text>
+                    <Text style={styles.detailValue}>
+                      {deliveryType === 'delivery' ? 'Доставка' : 'Самовывоз'}
+                    </Text>
+                  </View>
                 </View>
                 
-                <TouchableOpacity 
-                  style={styles.datePickerButton}
-                  onPress={() => setShowDatePicker(true)}
-                >
-                  <Ionicons name="calendar-outline" size={20} color="#006363" />
-                  <Text style={styles.dateText}>
-                    {formatDate(deliveryDate)}
-                  </Text>
-                  <Ionicons name="chevron-down" size={16} color="#666" />
-                </TouchableOpacity>
-
-                {showDatePicker && (
-                  <DateTimePicker
-                    value={deliveryDate}
-                    mode="date"
-                    display="default"
-                    onChange={handleDateChange}
-                    minimumDate={new Date()}
-                  />
+                {deliveryDate && (
+                  <View style={styles.detailRow}>
+                    <View style={styles.detailIcon}>
+                      <Ionicons 
+                        name="calendar-outline" 
+                        size={24} 
+                        color={colors.primary} 
+                      />
+                    </View>
+                    <View style={styles.detailContent}>
+                      <Text style={styles.detailLabel}>Дата доставки</Text>
+                      <Text style={styles.detailValue}>
+                        {formatDeliveryDate(deliveryDate)}
+                      </Text>
+                    </View>
+                  </View>
                 )}
-              </>
-            )}
-          </View>
-
-          {/* Способ оплаты */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Способ оплаты</Text>
-            <View style={styles.paymentPickerContainer}>
-              <Picker
-                selectedValue={paymentMethod}
-                onValueChange={(itemValue) => setPaymentMethod(itemValue)}
-                style={styles.picker}
-                dropdownIconColor="#006363"
-              >
-                <Picker.Item label="Картой онлайн" value="card" />
-                <Picker.Item label="Наличными при получении" value="cash" />
-                {deliveryType === 'pickup' && (
-                  <Picker.Item label="Картой при получении" value="card_on_delivery" />
-                )}
-              </Picker>
+                
+                <View style={styles.detailRow}>
+                  <View style={styles.detailIcon}>
+                    <Ionicons 
+                      name="time-outline" 
+                      size={24} 
+                      color={colors.primary} 
+                    />
+                  </View>
+                  <View style={styles.detailContent}>
+                    <Text style={styles.detailLabel}>Статус заказа</Text>
+                    <View style={styles.statusContainer}>
+                      <View style={[styles.statusDot, { backgroundColor: '#22c55e' }]} />
+                      <Text style={styles.detailValue}>В обработке</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
             </View>
-          </View>
-
-          {/* Комментарий */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Комментарий к заказу</Text>
-            <TextInput
-              style={[styles.input, styles.commentInput]}
-              placeholder="Ваши пожелания..."
-              value={comment}
-              onChangeText={setComment}
-              multiline
-              numberOfLines={4}
-            />
-          </View>
-
-          {/* Кнопка оформления */}
-          <TouchableOpacity
-            style={styles.checkoutButton}
-            onPress={handleCheckout}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text style={styles.checkoutButtonText}>
-                Оформить заказ • {cartStore.totalAmount.toFixed(0)} ₽
+            
+            {/* Info Card */}
+            <View style={styles.infoCard}>
+              <Ionicons 
+                name="information-circle" 
+                size={20} 
+                color={colors.primary} 
+                style={styles.infoIcon}
+              />
+              <Text style={styles.infoText}>
+                Мы отправили подтверждение заказа на ваш телефон. 
+                Вы можете отслеживать статус заказа в разделе "Мои заказы".
               </Text>
-            )}
-          </TouchableOpacity>
-        </Animated.View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            </View>
+          </Animated.View>
+          
+          {/* Action Buttons */}
+          <Animated.View 
+            style={[
+              styles.buttonsContainer,
+              {
+                opacity: fadeAnim,
+                transform: [{ translateY: slideAnim }]
+              }
+            ]}
+          >
+            <TouchableOpacity 
+              style={styles.primaryButton}
+              onPress={handleViewOrder}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.primaryButtonText}>Перейти к заказу</Text>
+              <Ionicons name="arrow-forward" size={20} color="#ffffff" style={styles.buttonIcon} />
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.secondaryButton}
+              onPress={handleGoHome}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.secondaryButtonText}>На главную</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </ScrollView>
+      </View>
+    </SafeAreaView>
   );
-});
+};
 
-const styles = StyleSheet.create({
+const themedStyles = (colors, theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: colors.background,
   },
-  scrollContainer: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  content: {
+  gradient: {
     flex: 1,
+    backgroundColor: theme === 'dark' ? '#0d0d0d' : '#f5f5f5',
   },
-  header: {
-    marginBottom: 30,
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingBottom: Platform.select({
+      ios: 88 + 20, // TabBar height + padding
+      android: 56 + 20,
+    }),
   },
-  title: {
+  successContainer: {
+    alignItems: 'center',
+    marginTop: 40,
+    marginBottom: 40,
+  },
+  checkmarkContainer: {
+    width: 120,
+    height: 120,
+    marginBottom: 24,
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkmarkGradient: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#22c55e',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#22c55e',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.4,
+        shadowRadius: 16,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+  },
+  ripple: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: '#22c55e',
+  },
+  successTitle: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#333',
-    marginBottom: 5,
+    color: colors.text,
+    marginBottom: 8,
+    textAlign: 'center',
   },
-  subtitle: {
+  successSubtitle: {
     fontSize: 16,
-    color: '#666',
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
-  section: {
-    backgroundColor: 'white',
+  detailsContainer: {
+    marginBottom: 30,
+  },
+  orderCard: {
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    padding: 24,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  orderHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  orderNumberLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  orderNumber: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginHorizontal: -24,
+  },
+  orderDetails: {
+    marginTop: 20,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  detailIcon: {
+    width: 48,
+    height: 48,
     borderRadius: 12,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
   },
-  sectionTitle: {
-    fontSize: 18,
+  detailContent: {
+    flex: 1,
+  },
+  detailLabel: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 2,
+  },
+  detailValue: {
+    fontSize: 16,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 15,
+    color: colors.text,
   },
-  inputContainer: {
+  statusContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    marginBottom: 20,
-    paddingBottom: 10,
   },
-  inputIcon: {
-    marginRight: 10,
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
   },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    color: '#333',
-    paddingVertical: 8,
-  },
-  commentInput: {
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 8,
-    padding: 15,
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  deliveryOptions: {
+  infoCard: {
+    backgroundColor: colors.primaryLight,
+    borderRadius: 16,
+    padding: 16,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
+    alignItems: 'flex-start',
   },
-  deliveryOption: {
+  infoIcon: {
+    marginRight: 12,
+    marginTop: 2,
+  },
+  infoText: {
     flex: 1,
+    fontSize: 14,
+    color: colors.primary,
+    lineHeight: 20,
+  },
+  buttonsContainer: {
+    marginTop: 20,
+  },
+  primaryButton: {
+    backgroundColor: colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 15,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#eee',
-    marginHorizontal: 5,
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    marginBottom: 12,
+    borderRadius: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
-  deliveryOptionActive: {
-    borderColor: '#006363',
-    backgroundColor: '#f0faf9',
-  },
-  deliveryOptionText: {
-    marginLeft: 8,
-    fontSize: 16,
-    color: '#333',
-  },
-  datePickerButton: {
+  buttonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 15,
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 8,
-    marginBottom: 20,
+    justifyContent: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 24,
   },
-  dateText: {
-    flex: 1,
-    marginLeft: 10,
-    fontSize: 16,
-    color: '#333',
+  primaryButtonText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginRight: 8,
   },
-  paymentPickerContainer: {
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 8,
-    overflow: 'hidden',
+  buttonIcon: {
+    marginLeft: 4,
   },
-  picker: {
-    width: '100%',
-    color: '#333',
-  },
-  checkoutButton: {
-    backgroundColor: '#006363',
-    borderRadius: 8,
-    padding: 18,
+  secondaryButton: {
+    paddingVertical: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 10,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: colors.border,
   },
-  checkoutButtonText: {
-    color: 'white',
-    fontSize: 18,
+  secondaryButtonText: {
+    fontSize: 17,
     fontWeight: '600',
+    color: colors.text,
   },
 });
 
-export default CheckoutScreen;
+export default OrderSuccessScreen;

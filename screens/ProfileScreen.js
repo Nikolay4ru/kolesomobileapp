@@ -22,7 +22,7 @@ const ProfileScreen = observer(() => {
   
   const [adminMode, setAdminMode] = useState(false);
   const [biometryType, setBiometryType] = useState(null);
-
+console.log(authStore);
   // Проверяем доступность биометрии при монтировании компонента
   useEffect(() => {
     checkBiometrics();
@@ -377,7 +377,7 @@ const ProfileScreen = observer(() => {
                 onPress={() => navigation.navigate('Admin', { screen: 'ScanProducts' })}
                 isAdmin
               />
-              {authStore.user?.storeId === 8 && (
+              {authStore.admin?.storeId === 8 && (
                 <MenuItem 
                   icon="video-library" 
                   title="Загрузка видео" 

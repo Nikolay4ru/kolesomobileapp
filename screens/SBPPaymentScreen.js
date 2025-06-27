@@ -1,4 +1,3 @@
-// SBPPaymentScreen.js - Исправленный экран оплаты через СБП
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -12,411 +11,386 @@ import {
   Animated,
   Dimensions,
   BackHandler,
-  useColorScheme,
+  SafeAreaView,
+  ScrollView,
+  Platform,
 } from 'react-native';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { MMKV } from 'react-native-mmkv';
+import { useTheme } from '../contexts/ThemeContext';
+import { useThemedStyles } from '../hooks/useThemedStyles';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import axios from 'axios';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Инициализация MMKV
-const storage = new MMKV();
-
 const SBPPaymentScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const colorScheme = useColorScheme();
-  const isDarkMode = colorScheme === 'dark';
+  const insets = useSafeAreaInsets();
+  const { colors, theme } = useTheme();
+  const styles = useThemedStyles(themedStyles);
   
-  const { paymentData, orderNumber } = route.params || {};
+  const { paymentData, orderNumber, onSuccess } = route.params || {};
 
   // Состояния
   const [loading, setLoading] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState('pending'); // pending, paid, failed, timeout
   const [timeLeft, setTimeLeft] = useState(1200); // 20 минут
-  const [showQR, setShowQR] = useState(false);
   const [error, setError] = useState(null);
-  const [isPolling, setIsPolling] = useState(true);
+  const [showQR, setShowQR] = useState(false);
+  const [openingBank, setOpeningBank] = useState(false);
 
   // Refs
   const pollingInterval = useRef(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const successAnim = useRef(new Animated.Value(0)).current;
-  const qrScaleAnim = useRef(new Animated.Value(0)).current;
-
-  // Цвета для темной темы
-  const colors = {
-    background: isDarkMode ? '#000000' : '#F5F5F7',
-    cardBackground: isDarkMode ? '#1C1C1E' : 'white',
-    text: isDarkMode ? '#FFFFFF' : '#000000',
-    secondaryText: isDarkMode ? '#8E8E93' : '#666666',
-    tertiaryText: isDarkMode ? '#636366' : '#999999',
-    border: isDarkMode ? '#38383A' : '#E5E5E7',
-    primaryButton: '#007AFF',
-    successColor: '#34C759',
-    errorColor: '#FF3B30',
-    warningColor: '#FF9500',
-    qrBackground: isDarkMode ? '#2C2C2E' : '#FFFFFF',
-  };
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const progressAnim = useRef(new Animated.Value(1)).current;
+  const qrHeight = useRef(new Animated.Value(0)).current;
 
   // Эффекты
   useEffect(() => {
-    if (paymentData && isPolling) {
+    if (paymentData) {
+      startAnimations();
       startStatusPolling();
-      fadeIn();
     }
 
     return () => {
       if (pollingInterval.current) {
         clearInterval(pollingInterval.current);
-        pollingInterval.current = null;
       }
     };
-  }, [paymentData, isPolling]);
+  }, [paymentData]);
 
   // Обработка кнопки "Назад"
-  useFocusEffect(
-    React.useCallback(() => {
-      const onBackPress = () => {
-        handleCancel();
-        return true;
-      };
+useFocusEffect(
+  React.useCallback(() => {
+    const onBackPress = () => {
+      handleCancel();
+      return true;
+    };
 
-      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-      return () => backHandler.remove();
-    }, [])
-  );
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backHandler.remove();
+  }, [])
+);
 
   // Таймер обратного отсчета
   useEffect(() => {
     if (timeLeft > 0 && paymentStatus === 'pending') {
       const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
+      
+      // Анимация прогресса
+      Animated.timing(progressAnim, {
+        toValue: timeLeft / 1200,
+        duration: 1000,
+        useNativeDriver: false,
+      }).start();
+      
       return () => clearTimeout(timer);
     } else if (timeLeft === 0 && paymentStatus === 'pending') {
       handleTimeout();
     }
   }, [timeLeft, paymentStatus]);
 
-  // Анимация появления
-  const fadeIn = () => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 500,
-      useNativeDriver: true,
-    }).start();
+  // Запуск анимаций
+  const startAnimations = () => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        tension: 20,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+    ]).start();
   };
 
-  // Анимация успеха
-  const animateSuccess = () => {
-    Animated.spring(successAnim, {
-      toValue: 1,
-      tension: 10,
-      friction: 3,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  // Анимация показа QR
-  const animateQR = (show) => {
-    Animated.spring(qrScaleAnim, {
-      toValue: show ? 1 : 0,
-      tension: 50,
+  // Анимация QR кода
+  const toggleQR = () => {
+    setShowQR(!showQR);
+    Animated.spring(qrHeight, {
+      toValue: showQR ? 0 : 1,
+      tension: 20,
       friction: 7,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
   };
 
   // Проверка статуса платежа
   const startStatusPolling = () => {
-    if (!paymentData?.sbpOrderId && !paymentData?.orderId) {
-      console.error('No order ID provided');
-      return;
-    }
+    const checkStatus = async () => {
+      try {
+        const response = await axios.get(
+          `https://api.koleso.app/api/order-checkout.php?action=check-payment-status&sbp_order_id=${paymentData.sbpOrderId}`
+        );
 
-    // Очищаем предыдущий интервал если есть
-    if (pollingInterval.current) {
-      clearInterval(pollingInterval.current);
-    }
-
-    checkPaymentStatus(); // Сразу проверяем
-
-    pollingInterval.current = setInterval(() => {
-      if (isPolling) {
-        checkPaymentStatus();
+        if (response.data.paid) {
+          setPaymentStatus('paid');
+          clearInterval(pollingInterval.current);
+          handleSuccess();
+        }
+      } catch (err) {
+        console.error('Status check error:', err);
       }
-    }, 3000); // Каждые 3 секунды
-  };
+    };
 
-  const checkPaymentStatus = async () => {
-    try {
-      const orderId = paymentData?.sbpOrderId || paymentData?.orderId;
-      if (!orderId) return;
-
-      const response = await axios.get(
-        `https://api.koleso.app/api/sbp-api.php?action=check-status&orderId=${orderId}`
-      );
-      
-      const data = response.data;
-      
-      if (data.paid && paymentStatus !== 'paid') {
-        setPaymentStatus('paid');
-        setIsPolling(false);
-        clearInterval(pollingInterval.current);
-        pollingInterval.current = null;
-        animateSuccess();
-        handlePaymentSuccess();
-      } else if (data.statusCode >= 3 && paymentStatus !== 'failed') {
-        setPaymentStatus('failed');
-        setError(data.errorMessage || 'Платеж отклонен');
-        setIsPolling(false);
-        clearInterval(pollingInterval.current);
-        pollingInterval.current = null;
-      }
-    } catch (error) {
-      console.error('Status check error:', error);
-    }
+    // Первая проверка через 5 секунд
+    setTimeout(checkStatus, 5000);
+    
+    // Затем каждые 3 секунды
+    pollingInterval.current = setInterval(checkStatus, 3000);
   };
 
   // Обработчики
-  const handlePaymentSuccess = async () => {
-    try {
-      // Очищаем корзину
-      storage.delete('cart');
-
-      // Показываем успех на 2 секунды
-      setTimeout(() => {
-        navigation.reset({
-          index: 1,
-          routes: [
-            { name: 'Main' },
-            {
-              name: 'OrderSuccess',
-              params: {
-                orderNumber,
-                orderId: paymentData?.orderId,
-                amount: paymentData?.amount,
-              },
-            },
-          ],
+  const handleSuccess = () => {
+    setPaymentStatus('paid');
+    setTimeout(() => {
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        navigation.replace('OrderSuccess', {
+          orderId: paymentData.orderId,
+          orderNumber: orderNumber
         });
-      }, 2000);
-    } catch (error) {
-      console.error('Success handling error:', error);
-    }
+      }
+    }, 1500);
   };
 
   const handleTimeout = () => {
     setPaymentStatus('timeout');
-    setError('Время оплаты истекло');
-    setIsPolling(false);
-    if (pollingInterval.current) {
-      clearInterval(pollingInterval.current);
-      pollingInterval.current = null;
-    }
+    clearInterval(pollingInterval.current);
   };
 
   const handleCancel = () => {
     Alert.alert(
       'Отменить оплату?',
-      'Вы уверены, что хотите отменить оплату?',
+      'Вы действительно хотите отменить оплату заказа?',
       [
-        { text: 'Нет', style: 'cancel' },
+        { text: 'Продолжить оплату', style: 'cancel' },
         {
-          text: 'Да',
-          onPress: () => {
-            setIsPolling(false);
-            if (pollingInterval.current) {
-              clearInterval(pollingInterval.current);
-              pollingInterval.current = null;
-            }
-            navigation.goBack();
-          },
+          text: 'Отменить',
           style: 'destructive',
-        },
+          onPress: () => navigation.goBack()
+        }
       ]
     );
   };
 
   const handleRetry = () => {
-    // Сбрасываем состояния
     setPaymentStatus('pending');
-    setError(null);
     setTimeLeft(1200);
-    setIsPolling(true);
-    setShowQR(false);
-    
-    // Перезапускаем проверку
+    setError(null);
     startStatusPolling();
   };
 
-  // Открытие в банковском приложении
-  const openInBankApp = async () => {
-    const payload = paymentData?.qrCode?.payload;
-    if (!payload) {
-      Alert.alert('Ошибка', 'Ссылка для оплаты недоступна');
-      return;
-    }
-
+  const handleOpenSBP = async () => {
+    setOpeningBank(true);
+    const sbpUrl = paymentData.qrPayload;
+    
     try {
-      const canOpen = await Linking.canOpenURL(payload);
-      if (canOpen) {
-        await Linking.openURL(payload);
+      const supported = await Linking.canOpenURL(sbpUrl);
+      if (supported) {
+        await Linking.openURL(sbpUrl);
       } else {
-        await Linking.openURL(payload);
+        // Если прямая ссылка не работает, пробуем через браузер
+        await Linking.openURL(sbpUrl);
       }
-    } catch (error) {
-      console.error('Error opening bank app:', error);
+    } catch (err) {
+      console.error('Error opening SBP link:', err);
       Alert.alert(
-        'Ошибка',
-        'Не удалось открыть банковское приложение. Попробуйте показать QR-код и отсканировать его в приложении банка.'
+        'Не удалось открыть приложение', 
+        'Убедитесь, что у вас установлено приложение банка с поддержкой СБП'
       );
+    } finally {
+      setOpeningBank(false);
     }
   };
 
-  // Показать/скрыть QR
-  const toggleQR = () => {
-    const newShowQR = !showQR;
-    setShowQR(newShowQR);
-    animateQR(newShowQR);
-  };
-
-  // Форматирование времени
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Рендер различных состояний
+  const formatAmount = (amount) => {
+    return new Intl.NumberFormat('ru-RU', {
+      style: 'currency',
+      currency: 'RUB',
+      minimumFractionDigits: 0
+    }).format(amount);
+  };
+
+  // Рендеры состояний
   const renderPaymentState = () => (
-    <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-      <View style={styles.amountContainer}>
-        <Text style={[styles.amountLabel, { color: colors.secondaryText }]}>К оплате</Text>
-        <Text style={[styles.amount, { color: colors.text }]}>{paymentData?.amount} ₽</Text>
-        <Text style={[styles.orderNumber, { color: colors.tertiaryText }]}>Заказ №{orderNumber}</Text>
-      </View>
-
-      <TouchableOpacity
-        style={[styles.primaryButton, { backgroundColor: colors.primaryButton }]}
-        onPress={openInBankApp}
+    <ScrollView 
+      contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator={false}
+    >
+      <Animated.View 
+        style={[
+          styles.contentContainer,
+          {
+            opacity: fadeAnim,
+            transform: [{ scale: scaleAnim }]
+          }
+        ]}
       >
-        <Text style={styles.primaryButtonText}>
-          Оплатить через банковское приложение
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.secondaryButton}
-        onPress={toggleQR}
-      >
-        <Text style={[styles.secondaryButtonText, { color: colors.primaryButton }]}>
-          {showQR ? 'Скрыть QR-код' : 'Показать QR-код'}
-        </Text>
-      </TouchableOpacity>
-
-      {showQR && (
-        <Animated.View 
-          style={[
-            styles.qrContainer,
-            { 
-              backgroundColor: colors.qrBackground,
-              transform: [{ scale: qrScaleAnim }],
-              opacity: qrScaleAnim
-            }
-          ]}
-        >
-          {paymentData?.qrCode?.image ? (
-            <>
-              <Image
-                source={{ uri: paymentData.qrCode.image }}
-                style={styles.qrCode}
-                resizeMode="contain"
+        {/* Header Info */}
+        <View style={styles.headerInfo}>
+          <Text style={styles.orderLabel}>Заказ №{orderNumber}</Text>
+          <Text style={styles.amountText}>{formatAmount(paymentData.amount)}</Text>
+          
+          {/* Timer */}
+          <View style={styles.timerContainer}>
+            <View style={styles.timerProgress}>
+              <Animated.View 
+                style={[
+                  styles.timerProgressBar,
+                  {
+                    width: progressAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0%', '100%']
+                    })
+                  }
+                ]}
               />
-              <Text style={[styles.qrInstruction, { color: colors.secondaryText }]}>
-                Отсканируйте QR-код в приложении вашего банка
-              </Text>
-            </>
-          ) : (
-            <View style={styles.qrPlaceholder}>
-              <ActivityIndicator size="large" color={colors.primaryButton} />
             </View>
+            <Text style={styles.timerText}>
+              Осталось {formatTime(timeLeft)}
+            </Text>
+          </View>
+        </View>
+
+        {/* Main Payment Button */}
+        <TouchableOpacity 
+          style={styles.payButton}
+          onPress={handleOpenSBP}
+          activeOpacity={0.8}
+          disabled={openingBank}
+        >
+          {openingBank ? (
+            <ActivityIndicator size="small" color="#ffffff" />
+          ) : (
+            <>
+              <Ionicons name="wallet-outline" size={24} color="#ffffff" />
+              <Text style={styles.payButtonText}>Оплатить через СБП</Text>
+            </>
           )}
-        </Animated.View>
-      )}
+        </TouchableOpacity>
 
-      <View style={styles.statusContainer}>
-        <View style={[styles.statusDot, { backgroundColor: colors.warningColor }]} />
-        <Text style={[styles.statusText, { color: colors.secondaryText }]}>Ожидание оплаты...</Text>
-      </View>
-
-      <View style={[styles.timerContainer, { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}>
-        <Text style={[styles.timerText, { color: colors.secondaryText }]}>
-          Оставшееся время: {formatTime(timeLeft)}
+        <Text style={styles.hintText}>
+          Нажмите кнопку выше для перехода на страницу оплаты
         </Text>
-      </View>
 
-      <TouchableOpacity
-        style={styles.helpButton}
-        onPress={() => {
-          Alert.alert(
-            'Как оплатить?',
-            '1. Нажмите "Оплатить через банковское приложение"\n2. Выберите банк из списка\n3. Подтвердите оплату в приложении банка\n\nИли:\n\n1. Нажмите "Показать QR-код"\n2. Откройте приложение вашего банка\n3. Найдите раздел "Платежи" или "СБП"\n4. Отсканируйте QR-код',
-            [{ text: 'Понятно' }]
-          );
-        }}
-      >
-        <Text style={[styles.helpButtonText, { color: colors.secondaryText }]}>Нужна помощь?</Text>
-      </TouchableOpacity>
-    </Animated.View>
+        {/* QR Code Section (Hidden by default) */}
+        <View style={styles.qrSection}>
+          <TouchableOpacity 
+            style={styles.qrToggleButton}
+            onPress={toggleQR}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.qrToggleText}>
+              {showQR ? 'Скрыть QR-код' : 'Показать QR-код'}
+            </Text>
+            <Ionicons 
+              name={showQR ? "chevron-up" : "chevron-down"} 
+              size={20} 
+              color={colors.textSecondary} 
+            />
+          </TouchableOpacity>
+
+          <Animated.View 
+            style={[
+              styles.qrContainer,
+              {
+                maxHeight: qrHeight.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 400]
+                }),
+                opacity: qrHeight
+              }
+            ]}
+          >
+            {paymentData.qrCode && (
+              <View style={styles.qrWrapper}>
+                <Image 
+                  source={{ uri: paymentData.qrCode }}
+                  style={styles.qrImage}
+                  resizeMode="contain"
+                />
+                <Text style={styles.qrHint}>
+                  Отсканируйте QR-код в приложении банка
+                </Text>
+              </View>
+            )}
+          </Animated.View>
+        </View>
+
+        {/* Status Info */}
+        <View style={styles.statusCard}>
+          <View style={styles.statusIcon}>
+            <Ionicons name="time-outline" size={20} color={colors.primary} />
+          </View>
+          <Text style={styles.statusText}>
+            Ожидаем подтверждение оплаты...
+          </Text>
+        </View>
+
+        {/* Cancel Button */}
+        <TouchableOpacity 
+          style={styles.cancelButton}
+          onPress={handleCancel}
+        >
+          <Text style={styles.cancelButtonText}>Отменить оплату</Text>
+        </TouchableOpacity>
+      </Animated.View>
+    </ScrollView>
   );
 
   const renderSuccessState = () => (
-    <Animated.View
-      style={[
-        styles.successContainer,
-        {
-          opacity: successAnim,
-          transform: [{
-            scale: successAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0.3, 1],
-            })
-          }]
-        }
-      ]}
-    >
-      <View style={styles.successIcon}>
-        <Text style={styles.successEmoji}>✅</Text>
-      </View>
-      <Text style={[styles.successTitle, { color: colors.text }]}>Оплата успешна!</Text>
-      <Text style={[styles.successAmount, { color: colors.successColor }]}>{paymentData?.amount} ₽</Text>
-      <Text style={[styles.successMessage, { color: colors.secondaryText }]}>
-        Спасибо за покупку!{'\n'}Вы будете перенаправлены на страницу заказа
+    <View style={styles.stateContainer}>
+      <Animated.View style={styles.successIcon}>
+        <View style={styles.successCircle}>
+          <Ionicons name="checkmark" size={60} color="#ffffff" />
+        </View>
+      </Animated.View>
+      <Text style={styles.successTitle}>Оплата успешна!</Text>
+      <Text style={styles.successAmount}>{formatAmount(paymentData.amount)}</Text>
+      <Text style={styles.successMessage}>
+        Заказ №{orderNumber} оплачен
       </Text>
-    </Animated.View>
+    </View>
   );
 
   const renderErrorState = () => (
-    <View style={styles.errorContainer}>
+    <View style={styles.stateContainer}>
       <View style={styles.errorIcon}>
-        <Text style={styles.errorEmoji}>❌</Text>
+        <Ionicons name="close-circle" size={80} color={colors.error} />
       </View>
-      <Text style={[styles.errorTitle, { color: colors.text }]}>
+      <Text style={styles.errorTitle}>
         {paymentStatus === 'timeout' ? 'Время истекло' : 'Ошибка оплаты'}
       </Text>
-      <Text style={[styles.errorMessage, { color: colors.secondaryText }]}>{error}</Text>
+      <Text style={styles.errorMessage}>
+        {error || 'Не удалось завершить оплату. Попробуйте еще раз.'}
+      </Text>
 
       <TouchableOpacity 
-        style={[styles.primaryButton, { backgroundColor: colors.primaryButton }]} 
+        style={styles.primaryButton} 
         onPress={handleRetry}
       >
         <Text style={styles.primaryButtonText}>Попробовать снова</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.goBack()}>
-        <Text style={[styles.secondaryButtonText, { color: colors.primaryButton }]}>Вернуться к заказу</Text>
+      <TouchableOpacity 
+        style={styles.secondaryButton} 
+        onPress={() => navigation.goBack()}
+      >
+        <Text style={styles.secondaryButtonText}>Вернуться к заказу</Text>
       </TouchableOpacity>
     </View>
   );
@@ -434,19 +408,23 @@ const SBPPaymentScreen = () => {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { backgroundColor: colors.cardBackground, borderBottomColor: colors.border }]}>
-        <TouchableOpacity style={styles.backButton} onPress={handleCancel}>
-          <Text style={[styles.backButtonText, { color: colors.primaryButton }]}>‹</Text>
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={handleCancel}
+        >
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text }]}>Оплата через СБП</Text>
+        <Text style={styles.headerTitle}>Оплата через СБП</Text>
         <View style={styles.headerSpacer} />
       </View>
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primaryButton} />
-          <Text style={[styles.loadingText, { color: colors.secondaryText }]}>Создание платежа...</Text>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Обработка платежа...</Text>
         </View>
       ) : (
         renderContent()
@@ -455,199 +433,251 @@ const SBPPaymentScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const themedStyles = (colors, theme) => StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: 8,
   },
-  backButtonText: {
-    fontSize: 28,
-  },
-  title: {
+  headerTitle: {
+    flex: 1,
     fontSize: 18,
     fontWeight: '600',
-    flex: 1,
+    color: colors.text,
     textAlign: 'center',
+    marginRight: 40,
   },
   headerSpacer: {
-    width: 44,
+    width: 40,
   },
-  content: {
-    flex: 1,
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 16,
+    paddingBottom: 40,
+  },
+  contentContainer: {
+    paddingTop: 32,
+  },
+  headerInfo: {
     alignItems: 'center',
-    paddingHorizontal: 24,
+    marginBottom: 32,
   },
-  amountContainer: {
-    alignItems: 'center',
-    marginTop: 32,
-    marginBottom: 40,
-  },
-  amountLabel: {
-    fontSize: 16,
+  orderLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
     marginBottom: 8,
   },
-  amount: {
+  amountText: {
     fontSize: 36,
     fontWeight: '700',
-    marginBottom: 8,
-  },
-  orderNumber: {
-    fontSize: 14,
-  },
-  qrContainer: {
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  qrCode: {
-    width: 200,
-    height: 200,
-    marginBottom: 16,
-  },
-  qrPlaceholder: {
-    width: 200,
-    height: 200,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  qrInstruction: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  primaryButton: {
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-    borderRadius: 12,
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  primaryButtonText: {
-    color: 'white',
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  secondaryButton: {
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-    borderRadius: 12,
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  secondaryButtonText: {
-    fontSize: 17,
-    fontWeight: '500',
-  },
-  statusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 'auto',
-    marginBottom: 16,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  statusText: {
-    fontSize: 14,
+    color: colors.text,
+    marginBottom: 20,
   },
   timerContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginBottom: 16,
+    width: '100%',
+    maxWidth: 300,
+  },
+  timerProgress: {
+    height: 4,
+    backgroundColor: colors.border,
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  timerProgressBar: {
+    height: '100%',
+    backgroundColor: colors.primary,
   },
   timerText: {
     fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
-  helpButton: {
-    paddingVertical: 16,
+  payButton: {
+    backgroundColor: colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 32,
+    borderRadius: 16,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
   },
-  helpButtonText: {
+  payButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginLeft: 12,
+  },
+  hintText: {
     fontSize: 14,
-    textDecorationLine: 'underline',
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 32,
   },
-  loadingContainer: {
-    flex: 1,
+  qrSection: {
+    marginBottom: 24,
+  },
+  qrToggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+  qrToggleText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginRight: 4,
+  },
+  qrContainer: {
+    overflow: 'hidden',
+  },
+  qrWrapper: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 20,
     alignItems: 'center',
   },
-  loadingText: {
-    marginTop: 16,
+  qrImage: {
+    width: SCREEN_WIDTH - 112,
+    height: SCREEN_WIDTH - 112,
+    maxWidth: 240,
+    maxHeight: 240,
+    marginBottom: 16,
+  },
+  qrHint: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  statusCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primaryLight,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+  },
+  statusIcon: {
+    marginRight: 12,
+  },
+  statusText: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.primary,
+  },
+  cancelButton: {
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  cancelButtonText: {
     fontSize: 16,
+    color: colors.textSecondary,
   },
-  successContainer: {
+  stateContainer: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 24,
   },
   successIcon: {
     marginBottom: 24,
   },
-  successEmoji: {
-    fontSize: 80,
+  successCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#22c55e',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   successTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
+    color: colors.text,
     marginBottom: 8,
   },
   successAmount: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '600',
+    color: '#22c55e',
     marginBottom: 16,
   },
   successMessage: {
     fontSize: 16,
+    color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 22,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
   },
   errorIcon: {
     marginBottom: 24,
   },
-  errorEmoji: {
-    fontSize: 80,
-  },
   errorTitle: {
     fontSize: 24,
     fontWeight: '600',
+    color: colors.text,
     marginBottom: 8,
   },
   errorMessage: {
     fontSize: 16,
+    color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: 32,
+    lineHeight: 22,
+  },
+  primaryButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    marginBottom: 16,
+  },
+  primaryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  secondaryButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+  },
+  secondaryButtonText: {
+    fontSize: 16,
+    color: colors.primary,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: colors.textSecondary,
   },
 });
+
+
 
 export default SBPPaymentScreen;
