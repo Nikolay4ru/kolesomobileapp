@@ -25,17 +25,17 @@ import { observer } from 'mobx-react-lite';
 import { useStores } from '../useStores';
 import CustomHeader from "../components/CustomHeader";
 import ShareHelper from '../components/Share';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Carousel, {
   ICarouselInstance,
   Pagination,
 } from "react-native-reanimated-carousel";
 import MapView, { Marker } from 'react-native-maps';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import LinearGradient from 'react-native-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { useThemedStyles } from '../hooks/useThemedStyles';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const ProductScreen = observer(() => {
   const DEFAULT_IMAGE = 'https://api.koleso.app/public/img/no-image.jpg';
@@ -786,11 +786,14 @@ const ProductScreen = observer(() => {
       
      
       <ScrollView 
-  contentContainerStyle={[styles.content, { 
-    paddingBottom: bottomPanelHeight || 140
-  }]}
-  showsVerticalScrollIndicator={false}
->
+    contentContainerStyle={[
+      styles.content, 
+      { 
+        paddingBottom: tabBarHeight + 120 // bottomPanel height + небольшой отступ
+      }
+    ]}
+    showsVerticalScrollIndicator={false}
+  >
         {/* Карусель изображений */}
         <View style={styles.carouselWrapper}>
           <LinearGradient
@@ -1291,16 +1294,24 @@ const ProductScreen = observer(() => {
       </ScrollView>
 
       {/* Фиксированная панель покупки */}
-      <View 
-  style={[styles.bottomPanel, { paddingBottom: tabBarHeight }]}
-  onLayout={(event) => {
-    const { height } = event.nativeEvent.layout;
-    setBottomPanelHeight(height);
-  }}
->
+      <View style={[
+    styles.bottomPanel, 
+    { 
+      bottom: tabBarHeight,
+      paddingBottom: 0 
+    }
+  ]}>
        
         
-        <View style={styles.bottomContent}>
+        <View style={[
+      styles.bottomContent,
+      {
+        paddingBottom: Platform.select({
+          ios: insets.bottom > 0 ? insets.bottom : 20,
+          android: 20
+        })
+      }
+    ]}>
           <View style={styles.bottomPriceInfo}>
             <Text style={styles.bottomPriceLabel}>Итого:</Text>
             <Text style={styles.bottomPriceValue}>{parseFloat(product.price * quantity).toFixed(0)} ₽</Text>
@@ -1431,7 +1442,8 @@ const themedStyles = (colors, theme) => ({
     backgroundColor: colors.background,
   },
   content: {
-    paddingBottom: 20,
+    flexGrow: 1,
+    // paddingBottom будет динамическим
   },
   loadingContainer: {
     flex: 1,
@@ -1923,22 +1935,25 @@ const themedStyles = (colors, theme) => ({
     fontWeight: '600',
     marginRight: 4,
   },
-  bottomPanel: {
+bottomPanel: {
     position: 'absolute',
-    bottom: 0,
+    bottom: 0, // Убираем фиксированное значение
     left: 0,
     right: 0,
     backgroundColor: colors.card,
-    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
     shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: theme === 'dark' ? 0.4 : 0.15,
     shadowRadius: 10,
     elevation: 10,
+    zIndex: 100, // Добавляем для гарантии отображения поверх контента
   },
-  bottomContent: {
+ bottomContent: {
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingTop: 16,
+    // paddingBottom будет динамическим
   },
   bottomPriceInfo: {
     flexDirection: 'row',
