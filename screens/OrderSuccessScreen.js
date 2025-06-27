@@ -14,6 +14,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useThemedStyles } from '../hooks/useThemedStyles';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useStores } from '../useStores';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LottieView from 'lottie-react-native';
 
@@ -25,6 +26,7 @@ const OrderSuccessScreen = () => {
   const insets = useSafeAreaInsets();
   const { colors, theme } = useTheme();
   const styles = useThemedStyles(themedStyles);
+  const { ordersStore, authStore } = useStores();
   
   const { orderId, orderNumber, deliveryType, deliveryDate } = route.params || {};
   
@@ -86,13 +88,18 @@ const OrderSuccessScreen = () => {
     });
   };
   
-  const handleViewOrder = () => {
-    navigation.reset({
-      index: 1,
-      routes: [
-        { name: 'Home' },
-        { name: 'Profile', params: { screen: 'Orders' } }
-      ],
+  const handleViewOrder = async () => {
+    // Загружаем заказы, если пользователь авторизован
+    if (authStore.isLoggedIn) {
+      await ordersStore.loadOrders(authStore.token);
+    }
+    
+    // Переходим на страницу заказа
+    navigation.navigate('ProfileMenu', { 
+      screen: 'OrderDetail',
+      params: { 
+        orderId: parseInt(orderId) || orderId // Преобразуем в число, если возможно
+      }
     });
   };
   

@@ -12,6 +12,7 @@ const OrderDetailScreen = observer(() => {
   const navigation = useNavigation();
   const route = useRoute();
   const { orderId } = route.params;
+  console.log('orderId '+ orderId);
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);

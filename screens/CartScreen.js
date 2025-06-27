@@ -25,6 +25,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useTheme } from '../contexts/ThemeContext';
 import { useThemedStyles } from '../hooks/useThemedStyles';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 
@@ -59,6 +60,7 @@ const CartScreen = observer(({ navigation }) => {
   const isUpdatingQuantity = useRef(false);
 
   const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
 
   // Загрузка корзины
   useEffect(() => {
@@ -927,13 +929,31 @@ const CartScreen = observer(({ navigation }) => {
     );
   });
 
+
+  const dynamicListContentStyle = {
+    paddingBottom: tabBarHeight + 140 // footer height + небольшой отступ
+  };
+
   // Рендер футера
   const renderFooter = () => {
     if (selectedItems.length === 0) return null;
 
+    const footerPaddingBottom = Platform.select({
+    ios: insets.bottom > 0 ? insets.bottom : 16,
+    android: 16
+  });
+
     return (
-      <View style={[styles.footer, { paddingBottom: tabBarHeight }]}>
-        <View style={styles.footerContent}>
+      <View style={[
+      styles.footer,
+      { 
+        bottom: tabBarHeight, // Поднимаем footer над TabBar
+      }
+    ]}>
+        <View style={[
+        styles.footerContent,
+        { paddingBottom: footerPaddingBottom }
+      ]}>
           {/* Promo Code Section */}
           {!appliedPromo && (
             <View style={styles.promoSection}>
@@ -1089,7 +1109,7 @@ const CartScreen = observer(({ navigation }) => {
             data={cartStore.items}
             renderItem={renderItem}
             keyExtractor={item => `cart-${item.id}`}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[styles.listContent, dynamicListContentStyle]}
             ListHeaderComponent={
               <DeliveryOptions
                 deliveryOption={deliveryOption}
@@ -1191,9 +1211,9 @@ const themedStyles = (colors, theme) => ({
   },
 
   // List
-  listContent: {
-    paddingBottom: 180,
-  },
+ listContent: {
+      // Убираем фиксированный paddingBottom
+    },
   separator: {
     height: 1,
     backgroundColor: colors.border,
@@ -1438,22 +1458,24 @@ const themedStyles = (colors, theme) => ({
 
   // Footer
   footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: colors.card,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: theme === 'dark' ? 0.2 : 0.05,
-    shadowRadius: 8,
-    elevation: 5,
-  },
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      backgroundColor: colors.card,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: -2 },
+      shadowOpacity: theme === 'dark' ? 0.2 : 0.05,
+      shadowRadius: 8,
+      elevation: 5,
+      // Убираем любые паддинги здесь, они будут динамическими
+    },
   footerContent: {
-    padding: 16,
-  },
+      padding: 16,
+      paddingBottom: 16, // Фиксированный внутренний отступ
+    },
   promoSection: {
     flexDirection: 'row',
     gap: 8,
