@@ -449,7 +449,8 @@ async loadAuthState() {
         
         await Promise.all([
           this.checkAdminStatus(),
-          this.checkAuth()
+          this.checkAuth(),
+          this.fetchProfile(),
         ]);
       }
     } catch (error) {
@@ -532,8 +533,9 @@ async loadAuthState() {
   }
 
   async fetchProfile() {
+    console.log(this.user);
     if (!this.user) return;
-
+    
     try {
       const response = await this.api.get("/get_profile.php");
       
@@ -547,6 +549,7 @@ async loadAuthState() {
           birthDate: response.data.birth_date,
           gender: response.data.gender
         };
+        console.log(this.user);
         
         this.persistAuthState();
       }

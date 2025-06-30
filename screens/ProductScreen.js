@@ -24,6 +24,7 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import { observer } from 'mobx-react-lite';
 import { useStores } from '../useStores';
 import CustomHeader from "../components/CustomHeader";
+import AddToCartModal from '../components/AddToCartModal';
 import ShareHelper from '../components/Share';
 import CompatibleCarsSection from '../components/CompatibleCarsSection';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -44,6 +45,7 @@ const ProductScreen = observer(() => {
   const route = useRoute();
   const navigation = useNavigation();
   const { productId, fromCart, modal } = route.params;
+  console.log(route.params);
   const { cartStore, authStore, favoritesStore } = useStores();
   const { colors, theme } = useTheme();
   const styles = useThemedStyles(themedStyles);
@@ -51,7 +53,6 @@ const ProductScreen = observer(() => {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const statusBarHeight = modal ? 0 : insets.top;
-
   // States
   const [product, setProduct] = useState(null);
   const [stores, setStores] = useState([]);
@@ -77,6 +78,11 @@ const ProductScreen = observer(() => {
   const [compatibleCars, setCompatibleCars] = useState([]);
   const [compatibleCarsLoading, setCompatibleCarsLoading] = useState(false);
   const [compatibleCarsError, setCompatibleCarsError] = useState(null);
+
+
+  const [showCartModal, setShowCartModal] = useState(false);
+const [addedProduct, setAddedProduct] = useState(null);
+const [addedQuantity, setAddedQuantity] = useState(1);
 
   
   const width = Dimensions.get("window").width;
@@ -277,7 +283,7 @@ const ProductScreen = observer(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        
+        console.log(productId);
         const productResponse = await fetch(`https://api.koleso.app/api/product.php?id=${productId}`);
         if (!productResponse.ok) throw new Error(`HTTP error! status: ${productResponse.status}`);
         const productData = await productResponse.json();
@@ -433,164 +439,169 @@ const ProductScreen = observer(() => {
     }
   };
 
-  const addToCart = async () => {
-    if (!authStore.isLoggedIn) {
-      Alert.alert(
-        'Требуется авторизация',
-        'Для добавления товаров в корзину необходимо войти в систему',
-        [
-          { text: 'Отмена', style: 'cancel' },
-          { text: 'Войти', onPress: () => navigation.navigate('Auth') }
-        ]
-      );
-      return;
-    }
+const addToCart = async () => {
+  if (!authStore.isLoggedIn) {
+    Alert.alert(
+      'Требуется авторизация',
+      'Для добавления товаров в корзину необходимо войти в систему',
+      [
+        { text: 'Отмена', style: 'cancel' },
+        { text: 'Войти', onPress: () => navigation.navigate('Auth') }
+      ]
+    );
+    return;
+  }
 
-    if (addingToCart) return;
+  if (addingToCart) return;
 
-    // Проверяем доступность количества
-    if (!isQuantityAvailable(quantity)) {
+  // Проверяем доступность количества
+  if (!isQuantityAvailable(quantity)) {
+    const maxAvailable = getMaxAvailableQuantity();
+    Alert.alert(
+      'Недостаточно товара', 
+      `На складе доступно только ${maxAvailable} шт. этого товара`
+    );
+    return;
+  }
+
+  try {
+    setAddingToCart(true);
+
+    // Обновляем статистику покупок
+    await fetch(`${API_URL}/update_product_stats.php`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        productId: product.id,
+        action: 'purchase'
+      })
+    });
+
+    const cartItem = getCartItem();
+    
+    if (cartItem) {
+      // Если товар уже в корзине, проверяем итоговое количество
+      const newTotalQuantity = cartItem.quantity + quantity;
       const maxAvailable = getMaxAvailableQuantity();
-      Alert.alert(
-        'Недостаточно товара', 
-        `На складе доступно только ${maxAvailable} шт. этого товара`
-      );
-      return;
-    }
-
-    try {
-      setAddingToCart(true);
-
-      // Обновляем статистику покупок
-      await fetch(`${API_URL}/update_product_stats.php`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          productId: product.id,
-          action: 'purchase'
-        })
-      });
-
-      const cartItem = getCartItem();
       
-      if (cartItem) {
-        // Если товар уже в корзине, проверяем итоговое количество
-        const newTotalQuantity = cartItem.quantity + quantity;
+      if (newTotalQuantity > maxAvailable) {
+        Alert.alert(
+          'Недостаточно товара', 
+          `На складе доступно только ${maxAvailable} шт. В корзине уже ${cartItem.quantity} шт.`
+        );
+        return;
+      }
+      
+      await cartStore.updateItemQuantity(cartItem.id, newTotalQuantity, authStore.token);
+      console.log(`Товар уже в корзине, обновляем количество до: ${newTotalQuantity}`);
+    } else {
+      // Если товара нет в корзине, добавляем
+      await cartStore.addToCart({
+        product_id: product.id,
+        quantity,
+        price: product.price,
+        name: product.name,
+        brand: product.brand,
+        image_url: product.images?.[0] || DEFAULT_IMAGE
+      }, authStore.token);
+      console.log(`Добавляем новый товар в корзину с количеством: ${quantity}`);
+      
+      // Принудительно обновляем корзину после добавления
+      setTimeout(() => {
+        cartStore.loadCart(authStore.token);
+      }, 500);
+    }
+    
+    // Показываем модальное окно вместо Alert
+    setAddedProduct(product);
+    setAddedQuantity(quantity);
+    setShowCartModal(true);
+    
+  } catch (error) {
+    Alert.alert('Ошибка', 'Не удалось добавить товар в корзину');
+    console.error('Add to cart error:', error);
+  } finally {
+    setAddingToCart(false);
+  }
+};
+
+const FastBuyCart = async () => {
+  if (!authStore.isLoggedIn) {
+    Alert.alert(
+      'Требуется авторизация',
+      'Для добавления товаров в корзину необходимо войти в систему',
+      [
+        { text: 'Отмена', style: 'cancel' },
+        { text: 'Войти', onPress: () => navigation.navigate('Auth') }
+      ]
+    );
+    return;
+  }
+
+  if (addingToCart) return;
+
+  // Проверяем доступность количества
+  if (!isQuantityAvailable(quantity)) {
+    const maxAvailable = getMaxAvailableQuantity();
+    Alert.alert(
+      'Недостаточно товара', 
+      `На складе доступно только ${maxAvailable} шт. этого товара`
+    );
+    return;
+  }
+
+  try {
+    setAddingToCart(true);
+    const cartItem = getCartItem();
+    
+    if (cartItem) {
+      // Если товар уже в корзине, проверяем можем ли обновить количество
+      if (!isQuantityAvailable(quantity)) {
         const maxAvailable = getMaxAvailableQuantity();
-        
-        if (newTotalQuantity > maxAvailable) {
-          Alert.alert(
-            'Недостаточно товара', 
-            `На складе доступно только ${maxAvailable} шт. В корзине уже ${cartItem.quantity} шт.`
-          );
-          return;
-        }
-        
-        await cartStore.updateItemQuantity(cartItem.id, newTotalQuantity, authStore.token);
-        console.log(`Товар уже в корзине, обновляем количество до: ${newTotalQuantity}`);
-      } else {
-        // Если товара нет в корзине, добавляем
-        await cartStore.addToCart({
-          product_id: product.id,
-          quantity,
-          price: product.price,
-          name: product.name,
-          brand: product.brand,
-          image_url: product.images?.[0] || DEFAULT_IMAGE
-        }, authStore.token);
-        console.log(`Добавляем новый товар в корзину с количеством: ${quantity}`);
-        
-        // Принудительно обновляем корзину после добавления
-        setTimeout(() => {
-          cartStore.loadCart(authStore.token);
-        }, 500);
-      }
-       
-      Alert.alert('Успешно', 'Товар добавлен в корзину', [
-        { text: 'OK', onPress: () => {} },
-        { 
-          text: 'Перейти в корзину', 
-          onPress: () => navigation.navigate('Cart')
-        }
-      ]);
-    } catch (error) {
-      Alert.alert('Ошибка', 'Не удалось добавить товар в корзину');
-      console.error('Add to cart error:', error);
-    } finally {
-      setAddingToCart(false);
-    }
-  };
-
-  const FastBuyCart = async () => {
-    if (!authStore.isLoggedIn) {
-      Alert.alert(
-        'Требуется авторизация',
-        'Для добавления товаров в корзину необходимо войти в систему',
-        [
-          { text: 'Отмена', style: 'cancel' },
-          { text: 'Войти', onPress: () => navigation.navigate('Auth') }
-        ]
-      );
-      return;
-    }
-
-    if (addingToCart) return;
-
-    // Проверяем доступность количества
-    if (!isQuantityAvailable(quantity)) {
-      const maxAvailable = getMaxAvailableQuantity();
-      Alert.alert(
-        'Недостаточно товара', 
-        `На складе доступно только ${maxAvailable} шт. этого товара`
-      );
-      return;
-    }
-
-    try {
-      setAddingToCart(true);
-      const cartItem = getCartItem();
-      
-      if (cartItem) {
-        // Если товар уже в корзине, проверяем можем ли обновить количество
-        if (!isQuantityAvailable(quantity)) {
-          const maxAvailable = getMaxAvailableQuantity();
-          Alert.alert(
-            'Недостаточно товара', 
-            `На складе доступно только ${maxAvailable} шт. этого товара`
-          );
-          return;
-        }
-        
-        await cartStore.updateItemQuantity(cartItem.id, quantity, authStore.token);
-        console.log(`FastBuy: обновляем количество до ${quantity}`);
-      } else {
-        // Если товара нет в корзине, добавляем
-        await cartStore.addToCart({
-          product_id: product.id,
-          quantity,
-          price: product.price,
-          name: product.name,
-          brand: product.brand,
-          image_url: product.images?.[0] || DEFAULT_IMAGE
-        }, authStore.token);
-        console.log(`FastBuy: добавляем товар с количеством ${quantity}`);
-        
-        // Принудительно обновляем корзину после добавления
-        setTimeout(() => {
-          cartStore.loadCart(authStore.token);
-        }, 500);
+        Alert.alert(
+          'Недостаточно товара', 
+          `На складе доступно только ${maxAvailable} шт. этого товара`
+        );
+        return;
       }
       
-      navigation.navigate('Cart');
-    } catch (error) {
-      Alert.alert('Ошибка', 'Не удалось добавить товар в корзину');
-      console.error('Add to cart error:', error);
-    } finally {
-      setAddingToCart(false);
+      await cartStore.updateItemQuantity(cartItem.id, quantity, authStore.token);
+      console.log(`FastBuy: обновляем количество до ${quantity}`);
+    } else {
+      // Если товара нет в корзине, добавляем
+      await cartStore.addToCart({
+        product_id: product.id,
+        quantity,
+        price: product.price,
+        name: product.name,
+        brand: product.brand,
+        image_url: product.images?.[0] || DEFAULT_IMAGE
+      }, authStore.token);
+      console.log(`FastBuy: добавляем товар с количеством ${quantity}`);
+      
+      // Принудительно обновляем корзину после добавления
+      setTimeout(() => {
+        cartStore.loadCart(authStore.token);
+      }, 500);
     }
-  };
+    
+    // Сразу переходим в корзину без показа модального окна
+    navigation.navigate('Cart');
+  } catch (error) {
+    Alert.alert('Ошибка', 'Не удалось добавить товар в корзину');
+    console.error('Add to cart error:', error);
+  } finally {
+    setAddingToCart(false);
+  }
+};
+
+
+const handleAddRelatedProducts = async (relatedProducts) => {
+  console.log('Related products to add:', relatedProducts);
+  // Логика добавления уже реализована в модальном окне
+};
 
   const openStoreMap = (store) => {
     const { latitude, longitude, name } = store;
@@ -701,33 +712,36 @@ const ProductScreen = observer(() => {
         <TouchableOpacity 
           style={styles.productCardButton}
           onPress={async () => {
-            if (!authStore.isLoggedIn) {
-              Alert.alert(
-                'Требуется авторизация',
-                'Для добавления товаров в корзину необходимо войти в систему',
-                [
-                  { text: 'Отмена', style: 'cancel' },
-                  { text: 'Войти', onPress: () => navigation.navigate('Auth') }
-                ]
-              );
-              return;
-            }
-            
-            try {
-              await cartStore.addToCart({
-                product_id: item.id,
-                quantity: 1,
-                price: item.price,
-                name: item.name,
-                brand: item.brand,
-                image_url: item.images?.[0] || DEFAULT_IMAGE
-              }, authStore.token);
-              
-              Alert.alert('Успешно', 'Товар добавлен в корзину');
-            } catch (error) {
-              Alert.alert('Ошибка', 'Не удалось добавить товар в корзину');
-            }
-          }}
+  if (!authStore.isLoggedIn) {
+    Alert.alert(
+      'Требуется авторизация',
+      'Для добавления товаров в корзину необходимо войти в систему',
+      [
+        { text: 'Отмена', style: 'cancel' },
+        { text: 'Войти', onPress: () => navigation.navigate('Auth') }
+      ]
+    );
+    return;
+  }
+  
+  try {
+    await cartStore.addToCart({
+      product_id: item.id,
+      quantity: 1,
+      price: item.price,
+      name: item.name,
+      brand: item.brand,
+      image_url: item.images?.[0] || DEFAULT_IMAGE
+    }, authStore.token);
+    
+    // Показываем модальное окно для похожих товаров тоже
+    setAddedProduct(item);
+    setAddedQuantity(1);
+    setShowCartModal(true);
+  } catch (error) {
+    Alert.alert('Ошибка', 'Не удалось добавить товар в корзину');
+  }
+}}
         >
           <Ionicons name="cart-outline" size={20} color={colors.primary} />
           <Text style={styles.productCardButtonText}>В корзину</Text>
@@ -786,8 +800,8 @@ const ProductScreen = observer(() => {
     : 0;
 
   return (
-    
-    <View style={[styles.container, { paddingTop: statusBarHeight }]}>
+    // statusBarHeight
+    <View style={[styles.container,]}>
       <CustomHeader 
         title=""
         navigation={navigation}
@@ -816,6 +830,7 @@ const ProductScreen = observer(() => {
         iconColorLeft={colors.text}
         titleStyle={{ color: colors.text }}
         withBackButton
+        modal={modal}
       />
      
     
@@ -1424,6 +1439,20 @@ const ProductScreen = observer(() => {
         </View>
       </View>
       
+
+      <AddToCartModal
+  visible={showCartModal}
+  onClose={() => setShowCartModal(false)}
+  onGoToCart={() => {
+    setShowCartModal(false);
+    navigation.navigate('Cart');
+  }}
+  product={addedProduct}
+  quantity={addedQuantity}
+  onAddRelatedProducts={handleAddRelatedProducts}
+  authStore={authStore}
+  cartStore={cartStore}
+/>
     </View>
   );
 });

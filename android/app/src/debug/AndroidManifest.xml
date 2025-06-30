@@ -29,19 +29,33 @@ xmlns:tools="http://schemas.android.com/tools">
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
-        <intent-filter>
+        <intent-filter android:autoVerify="true">
   <action android:name="android.intent.action.VIEW" />
   <category android:name="android.intent.category.DEFAULT" />
   <category android:name="android.intent.category.BROWSABLE" />
-  <data android:scheme="koleso.app" />
+   <data android:scheme="koleso.app" android:host="open" />
+  <data android:scheme="https" android:host="koleso.app" android:pathPrefix="/open/" />
+  <data
+            android:scheme="https"
+            android:host="koleso.app"
+            android:pathPrefix="/product/" />
 </intent-filter>
 
-    <intent-filter>
+     <intent-filter android:autoVerify="true">
         <action android:name="android.intent.action.VIEW" />
         <category android:name="android.intent.category.DEFAULT" />
         <category android:name="android.intent.category.BROWSABLE" />
         <data android:scheme="https" android:host="koleso.app" />
         <data android:scheme="http" android:host="koleso.app" />
+    </intent-filter>
+    <intent-filter android:autoVerify="true">
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data
+            android:scheme="https"
+            android:host="koleso.app"
+            android:pathPrefix="/product/" />
     </intent-filter>
       </activity>
     </application>

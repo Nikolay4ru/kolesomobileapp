@@ -34,50 +34,90 @@ const NotificationsScreen = observer(() => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   
- 
+  // Параметры пагинации
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [totalPages, setTotalPages] = useState(1);
+  const LIMIT = 20; // Количество элементов на страницу
+  
   useEffect(() => {
-    loadNotifications();
+    loadNotifications(1, true);
   }, []);
 
-const loadNotifications = async () => {
-  setLoading(true);
-  try {
-    const response = await fetch('https://api.koleso.app/api/notifications_list.php', {
-      headers: {
-        'Authorization': `Bearer ${authStore.token}`
-      }
-    });
-    
-    if (!response.ok) {
-      throw new Error('Failed to fetch notifications');
-    }
-    
-    const data = await response.json();
-    console.log(data);
-    if (data.success) {
-      setNotifications(data.notifications);
-      setUnreadCount(data.unread_count);
+  const loadNotifications = async (pageNumber = 1, isInitial = false) => {
+    if (isInitial) {
+      setLoading(true);
     } else {
-      throw new Error(data.error || 'Failed to load notifications');
+      setLoadingMore(true);
     }
-  } catch (error) {
-    console.error('Error loading notifications:', error);
-    Alert.alert('Ошибка', 'Не удалось загрузить уведомления');
-  } finally {
-    setLoading(false);
-  }
-};
+    
+    try {
+      const response = await fetch(`https://api.koleso.app/api/notifications_list.php?page=${pageNumber}&limit=${LIMIT}`, {
+        headers: {
+          'Authorization': `Bearer ${authStore.token}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch notifications');
+      }
+      
+      const data = await response.json();
+      console.log(`Page ${pageNumber} data:`, data);
+      
+      if (data.success) {
+        if (isInitial) {
+          setNotifications(data.notifications);
+        } else {
+          // Добавляем новые уведомления к существующим
+          setNotifications(prev => [...prev, ...data.notifications]);
+        }
+        
+        setUnreadCount(data.unread_count);
+        setPage(pageNumber);
+        
+        // Обновляем информацию о пагинации
+        if (data.pagination) {
+          setTotalPages(data.pagination.pages);
+          setHasMore(pageNumber < data.pagination.pages);
+        } else {
+          // Если нет информации о пагинации, определяем по количеству элементов
+          setHasMore(data.notifications.length === LIMIT);
+        }
+      } else {
+        throw new Error(data.error || 'Failed to load notifications');
+      }
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+      if (isInitial) {
+        Alert.alert('Ошибка', 'Не удалось загрузить уведомления');
+      }
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  };
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
-    loadNotifications().finally(() => {
+    setPage(1);
+    setHasMore(true);
+    loadNotifications(1, true).finally(() => {
       setRefreshing(false);
     });
   }, []);
 
-const markAsRead = async (notificationId) => {
+  const handleLoadMore = useCallback(() => {
+    if (!loadingMore && hasMore && !refreshing) {
+      const nextPage = page + 1;
+      loadNotifications(nextPage, false);
+    }
+  }, [page, loadingMore, hasMore, refreshing]);
+
+  const markAsRead = async (notificationId) => {
     if (!authStore.token) return;
     
     try {
@@ -107,7 +147,7 @@ const markAsRead = async (notificationId) => {
     }
   };
 
- const markAllAsRead = () => {
+  const markAllAsRead = () => {
     Alert.alert(
       'Отметить все как прочитанные',
       'Вы уверены, что хотите отметить все уведомления как прочитанные?',
@@ -147,7 +187,7 @@ const markAsRead = async (notificationId) => {
     );
   };
 
-const deleteNotification = (notificationId) => {
+  const deleteNotification = (notificationId) => {
     Alert.alert(
       'Удалить уведомление',
       'Вы уверены, что хотите удалить это уведомление?',
@@ -174,8 +214,8 @@ const deleteNotification = (notificationId) => {
               if (response.ok) {
                 const data = await response.json();
                 if (data.success) {
-                  setNotifications(prev => prev.filter(n => n.id !== notificationId));
                   const notification = notifications.find(n => n.id === notificationId);
+                  setNotifications(prev => prev.filter(n => n.id !== notificationId));
                   if (notification && !notification.is_read) {
                     setUnreadCount(prev => Math.max(0, prev - 1));
                   }
@@ -210,23 +250,20 @@ const deleteNotification = (notificationId) => {
       case 'promo':
         navigation.navigate('ProductList');
         break;
-    case 'admin':
+      case 'admin':
         if (authStore.isAdmin) {
-            
-
-            navigation.navigate('MainTabs', {
-  screen: 'ProfileMenu',
-  params: {
-    screen: 'Admin',
-    params: {
-      screen: 'AdminOrders',
-      params: {
-        // ваши параметры здесь
-      }
-    }
-  }
-})
-          }
+          navigation.navigate('MainTabs', {
+            screen: 'ProfileMenu',
+            params: {
+              screen: 'Admin',
+              params: {
+                screen: 'AdminOrders',
+                params: {}
+              }
+            }
+          });
+        }
+        break;
     }
   };
 
@@ -270,7 +307,7 @@ const deleteNotification = (notificationId) => {
           {item.message}
         </Text>
         <Text style={styles.notificationTime}>
-          {formatTimestamp(item.timestamp)}
+          {formatTimestamp(item.created_at)}
         </Text>
       </View>
       
@@ -283,6 +320,17 @@ const deleteNotification = (notificationId) => {
       </TouchableOpacity>
     </TouchableOpacity>
   );
+
+  const renderFooter = () => {
+    if (!loadingMore) return null;
+    
+    return (
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color={colors.primary} />
+        <Text style={styles.loadingMoreText}>Загрузка...</Text>
+      </View>
+    );
+  };
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
@@ -336,7 +384,7 @@ const deleteNotification = (notificationId) => {
       <FlatList
         data={notifications}
         renderItem={renderNotification}
-        keyExtractor={item => item.id}
+        keyExtractor={item => item.id.toString()}
         contentContainerStyle={[
           styles.listContent,
           notifications.length === 0 && styles.emptyListContent
@@ -350,6 +398,9 @@ const deleteNotification = (notificationId) => {
           />
         }
         ListEmptyComponent={renderEmpty}
+        ListFooterComponent={renderFooter}
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.1}
         showsVerticalScrollIndicator={false}
       />
     </View>
@@ -394,7 +445,7 @@ const themedStyles = (colors, theme) => ({
   // Notifications
   listContent: {
     paddingTop: 16,
-    paddingBottom: 20,
+    paddingBottom: 90, // Увеличенный отступ для TabBar
   },
   emptyListContent: {
     flex: 1,
@@ -460,6 +511,19 @@ const themedStyles = (colors, theme) => ({
   },
   deleteButton: {
     padding: 4,
+  },
+  
+  // Footer Loader
+  footerLoader: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  loadingMoreText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: colors.textSecondary,
   },
   
   // Empty State

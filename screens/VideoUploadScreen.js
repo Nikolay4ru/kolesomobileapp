@@ -1,4 +1,5 @@
-const generateId = () => Math.random().toString(36).substr(2, 9);import React, { useState, useEffect, useRef } from 'react';
+const generateId = () => Math.random().toString(36).substr(2, 9);
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -19,6 +20,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { observer } from "mobx-react-lite";
 import axios from 'axios';
 import { useStores } from "../useStores";
+import CustomHeader from '../components/CustomHeader';
+import { useTheme } from '../contexts/ThemeContext';
+import { useThemedStyles } from '../hooks/useThemedStyles';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -33,6 +37,8 @@ const VideoUploadScreen = observer(({ navigation }) => {
   const [scaleAnim] = useState(new Animated.Value(0.95));
   const insets = useSafeAreaInsets();
   const statusBarHeight = insets.top;
+  const { colors, isDark } = useTheme();
+  const styles = useThemedStyles(createStyles);
 
   // Refs для TextInput компонентов и анимации
   const fileNameRefs = useRef({});
@@ -258,13 +264,15 @@ const VideoUploadScreen = observer(({ navigation }) => {
 
   const renderUploadItem = ({ item, index }) => {
     const itemScaleAnim = getItemAnimation(item.id);
+    
+
 
     const getStatusColor = () => {
       switch (item.status) {
-        case 'uploading': return '#007AFF';
-        case 'completed': return '#34C759';
-        case 'error': return '#FF3B30';
-        default: return '#8E8E93';
+        case 'uploading': return colors.primary;
+        case 'completed': return colors.success;
+        case 'error': return colors.danger;
+        default: return colors.textSecondary;
       }
     };
 
@@ -285,7 +293,7 @@ const VideoUploadScreen = observer(({ navigation }) => {
           styles.uploadItem,
           { 
             transform: [{ scale: itemScaleAnim }],
-            backgroundColor: item.status === 'completed' ? '#F0FFF4' : '#FFFFFF'
+            backgroundColor: item.status === 'completed' ? colors.completedBackground : colors.card
           }
         ]}
       >
@@ -295,21 +303,21 @@ const VideoUploadScreen = observer(({ navigation }) => {
             <Icon name={getStatusIcon()} size={20} color="#FFFFFF" />
           </View>
           <View style={styles.fileBasicInfo}>
-            <Text style={styles.videoFileName}>
+            <Text style={[styles.videoFileName, { color: colors.text }]}>
               {item.video.fileName || item.video.uri.split('/').pop()}
             </Text>
-            <Text style={styles.videoFileSize}>
+            <Text style={[styles.videoFileSize, { color: colors.textSecondary }]}>
               {item.video.fileSize ? `${Math.round(item.video.fileSize / 1024 / 1024)} МБ` : 'Видеофайл'}
             </Text>
           </View>
           <TouchableOpacity 
-            style={styles.removeButton}
+            style={[styles.removeButton, { backgroundColor: colors.surface }]}
             onPress={() => {
               animateItemPress(item.id);
               removeFromQueue(item.id);
             }}
           >
-            <Icon name="close" size={18} color="#FF3B30" />
+            <Icon name="close" size={18} color={colors.primary} />
           </TouchableOpacity>
         </View>
 
@@ -317,14 +325,17 @@ const VideoUploadScreen = observer(({ navigation }) => {
         {item.status === 'uploading' && (
           <View style={styles.progressSection}>
             <View style={styles.progressInfo}>
-              <Text style={styles.progressText}>Загружается...</Text>
-              <Text style={styles.progressPercent}>{item.progress}%</Text>
+              <Text style={[styles.progressText, { color: colors.textSecondary }]}>Загружается...</Text>
+              <Text style={[styles.progressPercent, { color: colors.primary }]}>{item.progress}%</Text>
             </View>
-            <View style={styles.progressBarContainer}>
+            <View style={[styles.progressBarContainer, { backgroundColor: colors.iconBackground }]}>
               <Animated.View 
                 style={[
                   styles.progressBarFill, 
-                  { width: `${item.progress}%` }
+                  { 
+                    width: `${item.progress}%`,
+                    backgroundColor: colors.primary 
+                  }
                 ]} 
               />
             </View>
@@ -334,8 +345,14 @@ const VideoUploadScreen = observer(({ navigation }) => {
         {/* Поле ввода названия */}
         {item.status !== 'completed' && (
           <View style={styles.fileNameSection}>
-            <Text style={styles.fieldLabel}>Название файла</Text>
-            <View style={styles.fileNameInputContainer}>
+            <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Название файла</Text>
+            <View style={[
+              styles.fileNameInputContainer, 
+              { 
+                backgroundColor: colors.inputBackground,
+                borderColor: colors.border 
+              }
+            ]}>
               <TextInput
                 ref={(ref) => {
                   if (ref) {
@@ -343,22 +360,23 @@ const VideoUploadScreen = observer(({ navigation }) => {
                   }
                 }}
                 key={`input-${item.id}`}
-                style={styles.fileNameInput}
+                style={[styles.fileNameInput, { color: colors.text }]}
                 defaultValue={fileName}
                 onChangeText={(text) => {
                   fileNameValues.current[item.id] = text;
                 }}
                 placeholder="Введите название"
-                placeholderTextColor="#C7C7CC"
+                placeholderTextColor={colors.textTertiary}
                 editable={item.status !== 'uploading'}
                 selectTextOnFocus={true}
                 autoCorrect={false}
                 autoCapitalize="none"
                 returnKeyType="done"
                 blurOnSubmit={true}
+                keyboardAppearance={isDark ? 'dark' : 'light'}
               />
             </View>
-            <Text style={styles.fileExtension}>
+            <Text style={[styles.fileExtension, { color: colors.textSecondary }]}>
               Расширение: .{item.video.type?.split('/')[1] || 'mp4'}
             </Text>
           </View>
@@ -369,7 +387,11 @@ const VideoUploadScreen = observer(({ navigation }) => {
           <TouchableOpacity 
             style={[
               styles.uploadButton,
-              (!fileNameValues.current[item.id] || !fileNameValues.current[item.id].trim()) && styles.uploadButtonDisabled
+              { backgroundColor: colors.primary },
+              (!fileNameValues.current[item.id] || !fileNameValues.current[item.id].trim()) && [
+                styles.uploadButtonDisabled,
+                { backgroundColor: colors.textTertiary }
+              ]
             ]}
             onPress={() => {
               animateItemPress(item.id);
@@ -384,9 +406,9 @@ const VideoUploadScreen = observer(({ navigation }) => {
 
         {/* Статус завершения */}
         {item.status === 'completed' && (
-          <View style={styles.completedStatus}>
-            <Icon name="check-circle" size={16} color="#34C759" />
-            <Text style={styles.completedText}>Успешно загружено</Text>
+          <View style={[styles.completedStatus, { backgroundColor: colors.completedBackground }]}>
+            <Icon name="check-circle" size={16} color={colors.success} />
+            <Text style={[styles.completedText, { color: colors.success }]}>Успешно загружено</Text>
           </View>
         )}
       </Animated.View>
@@ -394,18 +416,12 @@ const VideoUploadScreen = observer(({ navigation }) => {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: statusBarHeight }]}>
-      {/* Gradient Header */}
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Icon name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Загрузка видео</Text>
-        <View style={{ width: 40 }} />
-      </View>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Custom Header */}
+      <CustomHeader 
+        title="Загрузка видео"
+        onBackPress={() => navigation.goBack()}
+      />
 
       <ScrollView 
         style={styles.content}
@@ -427,39 +443,46 @@ const VideoUploadScreen = observer(({ navigation }) => {
         >
           {/* Выбор заказа */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Выберите заказ</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Выберите заказ</Text>
             <TouchableOpacity 
               style={[
                 styles.orderSelectCard,
-                selectedOrder && styles.orderSelectCardSelected
+                { backgroundColor: colors.cardBackground },
+                selectedOrder && [
+                  styles.orderSelectCardSelected,
+                  { 
+                    borderColor: colors.primary,
+                    backgroundColor: colors.cardBackgroundSelected 
+                  }
+                ]
               ]}
               onPress={() => setShowOrdersModal(true)}
             >
               <View style={styles.orderSelectContent}>
                 <View style={[
                   styles.orderSelectIcon,
-                  { backgroundColor: selectedOrder ? '#007AFF' : '#F0F0F0' }
+                  { backgroundColor: selectedOrder ? colors.primary : colors.iconBackground }
                 ]}>
                   <Icon 
                     name={selectedOrder ? "check-circle" : "receipt"} 
                     size={24} 
-                    color={selectedOrder ? "#FFFFFF" : "#8E8E93"} 
+                    color={selectedOrder ? "#FFFFFF" : colors.textSecondary} 
                   />
                 </View>
                 <View style={styles.orderSelectText}>
                   <Text style={[
                     styles.orderSelectTitle,
-                    selectedOrder && styles.orderSelectedTitle
+                    { color: selectedOrder ? colors.primary : colors.textSecondary }
                   ]}>
                     {selectedOrder ? `Заказ #${selectedOrder.number_ozon}` : 'Выберите заказ'}
                   </Text>
                   {!selectedOrder && (
-                    <Text style={styles.orderSelectSubtitle}>
+                    <Text style={[styles.orderSelectSubtitle, { color: colors.textTertiary }]}>
                       Нажмите для выбора заказа
                     </Text>
                   )}
                 </View>
-                <Icon name="chevron-right" size={24} color="#C7C7CC" />
+                <Icon name="chevron-right" size={24} color={colors.textTertiary} />
               </View>
             </TouchableOpacity>
           </View>
@@ -468,19 +491,25 @@ const VideoUploadScreen = observer(({ navigation }) => {
             <>
               {/* Область добавления файлов */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Добавить видео</Text>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Добавить видео</Text>
                 <TouchableOpacity 
-                  style={styles.addFilesCard}
+                  style={[
+                    styles.addFilesCard,
+                    { 
+                      backgroundColor: colors.card,
+                      borderColor: colors.border 
+                    }
+                  ]}
                   onPress={selectVideos}
                 >
-                  <View style={styles.addFilesIconContainer}>
-                    <Icon name="add-circle" size={32} color="#007AFF" />
+                  <View style={[styles.addFilesIconContainer, { backgroundColor: colors.primaryBackground }]}>
+                    <Icon name="add-circle" size={32} color={colors.primary} />
                   </View>
-                  <Text style={styles.addFilesTitle}>Выберите видеофайлы</Text>
-                  <Text style={styles.addFilesSubtitle}>
+                  <Text style={[styles.addFilesTitle, { color: colors.text }]}>Выберите видеофайлы</Text>
+                  <Text style={[styles.addFilesSubtitle, { color: colors.textSecondary }]}>
                     Поддерживается множественный выбор
                   </Text>
-                  <Text style={styles.addFilesFormats}>
+                  <Text style={[styles.addFilesFormats, { color: colors.textTertiary }]}>
                     MP4, MOV, AVI до 500 МБ
                   </Text>
                 </TouchableOpacity>
@@ -490,16 +519,22 @@ const VideoUploadScreen = observer(({ navigation }) => {
               {uploadQueue.length > 0 && (
                 <View style={styles.section}>
                   <View style={styles.queueHeader}>
-                    <Text style={styles.sectionTitle}>
+                    <Text style={[styles.sectionTitle, { color: colors.text }]}>
                       Очередь загрузок ({uploadQueue.length})
                     </Text>
                     {uploadQueue.some(item => item.status === 'pending') && (
                       <TouchableOpacity 
-                        style={styles.uploadAllButton}
+                        style={[
+                          styles.uploadAllButton,
+                          { 
+                            backgroundColor: colors.primaryBackground,
+                            borderColor: colors.primary 
+                          }
+                        ]}
                         onPress={uploadAll}
                       >
-                        <Icon name="cloud-upload" size={16} color="#007AFF" />
-                        <Text style={styles.uploadAllText}>Загрузить все</Text>
+                        <Icon name="cloud-upload" size={16} color={colors.primary} />
+                        <Text style={[styles.uploadAllText, { color: colors.primary }]}>Загрузить все</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -525,15 +560,21 @@ const VideoUploadScreen = observer(({ navigation }) => {
         presentationStyle="pageSheet"
         onRequestClose={() => setShowOrdersModal(false)}
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
+        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={[
+            styles.modalHeader, 
+            { 
+              backgroundColor: colors.background,
+              borderBottomColor: colors.border 
+            }
+          ]}>
             <TouchableOpacity 
-              style={styles.modalCloseButton}
+              style={[styles.modalCloseButton, { backgroundColor: colors.background }]}
               onPress={() => setShowOrdersModal(false)}
             >
-              <Icon name="close" size={24} color="#007AFF" />
+              <Icon name="close" size={24} color={colors.primary} />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Выберите заказ</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Выберите заказ</Text>
             <View style={{ width: 40 }} />
           </View>
           
@@ -544,25 +585,25 @@ const VideoUploadScreen = observer(({ navigation }) => {
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => (
               <TouchableOpacity 
-                style={styles.orderCard}
+                style={[styles.orderCard, { backgroundColor: colors.cardBackground }]}
                 onPress={() => selectOrder(item)}
               >
-                <View style={styles.orderCardIcon}>
-                  <Icon name="receipt" size={20} color="#007AFF" />
+                <View style={[styles.orderCardIcon, { backgroundColor: colors.cardBackground }]}>
+                  <Icon name="receipt" size={20} color={colors.primary} />
                 </View>
                 <View style={styles.orderCardInfo}>
-                  <Text style={styles.orderCardNumber}>
+                  <Text style={[styles.orderCardNumber, { color: colors.text }]}>
                     Отправление #{item.number_ozon}
                   </Text>
                 </View>
-                <Icon name="chevron-right" size={20} color="#C7C7CC" />
+                <Icon name="chevron-right" size={20} color={colors.textTertiary} />
               </TouchableOpacity>
             )}
             ListEmptyComponent={() => (
               <View style={styles.emptyState}>
-                <Icon name="inbox" size={64} color="#C7C7CC" />
-                <Text style={styles.emptyStateTitle}>Нет заказов</Text>
-                <Text style={styles.emptyStateSubtitle}>
+                <Icon name="inbox" size={64} color={colors.textTertiary} />
+                <Text style={[styles.emptyStateTitle, { color: colors.textSecondary }]}>Нет заказов</Text>
+                <Text style={[styles.emptyStateSubtitle, { color: colors.textTertiary }]}>
                   Отправления пока не найдены
                 </Text>
               </View>
@@ -574,37 +615,9 @@ const VideoUploadScreen = observer(({ navigation }) => {
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#007AFF',
-    shadowColor: '#007AFF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    textAlign: 'center',
   },
   content: {
     flex: 1,
@@ -619,13 +632,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1A1A1A',
     marginBottom: 16,
   },
   
   // Карточка выбора заказа
   orderSelectCard: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 20,
     shadowColor: '#000',
@@ -637,8 +648,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   orderSelectCardSelected: {
-    borderColor: '#007AFF',
-    backgroundColor: '#F0F8FF',
+    borderWidth: 2,
   },
   orderSelectContent: {
     flexDirection: 'row',
@@ -658,20 +668,14 @@ const styles = StyleSheet.create({
   orderSelectTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#8E8E93',
-  },
-  orderSelectedTitle: {
-    color: '#007AFF',
   },
   orderSelectSubtitle: {
     fontSize: 14,
-    color: '#C7C7CC',
     marginTop: 2,
   },
 
   // Карточка добавления файлов
   addFilesCard: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 32,
     alignItems: 'center',
@@ -681,14 +685,12 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 4,
     borderWidth: 2,
-    borderColor: '#E5E5EA',
     borderStyle: 'dashed',
   },
   addFilesIconContainer: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: '#F0F8FF',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
@@ -696,18 +698,15 @@ const styles = StyleSheet.create({
   addFilesTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1A1A1A',
     marginBottom: 8,
   },
   addFilesSubtitle: {
     fontSize: 16,
-    color: '#8E8E93',
     textAlign: 'center',
     marginBottom: 8,
   },
   addFilesFormats: {
     fontSize: 14,
-    color: '#C7C7CC',
     textAlign: 'center',
   },
 
@@ -723,21 +722,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: '#F0F8FF',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#007AFF',
   },
   uploadAllText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#007AFF',
     marginLeft: 6,
   },
 
   // Элемент очереди загрузки
   uploadItem: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 20,
     marginBottom: 16,
@@ -766,18 +761,15 @@ const styles = StyleSheet.create({
   videoFileName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1A1A1A',
   },
   videoFileSize: {
     fontSize: 14,
-    color: '#8E8E93',
     marginTop: 2,
   },
   removeButton: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#FFF5F5',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -795,22 +787,18 @@ const styles = StyleSheet.create({
   progressText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#8E8E93',
   },
   progressPercent: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#007AFF',
   },
   progressBarContainer: {
     height: 6,
-    backgroundColor: '#F0F0F0',
     borderRadius: 3,
     overflow: 'hidden',
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#007AFF',
     borderRadius: 3,
   },
 
@@ -821,32 +809,26 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#8E8E93',
     marginBottom: 8,
   },
   fileNameInputContainer: {
-    backgroundColor: '#F8F9FA',
     borderRadius: 12,
     paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: '#E5E5EA',
     marginBottom: 8,
   },
   fileNameInput: {
     fontSize: 16,
-    color: '#1A1A1A',
     paddingVertical: 12,
     minHeight: 44,
   },
   fileExtension: {
     fontSize: 12,
-    color: '#8E8E93',
     fontStyle: 'italic',
   },
 
   // Кнопки
   uploadButton: {
-    backgroundColor: '#007AFF',
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 20,
@@ -855,7 +837,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   uploadButtonDisabled: {
-    backgroundColor: '#C7C7CC',
+    opacity: 0.6,
   },
   uploadButtonText: {
     color: '#FFFFFF',
@@ -870,20 +852,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     paddingHorizontal: 12,
-    backgroundColor: '#F0FFF4',
     borderRadius: 8,
   },
   completedText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#34C759',
     marginLeft: 6,
   },
 
   // Модальное окно
   modalContainer: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -891,9 +870,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
   },
   modalCloseButton: {
     width: 40,
@@ -901,19 +878,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 20,
-    backgroundColor: '#F0F8FF',
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1A1A1A',
   },
   ordersList: {
     flex: 1,
     paddingTop: 20,
   },
   orderCard: {
-    backgroundColor: '#FFFFFF',
     marginHorizontal: 20,
     marginBottom: 12,
     padding: 20,
@@ -930,7 +904,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F0F8FF',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -941,7 +914,6 @@ const styles = StyleSheet.create({
   orderCardNumber: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1A1A1A',
   },
 
   // Пустое состояние
@@ -953,13 +925,11 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#8E8E93',
     marginTop: 16,
     marginBottom: 8,
   },
   emptyStateSubtitle: {
     fontSize: 16,
-    color: '#C7C7CC',
     textAlign: 'center',
     lineHeight: 22,
   },

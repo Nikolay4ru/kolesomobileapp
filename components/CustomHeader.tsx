@@ -8,6 +8,7 @@ import {
   StatusBar,
   Platform,
   SafeAreaView,
+  Appearance,
 } from 'react-native';
 import { useColorScheme } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -31,6 +32,7 @@ const CustomHeader = ({
   iconColorRight2 = null,
   iconSize = 24,
   backgroundColor = null,
+  modal = false, // Новый параметр
 }) => {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
@@ -69,12 +71,9 @@ const CustomHeader = ({
   // Высота статус бара
   const statusBarHeight = Platform.OS === 'ios' ? 0 : (insets.top || StatusBar.currentHeight || 0);
   
-  // Подсчитываем количество правых иконок для балансировки
-  const rightIconsCount = (rightIcon ? 1 : 0) + (rightIcon2 ? 1 : 0);
-  const rightContainerWidth = rightIconsCount === 0 ? 40 : 40 + (rightIconsCount * 44);
-  
   const HeaderWrapper = ({ children }) => {
-    if (Platform.OS === 'ios') {
+    // Если modal = false и платформа iOS, добавляем SafeAreaView
+    if (Platform.OS === 'ios' && !modal) {
       return (
         <SafeAreaView style={{ backgroundColor: finalBackgroundColor, flex: 0 }}>
           {children}
@@ -97,7 +96,9 @@ const CustomHeader = ({
           style={[
             styles.container,
             { backgroundColor: finalBackgroundColor },
-            Platform.OS === 'android' && { paddingTop: statusBarHeight }
+            Platform.OS === 'android' && { paddingTop: statusBarHeight },
+            // Добавляем отступ для iOS если modal = true
+            Platform.OS === 'ios' && !modal && { paddingTop: insets.top }
           ]}
         >
           <View 
@@ -111,15 +112,13 @@ const CustomHeader = ({
             ]}
           >
             {/* Левая иконка */}
-            <View style={styles.leftContainer}>
-              <TouchableOpacity
-                onPress={handleLeftAction}
-                style={styles.iconButton}
-                hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
-              >
-                <Ionicons name={leftIcon} size={iconSize} color={finalIconColor} />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              onPress={handleLeftAction}
+              style={styles.sideContainer}
+              hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+            >
+              <Ionicons name={leftIcon} size={iconSize} color={finalIconColor} />
+            </TouchableOpacity>
 
             {/* Центральный элемент */}
             <View style={styles.centerContainer}>
@@ -140,11 +139,11 @@ const CustomHeader = ({
             </View>
 
             {/* Правые иконки */}
-            <View style={[styles.rightContainer, { width: rightContainerWidth }]}>
+            <View style={styles.rightIconsContainer}>
               {rightIcon2 && (
                 <TouchableOpacity
                   onPress={rightAction2}
-                  style={styles.iconButton}
+                  style={styles.rightIcon}
                   hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
                 >
                   <Ionicons name={rightIcon2} size={iconSize} color={finalIconColorRight2} />
@@ -153,7 +152,7 @@ const CustomHeader = ({
               {rightIcon && (
                 <TouchableOpacity
                   onPress={rightAction}
-                  style={[styles.iconButton, rightIcon2 && { marginLeft: 20 }]}
+                  style={styles.rightIcon}
                   hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
                 >
                   <Ionicons name={rightIcon} size={iconSize} color={finalIconColorRight} />
@@ -173,12 +172,13 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     height: 56,
     paddingHorizontal: 15,
     borderBottomWidth: 1,
   },
-  leftContainer: {
+  sideContainer: {
     width: 40,
     alignItems: 'flex-start',
     justifyContent: 'center',
@@ -189,19 +189,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 10,
   },
-  rightContainer: {
+  rightIconsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
+    minWidth: 80,
   },
-  iconButton: {
-    justifyContent: 'center',
-    alignItems: 'center',
+  rightIcon: {
+    marginLeft: 20,
   },
   title: {
     fontSize: 18,
     fontWeight: '600',
-    textAlign: 'center',
   },
   logo: {
     height: 30,

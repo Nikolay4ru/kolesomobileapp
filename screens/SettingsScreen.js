@@ -23,15 +23,13 @@ import { useStores } from '../useStores';
 import { useTheme } from '../contexts/ThemeContext';
 import { useThemedStyles } from '../hooks/useThemedStyles';
 import BannerNotificationPermission from '../components/BannerNotificationPermission';
-
-
 const storage = new MMKV();
 
 // Компонент модального окна выбора темы
 const ThemeSelector = ({ visible, onClose }) => {
   const { themeMode, changeTheme, colors } = useTheme();
   const styles = useThemedStyles(themeModalStyles);
-
+  
   const themeOptions = [
     { label: 'Системная', value: 'system', icon: 'phone-iphone' },
     { label: 'Светлая', value: 'light', icon: 'light-mode' },
@@ -110,10 +108,20 @@ const SettingsScreen = observer(() => {
   const { colors, theme, themeMode } = useTheme();
   const styles = useThemedStyles(themedStyles);
   const [themeModalVisible, setThemeModalVisible] = useState(false);
-
+  const [appVersion, setAppVersion] = useState('');
   // Состояния для настроек
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [adminNotificationsEnabled, setAdminNotificationsEnabled] = useState(true);
+
+
+  useEffect(() => {
+  loadSettings();
+  loadServerSettings();
+  setAppVersion(DeviceInfo.getReadableVersion());
+  // Или если хотите видеть и билд: 
+  // DeviceInfo.getReadableVersion();
+}, []);
+
 
   // Загрузка сохраненных настроек при монтировании
   useEffect(() => {
@@ -376,11 +384,14 @@ const SettingsScreen = observer(() => {
           <Text style={styles.sectionTitle}>Общие</Text>
           <View style={styles.settingsCard}>
             <ActionItem
-              icon="info-outline"
-              title="О приложении"
-              subtitle="Версия 1.0.0"
-              onPress={() => Alert.alert('О приложении', 'Koleso App v1.0.0\n\n© 2024 Все права защищены')}
-            />
+  icon="info-outline"
+  title="О приложении"
+  subtitle={`Версия ${appVersion || ''}`}
+  onPress={() => Alert.alert(
+    'О приложении', 
+    `Колесо v${appVersion}\n\n© 2025 Все права защищены`
+  )}
+/>
             <ActionItem
               icon="shield"
               iconComponent={Ionicons}

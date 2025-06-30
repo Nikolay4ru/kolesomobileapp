@@ -340,8 +340,8 @@ const CartScreen = observer(({ navigation }) => {
 
       isUpdatingQuantity.current = true;
 
-      await cartStore.updateItemQuantity(itemId, newQuantity, authStore.token);
-
+      await cartStore.updateItemQuantity(itemId, newQuantity, authStore.token); 
+      setForceUpdate(prev => !prev);
       setTimeout(() => {
         isUpdatingQuantity.current = false;
       }, 100);
@@ -934,6 +934,11 @@ const CartScreen = observer(({ navigation }) => {
     paddingBottom: tabBarHeight + 140 // footer height + небольшой отступ
   };
 
+  const bottomOffset = Platform.select({
+    ios: tabBarHeight,
+    android: tabBarHeight > 0 ? tabBarHeight : insets.bottom
+  });
+
   // Рендер футера
   const renderFooter = () => {
     if (selectedItems.length === 0) return null;
@@ -945,11 +950,11 @@ const CartScreen = observer(({ navigation }) => {
 
     return (
       <View style={[
-      styles.footer,
-      { 
-        bottom: tabBarHeight, // Поднимаем footer над TabBar
-      }
-    ]}>
+        styles.footer,
+        { 
+          bottom: bottomOffset, // Поднимаем footer точно над TabBar
+        }
+      ]}>
         <View style={[
         styles.footerContent,
         { paddingBottom: footerPaddingBottom }
@@ -1109,7 +1114,12 @@ const CartScreen = observer(({ navigation }) => {
             data={cartStore.items}
             renderItem={renderItem}
             keyExtractor={item => `cart-${item.id}`}
-            contentContainerStyle={[styles.listContent, dynamicListContentStyle]}
+            contentContainerStyle={[
+      styles.listContent,
+      { 
+        paddingBottom: 180 + bottomOffset // Учитываем реальную высоту отступа
+      }
+    ]}
             ListHeaderComponent={
               <DeliveryOptions
                 deliveryOption={deliveryOption}

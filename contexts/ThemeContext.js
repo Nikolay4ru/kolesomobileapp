@@ -279,6 +279,9 @@ export const lightColors = {
   inputBackground: '#F5F5F5',
   buttonDisabled: '#E0E0E0',
   placeholder: '#999999',
+  completedBackground: '#D1FAE5',
+  dangerBackground: '#FEF3C7',
+  iconBackground: '#FFFFFF',
 
   // Градиенты
   gradientStart: '#006363',
@@ -327,6 +330,9 @@ export const darkColors = {
   inputBackground: '#2C2C2E',
   buttonDisabled: '#38383A',
   placeholder: '#48484A',
+  completedBackground: '#1F4D2F',
+  dangerBackground: '#4D3F1F',
+  iconBackground: '#1C1C1E',
 
   // Градиенты
   gradientStart: '#00A3A3',

@@ -61,13 +61,6 @@ const CheckoutScreen = observer(() => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
-  // Проверка доступности Яндекс Сплит
-  const isYandexSplitAvailable = () => {
-    // Проверяем, что у всех товаров в корзине есть yandexsplit = 1
-    console.log(cartStore.items);
-    return cartStore.items.every(item => item.yandexsplit === 1 || item.yandexsplit === '1');
-  };
-
   // Синхронизация данных профиля если пользователь залогинен/обновил профиль
   useEffect(() => {
     setName(authStore.user?.firstName || authStore.user?.name || '');
@@ -177,13 +170,11 @@ const CheckoutScreen = observer(() => {
       setLoading(true);
 
       const orderData = {
-        user_id: authStore.user?.id,
+         user_id: authStore.user?.id,
         items: cartStore.items.map(item => ({
           product_id: item.product_id || item.id,
-          name: item.name || item.title || `Товар ${item.id}`,
           quantity: item.quantity,
           price: item.price,
-          description: item.description || ''
         })),
         total: cartStore.totalAmount,
         customerName: name,
@@ -199,18 +190,11 @@ const CheckoutScreen = observer(() => {
       };
 
       // Определяем URL в зависимости от способа оплаты
-      let apiUrl;
-      if (paymentMethod === 'sbp') {
-        apiUrl = 'https://api.koleso.app/api/order-checkout.php?action=create-order-with-sbp';
-      } else if (paymentMethod === 'yandex_split') {
-        apiUrl = 'https://api.koleso.app/api/order-checkout.php?action=create-order-with-yandex-split';
-      } else {
-        apiUrl = 'https://api.koleso.app/api/order-checkout.php?action=create-order';
-      }
-      
-      console.log(apiUrl);
-      console.log(JSON.stringify(orderData));
-      
+      const apiUrl = paymentMethod === 'sbp' 
+        ? 'https://api.koleso.app/api/order-checkout.php?action=create-order-with-sbp'
+        : 'https://api.koleso.app/api/order-checkout.php?action=create-order';
+        console.log(apiUrl);
+        console.log(JSON.stringify(orderData));
       // Создаем заказ
       const response = await axios.post(
         apiUrl,
@@ -227,54 +211,33 @@ const CheckoutScreen = observer(() => {
         const orderId = response.data.orderId;
 
         if (paymentMethod === 'sbp' && response.data.qrCode) {
-          // Переходим на экран оплаты СБП
-          navigation.navigate('SBPPayment', {
-            paymentData: {
-              orderId,
-              qrCode: response.data.qrCode.image,
-              amount: response.data.amount || cartStore.totalAmount,
-              sbpOrderId: response.data.sbpOrderId,
-              qrPayload: response.data.qrCode.payload,
-              expiresAt: response.data.expiresAt
-            },
-            orderNumber: response.data.orderNumber || orderId,
-            onSuccess: () => {
-              cartStore.clearCart();
-              navigation.replace('OrderSuccess', { 
-                orderId,
-                deliveryType,
-                orderNumber: response.data.orderNumber || orderId,
-                deliveryDate: deliveryType === 'delivery' ? deliveryDate : null
-              });
-            }
-          });
-        } else if (paymentMethod === 'yandex_split' && response.data.paymentUrl) {
-          // Переходим на экран оплаты Яндекс Сплит
-          navigation.navigate('YandexSplitPayment', {
-            paymentData: {
-              orderId,
-              paymentUrl: response.data.paymentUrl,
-              amount: response.data.amount || cartStore.totalAmount,
-              splitOrderId: response.data.splitOrderId,
-              expiresAt: response.data.expiresAt
-            },
-            orderNumber: response.data.orderNumber || orderId,
-            onSuccess: () => {
-              cartStore.clearCart();
-              navigation.replace('OrderSuccess', { 
-                orderId,
-                deliveryType,
-                orderNumber: response.data.orderNumber || orderId,
-                deliveryDate: deliveryType === 'delivery' ? deliveryDate : null
-              });
-            }
-          });
-        } else {
+    // Переходим на экран оплаты СБП
+    navigation.navigate('SBPPayment', {
+      paymentData: {
+        orderId,
+        qrCode: response.data.qrCode.image, // Используем изображение QR-кода
+        amount: response.data.amount || cartStore.totalAmount,
+        sbpOrderId: response.data.sbpOrderId,
+        qrPayload: response.data.qrCode.payload, // Сохраняем payload для открытия в банке
+        expiresAt: response.data.expiresAt
+      },
+      orderNumber: response.data.orderNumber || orderId,
+      onSuccess: () => {
+        cartStore.clearCart();
+        navigation.replace('OrderSuccess', { 
+          orderId,
+          deliveryType,
+          orderNumber: response.data.orderNumber || orderId,
+          deliveryDate: deliveryType === 'delivery' ? deliveryDate : null
+        });
+      }
+    });
+  } else {
           cartStore.clearCart();
           navigation.replace('OrderSuccess', { 
             orderId,
             deliveryType,
-            orderNumber: response.data.orderNumber || orderId,
+             orderNumber: response.data.orderNumber || orderId,
             deliveryDate: deliveryType === 'delivery' ? deliveryDate : null
           });
         }
@@ -612,28 +575,6 @@ const CheckoutScreen = observer(() => {
                     СБП (Система быстрых платежей)
                   </Text>
                 </TouchableOpacity>
-                
-                {/* Яндекс Сплит - показываем только если доступен для всех товаров */}
-                {isYandexSplitAvailable() && (
-                  <TouchableOpacity
-                    style={[
-                      styles.paymentOption,
-                      styles.paymentOptionFull,
-                      paymentMethod === 'yandex_split' && styles.paymentOptionActive
-                    ]}
-                    onPress={() => setPaymentMethod('yandex_split')}
-                  >
-                    <View style={styles.yandexSplitIcon}>
-                      <Text style={styles.yandexSplitIconText}>Я</Text>
-                    </View>
-                    <Text style={[
-                      styles.paymentOptionText,
-                      paymentMethod === 'yandex_split' && { color: colors.primary }
-                    ]}>
-                      Яндекс Сплит (оплата частями)
-                    </Text>
-                  </TouchableOpacity>
-                )}
               </View>
               
               {paymentMethod === 'sbp' && (
@@ -641,15 +582,6 @@ const CheckoutScreen = observer(() => {
                   <Ionicons name="information-circle-outline" size={20} color={colors.primary} />
                   <Text style={styles.paymentNoticeText}>
                     После оформления заказа вам будет показан QR-код для оплаты через приложение вашего банка
-                  </Text>
-                </View>
-              )}
-              
-              {paymentMethod === 'yandex_split' && (
-                <View style={styles.paymentNotice}>
-                  <Ionicons name="information-circle-outline" size={20} color={colors.primary} />
-                  <Text style={styles.paymentNoticeText}>
-                    Оплата частями без процентов от 2 до 4 платежей. После оформления заказа вы будете перенаправлены на страницу Яндекс Пэй для завершения оплаты
                   </Text>
                 </View>
               )}
@@ -953,19 +885,6 @@ const themedStyles = (colors, theme) => ({
     color: colors.textSecondary,
     marginLeft: 8,
     fontWeight: '500',
-  },
-  yandexSplitIcon: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    backgroundColor: '#FC3F1D',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  yandexSplitIconText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
   },
   paymentNotice: {
     flexDirection: 'row',

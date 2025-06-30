@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -26,31 +26,30 @@ const EditProfileScreen = observer(() => {
   const { authStore } = useStores();
   const { colors, theme } = useTheme();
   const styles = useThemedStyles(themedStyles);
-  
-  const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    middleName: '',
-    email: '',
-    birthDate: new Date(),
-    gender: 'male',
-  });
-  
+
+  // Инициализация только один раз на основе authStore.user
+  const [formData, setFormData] = useState(() => ({
+    firstName: authStore.user?.firstName || '',
+    lastName: authStore.user?.lastName || '',
+    middleName: authStore.user?.middleName || '',
+    email: authStore.user?.email || '',
+    birthDate: authStore.user?.birthDate ? new Date(authStore.user.birthDate) : new Date(),
+    gender: authStore.user?.gender || 'male',
+  }));
+
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Проверяем, была ли уже установлена дата рождения
+  const isBirthDateSet = authStore.user?.birthDate ? true : false;
 
-  useEffect(() => {
-    if (authStore.user) {
-      setFormData({
-        firstName: authStore.user.firstName || '',
-        lastName: authStore.user.lastName || '',
-        middleName: authStore.user.middleName || '',
-        email: authStore.user.email || '',
-        birthDate: authStore.user.birthDate ? new Date(authStore.user.birthDate) : new Date(),
-        gender: authStore.user.gender || 'male',
-      });
-    }
-  }, [authStore.user]);
+  // Используем useCallback для предотвращения пересоздания функций
+  const handleFieldChange = useCallback((field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  }, []);
 
   const handleSave = async () => {
     // Валидация
@@ -70,17 +69,23 @@ const EditProfileScreen = observer(() => {
     }
 
     setIsLoading(true);
-    
+
     try {
-      await authStore.updateProfile({
+      const updateData = {
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
         middleName: formData.middleName.trim(),
         email: formData.email.trim(),
-        birthDate: formData.birthDate.toISOString().split('T')[0],
         gender: formData.gender,
-      });
+      };
       
+      // Добавляем дату рождения только если она была установлена ранее
+      if (isBirthDateSet) {
+        updateData.birthDate = formData.birthDate.toISOString().split('T')[0];
+      }
+
+      await authStore.updateProfile(updateData);
+
       Alert.alert('Успешно', 'Профиль обновлен', [
         { text: 'OK', onPress: () => navigation.goBack() }
       ]);
@@ -91,25 +96,49 @@ const EditProfileScreen = observer(() => {
     }
   };
 
-  const InputField = ({ label, value, onChangeText, placeholder, keyboardType = 'default', autoCapitalize = 'words' }) => (
+  // Мемоизируем компонент InputField
+  const InputField = useCallback(({ label, value, field, placeholder, keyboardType = 'default', autoCapitalize = 'words' }) => (
     <View style={styles.inputContainer}>
       <Text style={styles.inputLabel}>{label}</Text>
       <TextInput
         style={styles.input}
         value={value}
-        onChangeText={onChangeText}
+        onChangeText={(text) => handleFieldChange(field, text)}
         placeholder={placeholder}
         placeholderTextColor={colors.textSecondary}
         keyboardType={keyboardType}
         autoCapitalize={autoCapitalize}
+        // Добавляем blurOnSubmit для предотвращения проблем с фокусом
+        blurOnSubmit={false}
       />
     </View>
-  );
+  ), [styles, colors, handleFieldChange]);
+
+  const handleDateConfirm = useCallback((date) => {
+    setDatePickerOpen(false);
+    handleFieldChange('birthDate', date);
+  }, [handleFieldChange]);
+
+  const handleDateCancel = useCallback(() => {
+    setDatePickerOpen(false);
+  }, []);
+
+  const openDatePicker = useCallback(() => {
+    if (!isBirthDateSet) {
+      setDatePickerOpen(true);
+    } else {
+      Alert.alert(
+        'Дата рождения установлена', 
+        'Дата рождения не может быть изменена после установки. Если требуется изменение, обратитесь в службу поддержки.',
+        [{ text: 'Понятно' }]
+      );
+    }
+  }, [isBirthDateSet]);
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} />
-      
+
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top }]}>
         <TouchableOpacity 
@@ -127,7 +156,11 @@ const EditProfileScreen = observer(() => {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView 
-          contentContainerStyle={styles.scrollContent}
+        
+          contentContainerStyle={[
+        styles.scrollContent,
+        { paddingBottom: insets.bottom + 100 }
+      ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -138,21 +171,21 @@ const EditProfileScreen = observer(() => {
             <InputField
               label="Имя"
               value={formData.firstName}
-              onChangeText={(text) => setFormData({...formData, firstName: text})}
+              field="firstName"
               placeholder="Введите имя"
             />
             
             <InputField
               label="Фамилия"
               value={formData.lastName}
-              onChangeText={(text) => setFormData({...formData, lastName: text})}
+              field="lastName"
               placeholder="Введите фамилию"
             />
             
             <InputField
               label="Отчество"
               value={formData.middleName}
-              onChangeText={(text) => setFormData({...formData, middleName: text})}
+              field="middleName"
               placeholder="Введите отчество (необязательно)"
             />
           </View>
@@ -164,7 +197,7 @@ const EditProfileScreen = observer(() => {
             <InputField
               label="Email"
               value={formData.email}
-              onChangeText={(text) => setFormData({...formData, email: text})}
+              field="email"
               placeholder="example@email.com"
               keyboardType="email-address"
               autoCapitalize="none"
@@ -186,19 +219,33 @@ const EditProfileScreen = observer(() => {
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Дата рождения</Text>
               <TouchableOpacity 
-                style={styles.dateButton}
-                onPress={() => setDatePickerOpen(true)}
+                style={[
+                  styles.dateButton,
+                  isBirthDateSet && styles.dateButtonDisabled
+                ]}
+                onPress={openDatePicker}
+                activeOpacity={isBirthDateSet ? 1 : 0.7}
               >
                 <Icon name="event" size={20} color={colors.textSecondary} />
-                <Text style={styles.dateText}>
+                <Text style={[
+                  styles.dateText,
+                  isBirthDateSet && styles.dateTextDisabled
+                ]}>
                   {formData.birthDate.toLocaleDateString('ru-RU', {
                     day: 'numeric',
                     month: 'long',
                     year: 'numeric'
                   })}
                 </Text>
-                <Icon name="chevron-right" size={20} color={colors.textSecondary} />
+                {!isBirthDateSet && <Icon name="chevron-right" size={20} color={colors.textSecondary} />}
+                {isBirthDateSet && <Icon name="lock" size={16} color={colors.textSecondary} />}
               </TouchableOpacity>
+              <Text style={[styles.dateHint, isBirthDateSet && styles.dateHintWarning]}>
+                {isBirthDateSet 
+                  ? 'Дата рождения не может быть изменена после установки'
+                  : 'Нажмите, чтобы установить дату рождения, можно установить только один раз'
+                }
+              </Text>
             </View>
 
             <View style={styles.inputContainer}>
@@ -209,7 +256,7 @@ const EditProfileScreen = observer(() => {
                     styles.genderOption,
                     formData.gender === 'male' && styles.genderOptionActive
                   ]}
-                  onPress={() => setFormData({...formData, gender: 'male'})}
+                  onPress={() => handleFieldChange('gender', 'male')}
                 >
                   <Icon 
                     name="male" 
@@ -229,7 +276,7 @@ const EditProfileScreen = observer(() => {
                     styles.genderOption,
                     formData.gender === 'female' && styles.genderOptionActive
                   ]}
-                  onPress={() => setFormData({...formData, gender: 'female'})}
+                  onPress={() => handleFieldChange('gender', 'female')}
                 >
                   <Icon 
                     name="female" 
@@ -266,11 +313,8 @@ const EditProfileScreen = observer(() => {
             mode="date"
             maximumDate={new Date()}
             minimumDate={new Date(1900, 0, 1)}
-            onConfirm={(date) => {
-              setDatePickerOpen(false);
-              setFormData({...formData, birthDate: date});
-            }}
-            onCancel={() => setDatePickerOpen(false)}
+            onConfirm={handleDateConfirm}
+            onCancel={handleDateCancel}
             theme={theme === 'dark' ? 'dark' : 'light'}
             locale="ru"
           />
@@ -311,7 +355,7 @@ const themedStyles = (colors, theme) => StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingVertical: 24,
+    paddingVertical: 24
   },
   section: {
     marginBottom: 32,
@@ -374,11 +418,28 @@ const themedStyles = (colors, theme) => StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  dateButtonDisabled: {
+    backgroundColor: colors.surface,
+    opacity: 0.8,
+  },
   dateText: {
     flex: 1,
     fontSize: 16,
     color: colors.text,
     marginLeft: 12,
+  },
+  dateTextDisabled: {
+    color: colors.textSecondary,
+  },
+  dateHint: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 6,
+    fontStyle: 'italic',
+  },
+  dateHintWarning: {
+    color: colors.warning || colors.textSecondary,
+    fontWeight: '500',
   },
   genderContainer: {
     flexDirection: 'row',
@@ -411,7 +472,6 @@ const themedStyles = (colors, theme) => StyleSheet.create({
   saveButton: {
     marginHorizontal: 20,
     marginTop: 24,
-    marginBottom: 40,
     backgroundColor: colors.primary,
     borderRadius: 12,
     paddingVertical: 16,
