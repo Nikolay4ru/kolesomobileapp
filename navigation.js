@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -49,6 +49,10 @@ import AdminOrdersScreen from './screens/AdminOrdersScreen';
 import AdminOrderDetailScreen from './screens/AdminOrderDetail';
 import VideoUploadScreen from './screens/VideoUploadScreen';
 import AdminOrdersFilterScreen from './screens/AdminOrdersScreen';
+import EmployeeDashboardScreen from './screens/EmployeeDashboardScreen';
+
+// Новое: OrderDetail для EmployeeDashboard
+import EmployeeOrderDetailScreen from './screens/AdminOrderDetail'; // используем тот же AdminOrderDetailScreen
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -73,7 +77,6 @@ const HomeStack = () => {
     </Stack.Navigator>
   );
 };
-
 
 const CatalogStack = () => {
   const { colors } = useTheme();
@@ -147,10 +150,10 @@ const CartStack = () => {
       <Stack.Screen name="Checkout" component={CheckoutScreen} options={{ headerShown: false }} />
       <Stack.Screen name="SBPPayment" component={SBPPaymentScreen} options={{ headerShown: false }}/>
       <Stack.Screen 
-  name="YandexSplitPayment" 
-  component={YandexSplitPaymentScreen}
-  options={{ headerShown: false }}
-/>
+        name="YandexSplitPayment" 
+        component={YandexSplitPaymentScreen}
+        options={{ headerShown: false }}
+      />
       <Stack.Screen name="OrderSuccess" component={OrderSuccessScreen} options={{ headerShown: false, gestureEnabled: false }} />
     </Stack.Navigator>
   );
@@ -161,6 +164,24 @@ const ServicePages = () => (
     <Stack.Screen name="ServiceSelection" component={ServiceSelectionScreen} options={{ headerShown: false }} />
   </Stack.Navigator>
 );
+
+// === Добавляем стек для EmployeeDashboard ===
+const EmployeeDashboardStack = () => {
+  const { colors } = useTheme();
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        cardStyle: { backgroundColor: colors.background },
+      }}
+    >
+      <Stack.Screen name="EmployeeDashboardScreen" component={EmployeeDashboardScreen} />
+      <Stack.Screen name="AdminOrderDetail" component={EmployeeOrderDetailScreen} />
+      <Stack.Screen name="EmployeeOrderList" component={AdminOrdersScreen} />
+       <Stack.Screen name="EmployeeSettings" component={SettingsScreen} />
+    </Stack.Navigator>
+  );
+};
 
 // CustomTabBar компонент (оставлен без изменений)
 const CustomTabBar = observer(({ state, descriptors, navigation }) => {
@@ -452,6 +473,12 @@ const linking = {
           }
         }
       },
+      EmployeeDashboard: {
+        screens: {
+          EmployeeDashboardScreen: 'employee-dashboard',
+          EmployeeOrderDetail: 'employee-dashboard/order-detail/:id'
+        }
+      },
       Booking: 'booking',
       FilterScreen: 'filter',
       FilterModalScreen: 'filter-modal',
@@ -468,6 +495,32 @@ const linking = {
 const NavigationContent = observer(() => {
   const { authStore } = useStores();
   const { colors, theme } = useTheme();
+  const [initialRoute, setInitialRoute] = useState(null);
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    // Проверяем настройки при запуске
+    const checkInitialRoute = async () => {
+      await authStore.loadAuthState();
+      
+      // Определяем начальный маршрут в зависимости от состояния авторизации
+      if (!authStore.isLoggedIn) {
+        setInitialRoute('AuthStack');
+      } else if (authStore.canAccessEmployeeDashboard && authStore.showEmployeeDashboard) {
+        setInitialRoute('EmployeeDashboard');
+      } else {
+        setInitialRoute('MainTabs');
+      }
+      
+      setIsReady(true);
+    };
+
+    checkInitialRoute();
+  }, [authStore]);
+
+  if (!isReady || !initialRoute) {
+    return null; // или можно показать загрузчик
+  }
 
   const navigationTheme = {
     dark: theme === 'dark',
@@ -484,19 +537,24 @@ const NavigationContent = observer(() => {
   return (
     <NavigationContainer ref={navigationRef} linking={linking} theme={navigationTheme}>
       <Stack.Navigator
+        initialRouteName={initialRoute}
         screenOptions={{
+          headerShown: false,
           cardStyle: { backgroundColor: colors.background },
-        }}>
-        {authStore.isLoggedIn ? (
-          <>
-            <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
-            <Stack.Screen name="Booking" component={ServicePages} options={{ headerShown: false }} />
-            <Stack.Screen name="FilterScreen" component={FilterScreen} options={{ presentation: 'modal', headerShown: false }} />
-            <Stack.Screen name="FilterModalScreen" component={FilterModalScreen} options={{ presentation: 'modal', headerShown: false }} />
-          </>
-        ) : (
-          <Stack.Screen name="AuthStack" component={AuthStack} options={{ headerShown: false, gestureEnabled: false }} />
-        )}
+          cardStyleInterpolator: ({ current }) => ({
+            cardStyle: {
+              opacity: current.progress,
+            },
+          }),
+        }}
+      >
+        <Stack.Screen name="AuthStack" component={AuthStack} options={{ headerShown: false, gestureEnabled: false }} />
+        <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
+        {/* Меняем EmployeeDashboard на свой Stack */}
+        <Stack.Screen name="EmployeeDashboard" component={EmployeeDashboardStack} options={{ headerShown: false }} />
+        <Stack.Screen name="Booking" component={ServicePages} options={{ headerShown: false }} />
+        <Stack.Screen name="FilterScreen" component={FilterScreen} options={{ presentation: 'modal', headerShown: false }} />
+        <Stack.Screen name="FilterModalScreen" component={FilterModalScreen} options={{ presentation: 'modal', headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

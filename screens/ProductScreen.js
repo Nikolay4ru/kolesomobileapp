@@ -622,6 +622,11 @@ const handleAddRelatedProducts = async (relatedProducts) => {
   const renderStoreItem = ({ item, index }) => {
     const isSelected = selectedStore?.store_id === item.store_id;
     const inStock = item.quantity > 0;
+
+     const bottomPadding = Platform.select({
+        ios: 0,
+        android: insets.bottom > 0 ? insets.bottom : 0,
+      });
     
     return (
       <TouchableOpacity 
@@ -1333,7 +1338,7 @@ const handleAddRelatedProducts = async (relatedProducts) => {
       <View style={[
     styles.bottomPanel, 
     { 
-      bottom: tabBarHeight,
+      bottom: insets.bottom + 54,
       paddingBottom: 0 
     }
   ]}>
@@ -1349,7 +1354,7 @@ const handleAddRelatedProducts = async (relatedProducts) => {
       }
     ]}>
           <View style={styles.bottomPriceInfo}>
-            <Text style={styles.bottomPriceLabel}>Итого:</Text>
+            <Text style={styles.bottomPriceLabel}>Итого: {tabBarHeight}</Text>
             <Text style={styles.bottomPriceValue}>{parseFloat(product.price * quantity).toFixed(0)} ₽</Text>
           </View>
           

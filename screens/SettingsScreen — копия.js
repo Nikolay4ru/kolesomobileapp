@@ -22,8 +22,7 @@ import { MMKV } from 'react-native-mmkv';
 import { useStores } from '../useStores';
 import { useTheme } from '../contexts/ThemeContext';
 import { useThemedStyles } from '../hooks/useThemedStyles';
-//import BannerNotificationPermission from '../components/BannerNotificationPermission';
-import EmployeeDashboardSwitch from '../components/EmployeeDashboardSwitch';
+import BannerNotificationPermission from '../components/BannerNotificationPermission';
 const storage = new MMKV();
 
 // Компонент модального окна выбора темы
@@ -108,25 +107,28 @@ const SettingsScreen = observer(() => {
   const { authStore } = useStores();
   const { colors, theme, themeMode } = useTheme();
   const styles = useThemedStyles(themedStyles);
-
   const [themeModalVisible, setThemeModalVisible] = useState(false);
   const [appVersion, setAppVersion] = useState('');
-
-  // Только useState для уведомлений
+  // Состояния для настроек
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [adminNotificationsEnabled, setAdminNotificationsEnabled] = useState(true);
+  const [showEmployeeDashboard, setShowEmployeeDashboard] = useState(authStore.showEmployeeDashboard);
+ 
 
-  // showEmployeeDashboard — только MobX!
-  const showEmployeeDashboard = authStore.showEmployeeDashboard;
 
-  
+  useEffect(() => {
+  loadSettings();
+  loadServerSettings();
+  setAppVersion(DeviceInfo.getReadableVersion());
+  // Или если хотите видеть и билд: 
+  // DeviceInfo.getReadableVersion();
+}, []);
 
 
   // Загрузка сохраненных настроек при монтировании
   useEffect(() => {
-      loadSettings();
-      loadServerSettings();
-      setAppVersion(DeviceInfo.getReadableVersion());
+    loadSettings();   
+    loadServerSettings(); 
   }, []);
 
   const loadSettings = () => {
@@ -232,24 +234,25 @@ const SettingsScreen = observer(() => {
     }
   };
 
-
-const handleEmployeeDashboardToggle = (value) => {
-    authStore.setShowEmployeeDashboard(value);
-    if (value) {
-      Alert.alert(
-        'Панель сотрудника',
-        'При следующем запуске приложения будет открыта панель сотрудника',
-        [{ text: 'OK' }]
-      );
-    }
-  };
-
   const getThemeLabel = () => {
     switch (themeMode) {
       case 'system': return 'Системная';
       case 'light': return 'Светлая';
       case 'dark': return 'Темная';
       default: return 'Системная';
+    }
+  };
+
+  const handleEmployeeDashboardToggle = (value) => {
+    setShowEmployeeDashboard(value);
+    authStore.setShowEmployeeDashboard(value);
+    
+    if (value) {
+      Alert.alert(
+        'Панель сотрудника',
+        'При следующем запуске приложения будет открыта панель сотрудника',
+        [{ text: 'OK' }]
+      );
     }
   };
 
@@ -378,16 +381,22 @@ const handleEmployeeDashboardToggle = (value) => {
         </View>
 
 
-         {/* Employee Settings Section */}
+        {/* Employee Settings Section */}
         {authStore.canAccessEmployeeDashboard && (
-  <View style={styles.section}>
-    <Text style={styles.sectionTitle}>Настройки сотрудника</Text>
-    <View style={styles.settingsCard}>
-      <EmployeeDashboardSwitch styles={styles} />
-    </View>
-  </View>
-)}
-        
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Настройки сотрудника</Text>
+            <View style={styles.sectionCard}>
+              <SettingItem
+                icon="dashboard"
+                title="Панель сотрудника при запуске"
+                subtitle="Открывать панель сотрудника при входе в приложение"
+                value={showEmployeeDashboard}
+                onValueChange={handleEmployeeDashboardToggle}
+                showDivider={false}
+              />
+            </View>
+          </View>
+        )}
 
         {/* Внешний вид */}
         <View style={styles.section}>
@@ -459,9 +468,9 @@ const handleEmployeeDashboardToggle = (value) => {
           </Text>
         </View>
       </ScrollView>
-      {/* {authStore.isNotificationDenied && (
+      {authStore.isNotificationDenied && (
         <BannerNotificationPermission />
-      )}*/}
+      )}
       <ThemeSelector 
         visible={themeModalVisible}
         onClose={() => setThemeModalVisible(false)}

@@ -936,7 +936,7 @@ const CartScreen = observer(({ navigation }) => {
 
   const bottomOffset = Platform.select({
     ios: tabBarHeight,
-    android: tabBarHeight > 0 ? tabBarHeight : insets.bottom
+    android: insets.bottom + 56
   });
 
   // Рендер футера

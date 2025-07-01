@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   FlatList,
   RefreshControl,
+  Platform,
   ActivityIndicator,
   StatusBar,
   Alert
@@ -450,18 +451,27 @@ const themedStyles = (colors, theme) => ({
   emptyListContent: {
     flex: 1,
   },
-  notificationCard: {
+notificationCard: {
     flexDirection: 'row',
     backgroundColor: colors.card,
     marginHorizontal: 20,
     marginBottom: 12,
     padding: 16,
     borderRadius: 12,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: theme === 'dark' ? 0.2 : 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: theme === 'dark' ? 0.2 : 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 0, // попробуйте 1 или 2
+        // Можно добавить border для легкой рамки
+        borderWidth: 1,
+        borderColor: colors.border + '20', // легкий прозрачный бордер
+      },
+    }),
   },
   unreadNotification: {
     backgroundColor: colors.primary + '10',

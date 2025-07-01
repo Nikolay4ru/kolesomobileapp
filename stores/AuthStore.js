@@ -1,4 +1,4 @@
-// stores/AuthStore.ts
+// stores/AuthStore.js
 import { makeAutoObservable } from "mobx";
 import { MMKV } from "react-native-mmkv";
 import { createApi, ApiInstance } from "../api";
@@ -11,7 +11,9 @@ const ONESIGNAL_APP_ID = "77c64a7c-678f-4de8-811f-9cac6c1b58e1";
 const STORAGE_KEYS = {
   TOKEN: "token",
   USER: "user",
-  NOTIFICATION_PERMISSION: "hasNotificationPermission"
+  NOTIFICATION_PERMISSION: "hasNotificationPermission",
+  STARTUP_SCREEN: "startupScreen", // новый ключ для настройки стартового экрана
+  SHOW_EMPLOYEE_DASHBOARD: "showEmployeeDashboard" // показывать ли панель сотрудника при запуске
 };
 
 type UserProfile = {
@@ -29,7 +31,7 @@ type AdminProfile = {
   id: string;
   userId: string;
   storeId: number | null;
-  role: 'admin' | 'manager';
+  role: 'admin' | 'manager' | 'director'; // добавлена роль директора
 };
 
 class AuthStore {
@@ -45,6 +47,9 @@ class AuthStore {
   isAdmin = false;
   admin: AdminProfile | null = null;
   
+  // Настройки стартового экрана
+  showEmployeeDashboard = false;
+  
   // OneSignal поля
   oneSignalId: string | null = null;
   pushSubscriptionId: string | null = null;
@@ -59,6 +64,29 @@ class AuthStore {
     makeAutoObservable(this);
     this.api = createApi(this);
     this.loadAuthState();
+  }
+
+  // Геттеры для ролей
+  get isManager() {
+    return this.isAdmin && this.admin?.role === 'manager';
+  }
+
+  get isDirector() {
+    return this.isAdmin && this.admin?.role === 'director';
+  }
+
+  get canAccessEmployeeDashboard() {
+    return this.isAdmin || this.isManager || this.isDirector;
+  }
+
+  // Геттер и сеттер для настройки панели сотрудника
+  setShowEmployeeDashboard(value: boolean) {
+    this.showEmployeeDashboard = value;
+    try {
+      storage.set(STORAGE_KEYS.SHOW_EMPLOYEE_DASHBOARD, value);
+    } catch (error) {
+      console.error('Error saving employee dashboard preference:', error);
+    }
   }
 
   // Геттер и сеттер для уведомлений
@@ -82,10 +110,9 @@ class AuthStore {
     this.syncNotificationStatus();
   }
 
-
   get isNotificationDenied() {
-  return this.isNotificationPermissionRequested && !this.hasNotificationPermission;
-}
+    return this.isNotificationPermissionRequested && !this.hasNotificationPermission;
+  }
 
   // === ONESIGNAL МЕТОДЫ ===
   
@@ -117,46 +144,47 @@ class AuthStore {
       }
     } catch (error) {
       console.error('OneSignal initialization error:', error);
+      this.oneSignalInitialized = false;
     }
   }
 
-async setupNotificationPermissions() {
-  const savedPermission = storage.getBoolean(STORAGE_KEYS.NOTIFICATION_PERMISSION);
-  if (savedPermission !== undefined) {
-    this._hasNotificationPermission = Boolean(savedPermission);
-  }
-
-  // Проверяем текущее разрешение из системы
-  const currentPermission = await this.getSystemNotificationPermission();
-
-  if (currentPermission === 'notDetermined') {
-    // Только если не определено — запрашиваем, и только 1 раз
-    if (!this.isNotificationPermissionRequested) {
-      await this.requestNotificationPermission();
+  async setupNotificationPermissions() {
+    const savedPermission = storage.getBoolean(STORAGE_KEYS.NOTIFICATION_PERMISSION);
+    if (savedPermission !== undefined) {
+      this._hasNotificationPermission = Boolean(savedPermission);
     }
-  } else if (currentPermission === 'granted') {
-    this._hasNotificationPermission = true;
-  } else if (currentPermission === 'denied') {
-    // Не показываем повторно запрос, просто отмечаем как denied
-    this._hasNotificationPermission = false;
-    this.isNotificationPermissionRequested = true; // чтобы больше не запрашивать!
-  }
-}
 
-// хелпер для получения статуса разрешения
-async getSystemNotificationPermission() {
-  if (!this.oneSignalInitialized) return 'notDetermined';
+    // Проверяем текущее разрешение из системы
+    const currentPermission = await this.getSystemNotificationPermission();
 
-  try {
-    const permission = await OneSignal.Notifications.getPermissionAsync();
-    // по OneSignal: 1 — granted, 0 — denied, null/undefined — notDetermined
-    if (permission === 1 || permission === true) return 'granted';
-    if (permission === 0 || permission === false) return 'denied';
-    return 'notDetermined';
-  } catch (e) {
-    return 'notDetermined';
+    if (currentPermission === 'notDetermined') {
+      // Только если не определено — запрашиваем, и только 1 раз
+      if (!this.isNotificationPermissionRequested) {
+        await this.requestNotificationPermission();
+      }
+    } else if (currentPermission === 'granted') {
+      this._hasNotificationPermission = true;
+    } else if (currentPermission === 'denied') {
+      // Не показываем повторно запрос, просто отмечаем как denied
+      this._hasNotificationPermission = false;
+      this.isNotificationPermissionRequested = true; // чтобы больше не запрашивать!
+    }
   }
-}
+
+  // хелпер для получения статуса разрешения
+  async getSystemNotificationPermission() {
+    if (!this.oneSignalInitialized) return 'notDetermined';
+
+    try {
+      const permission = await OneSignal.Notifications.getPermissionAsync();
+      // по OneSignal: 1 — granted, 0 — denied, null/undefined — notDetermined
+      if (permission === 1 || permission === true) return 'granted';
+      if (permission === 0 || permission === false) return 'denied';
+      return 'notDetermined';
+    } catch (e) {
+      return 'notDetermined';
+    }
+  }
 
   setupOneSignalListeners() {
     console.log('Setting up OneSignal listeners...');
@@ -213,70 +241,33 @@ async getSystemNotificationPermission() {
     }
   }
 
-  async requestNotificationPermission1() {
+  async requestNotificationPermission() {
     if (!this.oneSignalInitialized) return false;
-    
+
+    // Проверяем, не заблокировано ли в системе
+    const currentPermission = await this.getSystemNotificationPermission();
+    if (currentPermission === 'denied') {
+      this.isNotificationPermissionRequested = true; // Не запрашиваем повторно
+      this._hasNotificationPermission = false;
+      return false;
+    }
+
     try {
       console.log('Requesting notification permission...');
       this.isNotificationPermissionRequested = true;
-      
       const result = await OneSignal.Notifications.requestPermission(true);
-      console.log('Permission request result:', result, 'Type:', typeof result);
-      
       const boolResult = Boolean(result);
       this.hasNotificationPermission = boolResult;
-      
       if (boolResult) {
-        console.log('Permission granted, fetching IDs...');
-        
-        // Ждем немного, чтобы OneSignal обработал разрешение
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
         await this.fetchOneSignalIds();
-        
-        // Если OneSignal ID все еще не получен, повторяем попытки
-        if (!this.oneSignalId) {
-          console.log('OneSignal ID not received immediately after permission, scheduling retries...');
-          setTimeout(() => this.retryFetchOneSignalId(), 2000);
-          setTimeout(() => this.retryFetchOneSignalId(), 5000);
-        }
       }
-      
       return boolResult;
     } catch (error) {
       console.error('Error requesting notification permission:', error);
       return false;
     }
   }
-
-
-  async requestNotificationPermission() {
-  if (!this.oneSignalInitialized) return false;
-
-  // Проверяем, не заблокировано ли в системе
-  const currentPermission = await this.getSystemNotificationPermission();
-  if (currentPermission === 'denied') {
-    this.isNotificationPermissionRequested = true; // Не запрашиваем повторно
-    this._hasNotificationPermission = false;
-    return false;
-  }
-
-  try {
-    console.log('Requesting notification permission...');
-    this.isNotificationPermissionRequested = true;
-    const result = await OneSignal.Notifications.requestPermission(true);
-    const boolResult = Boolean(result);
-    this.hasNotificationPermission = boolResult;
-    if (boolResult) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      await this.fetchOneSignalIds();
-    }
-    return boolResult;
-  } catch (error) {
-    console.error('Error requesting notification permission:', error);
-    return false;
-  }
-}
 
   async fetchOneSignalIds() {
     if (!this.oneSignalInitialized) return;
@@ -421,11 +412,12 @@ async getSystemNotificationPermission() {
 
   // === АВТОРИЗАЦИЯ ===
 
-async loadAuthState() {
+  async loadAuthState() {
     try {
       const token = storage.getString(STORAGE_KEYS.TOKEN);
       const userJson = storage.getString(STORAGE_KEYS.USER);
       const notificationPermission = storage.getBoolean(STORAGE_KEYS.NOTIFICATION_PERMISSION);
+      const showEmployeeDashboard = storage.getBoolean(STORAGE_KEYS.SHOW_EMPLOYEE_DASHBOARD);
       
       if (token && userJson) {
         this.token = token;
@@ -435,6 +427,10 @@ async loadAuthState() {
         
         if (notificationPermission !== undefined) {
           this._hasNotificationPermission = Boolean(notificationPermission);
+        }
+        
+        if (showEmployeeDashboard !== undefined) {
+          this.showEmployeeDashboard = showEmployeeDashboard;
         }
         
         // Login в OneSignal если пользователь уже авторизован
@@ -455,6 +451,7 @@ async loadAuthState() {
       }
     } catch (error) {
       console.error("Failed to load auth state:", error);
+      this.logout();
     }
   }
 
@@ -481,7 +478,7 @@ async loadAuthState() {
     }
   }
 
- async verifyCode(code: string) {
+  async verifyCode(code: string) {
     this.setLoadingState(true);
 
     try {
@@ -532,6 +529,12 @@ async loadAuthState() {
     }
   }
 
+  // Альтернативный метод login для обратной совместимости
+  async login(phone: string, code: string) {
+    this.phoneNumber = phone;
+    return await this.verifyCode(code);
+  }
+
   async fetchProfile() {
     console.log(this.user);
     if (!this.user) return;
@@ -573,7 +576,7 @@ async loadAuthState() {
           id: response.data.id,
           userId: this.user.id,
           storeId: response.data.storeId,
-          role: response.data.role
+          role: response.data.role || 'admin' // Поддержка старого API
         };
       } else {
         this.isAdmin = false;
@@ -608,7 +611,7 @@ async loadAuthState() {
     }
   }
 
-  async updateAdminProfile(storeId: number | null, role: 'admin' | 'manager') {
+  async updateAdminProfile(storeId: number | null, role: 'admin' | 'manager' | 'director') {
     if (!this.isAdmin || !this.admin) return;
 
     this.setLoadingState(true);
@@ -670,6 +673,9 @@ async loadAuthState() {
     // Очищаем хранилище
     storage.delete(STORAGE_KEYS.TOKEN);
     storage.delete(STORAGE_KEYS.USER);
+    // Сохраняем настройки уведомлений и панели
+    // storage.delete(STORAGE_KEYS.NOTIFICATION_PERMISSION);
+    // storage.delete(STORAGE_KEYS.SHOW_EMPLOYEE_DASHBOARD);
   }
 
   async checkAuth() {
@@ -709,6 +715,10 @@ async loadAuthState() {
     if (loading) {
       this.error = "";
     }
+  }
+
+  setPhoneNumber(phone: string) {
+    this.phoneNumber = phone;
   }
 
   async checkInternetConnection() {

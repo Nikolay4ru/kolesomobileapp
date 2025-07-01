@@ -63,6 +63,11 @@ console.log(authStore);
     navigation.navigate('Admin', { screen: 'AdminOrders' });
   };
 
+  const handleEmployeeDashboardPress = () => {
+    navigation.navigate('EmployeeDashboard');
+  };
+
+
   const authenticateWithDeviceCredentials = async () => {
     try {
       const options = {
@@ -161,6 +166,26 @@ console.log(authStore);
     return "П";
   };
 
+  const getRoleBadge = () => {
+    if (!authStore.isAdmin) return null;
+    
+    const role = authStore.admin?.role;
+    const configs = {
+      director: { label: 'Директор', icon: 'business', color: colors.error },
+      manager: { label: 'Менеджер', icon: 'supervisor-account', color: colors.info },
+      admin: { label: 'Администратор', icon: 'admin-panel-settings', color: colors.warning }
+    };
+    
+    const config = configs[role] || configs.admin;
+    
+    return (
+      <View style={[styles.statusBadge, { backgroundColor: config.color + '15' }]}>
+        <Icon name={config.icon} size={16} color={config.color} />
+        <Text style={[styles.statusText, { color: config.color }]}>{config.label}</Text>
+      </View>
+    );
+  };
+
   const MenuItem = ({ icon, title, subtitle, onPress, isAdmin = false, isLast = false }) => (
     <TouchableOpacity 
       style={[
@@ -241,12 +266,7 @@ console.log(authStore);
             <Text style={styles.profileName}>{getUserName()}</Text>
             {authStore.isLoggedIn ? (
               <View style={styles.profileDetails}>
-                {authStore.isAdmin && (
-                  <View style={[styles.statusBadge, styles.adminBadge]}>
-                    <Icon name="admin-panel-settings" size={16} color={colors.warning} />
-                    <Text style={[styles.statusText, styles.adminText]}>Администратор</Text>
-                  </View>
-                )}
+                {getRoleBadge()}
               </View>
             ) : (
               <Text style={styles.guestText}>Войдите для доступа ко всем функциям</Text>
@@ -269,6 +289,29 @@ console.log(authStore);
             </TouchableOpacity>
           )}
         </View>
+
+
+
+        {/* Employee Quick Access - показываем всегда для сотрудников */}
+        {authStore.isLoggedIn && authStore.canAccessEmployeeDashboard && (
+          <TouchableOpacity 
+            style={styles.employeeDashboardCard}
+            onPress={handleEmployeeDashboardPress}
+          >
+            <View style={styles.dashboardCardContent}>
+              <View style={styles.dashboardIconContainer}>
+                <Icon name="dashboard" size={32} color={colors.primary} />
+              </View>
+              <View style={styles.dashboardInfo}>
+                <Text style={styles.dashboardTitle}>Панель сотрудника</Text>
+                <Text style={styles.dashboardSubtitle}>
+                  Быстрый доступ к заказам и статистике
+                </Text>
+              </View>
+              <Icon name="arrow-forward" size={24} color={colors.primary} />
+            </View>
+          </TouchableOpacity>
+        )}
 
         {/* Menu Sections */}
         {authStore.isLoggedIn && (
@@ -626,6 +669,41 @@ const themedStyles = (colors, theme) => ({
     fontSize: 14,
     color: colors.textSecondary,
     lineHeight: 18,
+  },
+   employeeDashboardCard: {
+    backgroundColor: colors.primary + '10',
+    marginHorizontal: 20,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.primary + '30',
+  },
+  dashboardCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dashboardIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: colors.primary + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  dashboardInfo: {
+    flex: 1,
+  },
+  dashboardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 2,
+  },
+  dashboardSubtitle: {
+    fontSize: 13,
+    color: colors.textSecondary,
   },
 });
 
