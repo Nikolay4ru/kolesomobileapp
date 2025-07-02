@@ -8,41 +8,36 @@ import {
   ActivityIndicator, 
   TouchableOpacity,
   StatusBar,
-  Animated
+  ScrollView,
+  SafeAreaView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { observer } from "mobx-react-lite";
 import { useStores } from "../useStores";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useThemedStyles } from '../hooks/useThemedStyles';
 
 const ITEMS_PER_PAGE = 20;
 
+// Упрощенная конфигурация статусов
 const statusConfig = {
-  'Новый': { color: '#FF9500', bg: '#FF950020', icon: 'fiber-new' },
-  'Товар зарезервирован': { color: '#007AFF', bg: '#007AFF20', icon: 'bookmark' },
-  'Готов к выдаче': { color: '#34C759', bg: '#34C75920', icon: 'check-circle' },
-  'Выдан': { color: '#30D158', bg: '#30D15820', icon: 'done-all' },
-  'Отменён (Удален)': { color: '#FF3B30', bg: '#FF3B3020', icon: 'cancel' },
-  'Отменён (Возврат товара)': { color: '#FF3B30', bg: '#FF3B3020', icon: 'undo' },
-  'Завершен': { color: '#32D74B', bg: '#32D74B20', icon: 'check-circle-outline' },
-  'default': { color: '#8E8E93', bg: '#8E8E9320', icon: 'help-outline' }
-};
-
-const paymentMethodConfig = {
-  'При получении': { label: 'Наличными', icon: 'payments', color: '#34C759' },
-  'По счету': { label: 'По счету', icon: 'receipt-long', color: '#007AFF' },
-  'card': { label: 'Картой', icon: 'credit-card', color: '#007AFF' },
-  'online': { label: 'Онлайн', icon: 'account-balance-wallet', color: '#FF9500' },
-  'default': { label: 'Не указано', icon: 'help-outline', color: '#8E8E93' }
+  'all': { label: 'Все заказы', color: '#000000' },
+  'Новый': { label: 'Новые', color: '#007AFF' },
+  'Товар зарезервирован': { label: 'Товар зарезервирован', color: '#FF9500' },
+  'Отгружается': { label: 'В работе', color: '#FF9500' },
+  'Завершен': { label: 'Завершен', color: '#30D158' },
+  'Отменён (Удален)': { label: 'Отменены (Удален)', color: '#FF3B30' },
+  'Отменён (Возврат товара)': { label: 'Отменены (Возврат)', color: '#FF3B30' },
+  
 };
 
 const AdminOrdersScreen = observer(() => {
   const { authStore } = useStores();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const route = useRoute();
   const { colors, theme } = useTheme();
   const styles = useThemedStyles(themedStyles);
   
@@ -52,13 +47,8 @@ const AdminOrdersScreen = observer(() => {
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  
-  const scrollY = new Animated.Value(0);
-  const headerOpacity = scrollY.interpolate({
-    inputRange: [0, 50],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
+  const [selectedStatus, setSelectedStatus] = useState(route.params?.filter || 'all');
+  const [totalCount, setTotalCount] = useState(0);
 
   const fetchOrders = useCallback(async (currentPage = 1, isRefreshing = false) => {
     try {
@@ -68,17 +58,20 @@ const AdminOrdersScreen = observer(() => {
         setLoading(true);
       }
 
+      const filters = {
+        store_id: authStore.admin?.storeId || 0,
+        page: currentPage,
+        per_page: ITEMS_PER_PAGE,
+        status: selectedStatus !== 'all' ? selectedStatus : undefined,
+      };
+
       const response = await fetch('https://api.koleso.app/api/adminOrders.php', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authStore.token}`
         },
-        body: JSON.stringify({
-          store_id: authStore.user?.storeId || authStore.admin?.storeId,
-          page: currentPage,
-          per_page: ITEMS_PER_PAGE
-        })
+        body: JSON.stringify(filters)
       });
 
       const data = await response.json();
@@ -88,16 +81,17 @@ const AdminOrdersScreen = observer(() => {
       }
 
       if (isRefreshing || currentPage === 1) {
-        setOrders(data.orders);
+        setOrders(data.orders || []);
       } else {
         setOrders(prev => {
           const existingIds = new Set(prev.map(order => order.id));
-          const newOrders = data.orders.filter(order => !existingIds.has(order.id));
+          const newOrders = (data.orders || []).filter(order => !existingIds.has(order.id));
           return [...prev, ...newOrders];
         });
       }
 
-      setHasMore(data.orders.length === ITEMS_PER_PAGE);
+      setTotalCount(data.total_count || 0);
+      setHasMore(data.orders?.length === ITEMS_PER_PAGE);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -105,7 +99,7 @@ const AdminOrdersScreen = observer(() => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [authStore.token, authStore.user?.storeId, authStore.admin?.storeId]);
+  }, [authStore.token, authStore.admin?.storeId, selectedStatus]);
 
   const loadMore = useCallback(() => {
     if (!loading && hasMore) {
@@ -123,453 +117,437 @@ const AdminOrdersScreen = observer(() => {
     fetchOrders(page);
   }, [fetchOrders, page]);
 
-  const renderFooter = () => {
-    if (!loading || !hasMore) return null;
-    
-    return (
-      <View style={styles.footer}>
-        <ActivityIndicator size="small" color={colors.primary} />
-      </View>
-    );
+  useEffect(() => {
+    setPage(1);
+    setOrders([]);
+    fetchOrders(1);
+  }, [selectedStatus]);
+
+const formatDate = (dateString) => {
+  const date = new Date(dateString);
+  const now = new Date();
+
+  const diffInMinutes = Math.floor((now - date) / (1000 * 60));
+
+  if (diffInMinutes < 60) {
+    return `${diffInMinutes} мин назад`;
+  }
+
+  const isToday = date.getDate() === now.getDate() &&
+                  date.getMonth() === now.getMonth() &&
+                  date.getFullYear() === now.getFullYear();
+
+  const timeStr = date.toLocaleTimeString('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  if (isToday) {
+    return `Сегодня в ${timeStr}`;
+  } else {
+    const dateStr = date.toLocaleDateString('ru-RU', {
+      day: 'numeric',
+      month: 'short'
+    });
+    return `${dateStr}, ${timeStr}`;
+  }
+};
+
+  const getStatusDisplay = (status) => {
+    const normalizedStatus = status;
+    const config = statusConfig[normalizedStatus] || statusConfig['Новый'];
+    return config;
   };
 
-  const getStatusConfig = (status) => {
-    return statusConfig[status] || statusConfig['default'];
-  };
-
-  const getPaymentConfig = (method) => {
-    return paymentMethodConfig[method] || paymentMethodConfig['default'];
-  };
-
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInHours = (now - date) / (1000 * 60 * 60);
-    
-    if (diffInHours < 24) {
-      return `Сегодня, ${date.toLocaleTimeString('ru-RU', { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-      })}`;
-    } else if (diffInHours < 48) {
-      return `Вчера, ${date.toLocaleTimeString('ru-RU', { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-      })}`;
-    } else {
-      return date.toLocaleDateString('ru-RU', {
-        day: 'numeric',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    }
-  };
-
-  const renderOrderItem = ({ item }) => {
-    const statusConf = getStatusConfig(item.status);
-    const paymentConf = getPaymentConfig(item.payment_method);
+  const renderOrderItem = ({ item, index }) => {
+    const statusDisplay = getStatusDisplay(item.status);
+    const isFirstItem = index === 0;
     
     return (
       <TouchableOpacity 
-        style={styles.orderCard}
+        style={[styles.orderItem, isFirstItem && styles.firstOrderItem]}
         onPress={() => navigation.navigate('AdminOrderDetail', { order: item })}
-        activeOpacity={0.7}
+        activeOpacity={0.6}
       >
-        {/* Header with order number and status */}
-        <View style={styles.cardHeader}>
-          <View style={styles.orderInfo}>
-            <Text style={styles.orderNumber}>Заказ #{item.number}</Text>
-            <Text style={styles.orderDate}>{formatDate(item.created_at)}</Text>
+        <View style={styles.orderHeader}>
+          <View style={styles.orderNumberContainer}>
+            <Text style={styles.orderNumber}>#{item.number}</Text>
+            <View style={[styles.statusDot, { backgroundColor: statusDisplay.color }]} />
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: statusConf.bg }]}>
-            <Icon name={statusConf.icon} size={16} color={statusConf.color} />
-            <Text style={[styles.statusText, { color: statusConf.color }]}>
-              {item.status}
-            </Text>
-          </View>
+          <Text style={styles.orderDate}>{formatDate(item.created_at)}</Text>
         </View>
-
-        {/* Client info */}
-        {item.client && (
-          <View style={styles.clientSection}>
-            <Icon name="person" size={18} color={colors.textSecondary} />
-            <View style={styles.clientInfo}>
-              <Text style={styles.clientName}>{item.client}</Text>
-              {item.client.phone && (
-                <Text style={styles.clientPhone}>{item.client.phone}</Text>
-              )}
-            </View>
-          </View>
-        )}
-
-        {/* Divider */}
-        <View style={styles.divider} />
-
-        {/* Footer with payment and price */}
-        <View style={styles.cardFooter}>
-          <View style={styles.paymentInfo}>
-            <Icon name={paymentConf.icon} size={18} color={paymentConf.color} />
-            <Text style={[styles.paymentText, { color: paymentConf.color }]}>
-              {paymentConf.label}
+        
+        <View style={styles.orderContent}>
+          <View style={styles.clientInfo}>
+            <Text style={styles.clientName} numberOfLines={1}>
+              {item.client || 'Клиент'}
             </Text>
+            {item.phone && (
+              <Text style={styles.clientPhone}>{item.phone}</Text>
+            )}
           </View>
-          <View style={styles.priceSection}>
-            <Text style={styles.priceText}>{item.total_amount.toLocaleString('ru-RU')} ₽</Text>
-            <Icon name="chevron-right" size={22} color={colors.textTertiary} />
+          
+          <View style={styles.orderDetails}>
+            <Text style={styles.orderAmount}>
+              {(item.total_amount || 0).toLocaleString('ru-RU')} ₽
+            </Text>
+            {item.items_count > 0 && (
+              <Text style={styles.itemsCount}>
+                {item.items_count} товар{item.items_count === 1 ? '' : item.items_count < 5 ? 'а' : 'ов'}
+              </Text>
+            )}
           </View>
         </View>
       </TouchableOpacity>
     );
   };
 
+  const renderStatusFilter = () => (
+    <View style={styles.filterContainer}>
+      <ScrollView 
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterContent}
+      >
+        {Object.entries(statusConfig).map(([key, config]) => {
+          const isActive = selectedStatus === key;
+          return (
+            <TouchableOpacity
+              key={key}
+              style={[
+                styles.filterChip,
+                isActive && styles.filterChipActive,
+                isActive && { backgroundColor: config.color }
+              ]}
+              onPress={() => setSelectedStatus(key)}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.filterChipText,
+                isActive && styles.filterChipTextActive
+              ]}>
+                {config.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+
+  const ListHeaderComponent = () => (
+    <>
+      {renderStatusFilter()}
+      {totalCount > 0 && (
+        <View style={styles.countContainer}>
+          <Text style={styles.countText}>
+            {totalCount} заказ{totalCount === 1 ? '' : totalCount < 5 ? 'а' : 'ов'}
+          </Text>
+        </View>
+      )}
+    </>
+  );
+
+  const ListEmptyComponent = () => {
+    if (loading) return null;
+    
+    return (
+      <View style={styles.emptyContainer}>
+        <Icon name="inbox" size={48} color={colors.textTertiary} />
+        <Text style={styles.emptyTitle}>Нет заказов</Text>
+        <Text style={styles.emptySubtitle}>
+          {selectedStatus !== 'all' 
+            ? 'Нет заказов с выбранным статусом' 
+            : 'Заказы появятся здесь после оформления'}
+        </Text>
+      </View>
+    );
+  };
+
+  const ListFooterComponent = () => {
+    if (!loading || !hasMore) return <View style={styles.footerSpace} />;
+    
+    return (
+      <View style={styles.footer}>
+        <ActivityIndicator size="small" color={colors.textSecondary} />
+      </View>
+    );
+  };
+
   if (!authStore.isAdmin) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar 
-          barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
-          backgroundColor={colors.background}
-        />
-        <View style={styles.errorContainer}>
-          <View style={styles.errorIconContainer}>
-            <Icon name="admin-panel-settings" size={72} color={colors.error} />
-          </View>
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} />
+        <View style={styles.centerContainer}>
+          <Icon name="lock" size={48} color={colors.textTertiary} />
           <Text style={styles.errorTitle}>Доступ запрещён</Text>
-          <Text style={styles.errorSubtitle}>У вас нет прав администратора</Text>
+          <Text style={styles.errorSubtitle}>Требуются права администратора</Text>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
-  if (loading && !refreshing && orders.length === 0) {
+  if (error && orders.length === 0) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar 
-          barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
-          backgroundColor={colors.background}
-        />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Загрузка заказов...</Text>
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Icon name="arrow-back-ios" size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Заказы</Text>
+          <View style={styles.headerPlaceholder} />
         </View>
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar 
-          barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
-          backgroundColor={colors.background}
-        />
-        <View style={styles.errorContainer}>
-          <View style={styles.errorIconContainer}>
-            <Icon name="error-outline" size={72} color={colors.error} />
-          </View>
-          <Text style={styles.errorTitle}>Ошибка загрузки</Text>
+        <View style={styles.centerContainer}>
+          <Icon name="wifi-off" size={48} color={colors.textTertiary} />
+          <Text style={styles.errorTitle}>Ошибка подключения</Text>
           <Text style={styles.errorSubtitle}>{error}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
-            <Icon name="refresh" size={20} color="#FFFFFF" />
-            <Text style={styles.retryButtonText}>Повторить попытку</Text>
+            <Text style={styles.retryButtonText}>Повторить</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <StatusBar 
-        barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
-        backgroundColor={colors.background}
-      />
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} />
       
-      {/* iOS-style Header */}
-      <View style={[styles.header, { paddingTop: insets.top }]}>
-        <Animated.View 
-          style={[
-            styles.headerBackground, 
-            { opacity: headerOpacity }
-          ]} 
-        />
-        <View style={styles.headerContent}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Icon name="arrow-back-ios" size={22} color={colors.primary} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Заказы</Text>
-          <View style={styles.headerRight} />
-        </View>
+      {/* Минималистичный заголовок */}
+      <View style={styles.header}>
+        <TouchableOpacity 
+          onPress={() => navigation.goBack()}
+          style={styles.headerButton}
+        >
+          <Icon name="arrow-back-ios" size={22} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Заказы</Text>
+        <TouchableOpacity 
+          onPress={onRefresh}
+          style={styles.headerButton}
+        >
+          <Icon name="refresh" size={22} color={colors.text} />
+        </TouchableOpacity>
       </View>
 
-      <Animated.FlatList
+      <FlatList
         data={orders}
         renderItem={renderOrderItem}
         keyExtractor={item => `${item.id}_${item.updated_at || item.created_at}`}
         contentContainerStyle={styles.listContent}
+        ListHeaderComponent={ListHeaderComponent}
+        ListEmptyComponent={ListEmptyComponent}
+        ListFooterComponent={ListFooterComponent}
         onEndReached={loadMore}
         onEndReachedThreshold={0.2}
-        ListFooterComponent={renderFooter}
         showsVerticalScrollIndicator={false}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: true }
-        )}
-        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
             colors={[colors.primary]}
             tintColor={colors.primary}
-            progressBackgroundColor={colors.card}
           />
         }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconContainer}>
-              <Icon name="shopping-bag" size={72} color={colors.textTertiary} />
-            </View>
-            <Text style={styles.emptyTitle}>Нет заказов</Text>
-            <Text style={styles.emptySubtitle}>Заказы появятся здесь после оформления</Text>
-          </View>
-        }
       />
-    </View>
+    </SafeAreaView>
   );
 });
 
-const themedStyles = (colors, theme) => ({
+const themedStyles = (colors, theme) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
   },
   header: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 100,
-    backgroundColor: colors.background,
-  },
-  headerBackground: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: colors.background,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
-  backButton: {
+  headerButton: {
     width: 44,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: -8,
+  },
+  headerPlaceholder: {
+    width: 44,
   },
   headerTitle: {
-    fontSize: 34,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '600',
     color: colors.text,
     letterSpacing: -0.4,
   },
-  headerRight: {
-    width: 44,
+  filterContainer: {
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
-  listContent: {
-    paddingTop: 120,
+  filterContent: {
     paddingHorizontal: 16,
-    paddingBottom: 32,
+    gap: 8,
   },
-  orderCard: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    marginBottom: 12,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: theme === 'dark' ? 0.3 : 0.08,
-    shadowRadius: 12,
-    elevation: 3,
-    overflow: 'hidden',
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: theme === 'dark' ? colors.surface : '#F2F2F7',
   },
-  cardHeader: {
-    padding: 16,
-    paddingBottom: 12,
+  filterChipActive: {
+    backgroundColor: colors.primary,
   },
-  orderInfo: {
-    marginBottom: 12,
-  },
-  orderNumber: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  orderDate: {
-    fontSize: 15,
-    color: colors.textSecondary,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    alignSelf: 'flex-start',
-  },
-  statusText: {
+  filterChipText: {
     fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 6,
-  },
-  clientSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
-  clientInfo: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  clientName: {
-    fontSize: 16,
     fontWeight: '500',
     color: colors.text,
   },
-  clientPhone: {
-    fontSize: 14,
+  filterChipTextActive: {
+    color: '#FFFFFF',
+  },
+  countContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  countText: {
+    fontSize: 13,
     color: colors.textSecondary,
-    marginTop: 2,
+    fontWeight: '500',
   },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.border,
+  listContent: {
+    flexGrow: 1,
+  },
+  orderItem: {
+    backgroundColor: colors.card,
     marginHorizontal: 16,
+    marginBottom: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
   },
-  cardFooter: {
+  firstOrderItem: {
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    marginTop: 8,
+  },
+  orderHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-  },
-  paymentInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  paymentText: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  priceSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  priceText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.text,
-    marginRight: 8,
-  },
-  // Error and empty states
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  errorIconContainer: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: colors.error + '15',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  errorTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.text,
     marginBottom: 8,
-    textAlign: 'center',
   },
-  errorSubtitle: {
-    fontSize: 17,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 24,
-  },
-  retryButton: {
+  orderNumberContainer: {
     flexDirection: 'row',
-    backgroundColor: colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 14,
     alignItems: 'center',
     gap: 8,
   },
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 17,
+  orderNumber: {
+    fontSize: 15,
     fontWeight: '600',
+    color: colors.text,
   },
-  loadingContainer: {
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  orderDate: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  orderContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  clientInfo: {
+    flex: 1,
+    marginRight: 16,
+  },
+  clientName: {
+    fontSize: 15,
+    color: colors.text,
+    marginBottom: 2,
+  },
+  clientPhone: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  orderDetails: {
+    alignItems: 'flex-end',
+  },
+  orderAmount: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 2,
+  },
+  itemsCount: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 17,
-    color: colors.textSecondary,
-    marginTop: 16,
-    fontWeight: '500',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingVertical: 80,
     paddingHorizontal: 32,
   },
-  emptyIconContainer: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: colors.surface,
+  emptyContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
+    paddingHorizontal: 32,
+    paddingVertical: 80,
   },
   emptyTitle: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '600',
     color: colors.text,
+    marginTop: 16,
     marginBottom: 8,
-    textAlign: 'center',
   },
   emptySubtitle: {
-    fontSize: 17,
+    fontSize: 15,
     color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 22,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorSubtitle: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: colors.primary,
+    borderRadius: 22,
+  },
+  retryButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   footer: {
     paddingVertical: 16,
-    justifyContent: 'center',
     alignItems: 'center',
+  },
+  footerSpace: {
+    height: 40,
   },
 });
 

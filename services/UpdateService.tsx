@@ -8,6 +8,7 @@ import {
   PermissionsAndroid,
   Platform,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import axios from 'axios';
 import RNFS from 'react-native-fs';
@@ -115,8 +116,10 @@ export const UpdateModal: React.FC<{
 
   const requestStoragePermission = async () => {
     if (Platform.Version >= 33) {
+      // Android 13+ не требует WRITE_EXTERNAL_STORAGE для Downloads
       return true;
     }
+    
     try {
       const granted = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
@@ -135,12 +138,22 @@ export const UpdateModal: React.FC<{
     }
   };
 
+  // Функция для получения правильного пути к директории
+  const getDownloadPath = async () => {
+    // Сначала пробуем использовать CachesDirectoryPath
+    // который гарантированно доступен без дополнительных разрешений
+    const cacheDir = RNFS.CachesDirectoryPath;
+    const fileName = `koleso_update_${Date.now()}.apk`;
+    return `${cacheDir}/${fileName}`;
+  };
+
   const downloadAndInstall = async () => {
     const hasPermission = await requestStoragePermission();
-    if (!hasPermission) {
+    if (!hasPermission && Platform.Version < 33) {
       setError('Необходимо разрешение на сохранение файлов');
       return;
     }
+    
     try {
       setError(null);
       setDownloading(true);
@@ -148,15 +161,28 @@ export const UpdateModal: React.FC<{
       setContentLength(0);
       contentLengthRef.current = 0;
 
-      const fileName = `koleso_update_${Date.now()}.apk`;
-      const filePath = `${RNFS.DownloadDirectoryPath}/${fileName}`;
+      // Используем кэш директорию вместо Downloads
+      const filePath = await getDownloadPath();
+      
+      console.log('Download path:', filePath);
+
+      // Проверяем существование директории
+      const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
+      const dirExists = await RNFS.exists(dirPath);
+      
+      if (!dirExists) {
+        console.log('Creating directory:', dirPath);
+        await RNFS.mkdir(dirPath);
+      }
 
       const download = RNFS.downloadFile({
         fromUrl: updateInfo.downloadUrl,
         toFile: filePath,
         background: true,
         discretionary: true,
+        cacheable: false, // Отключаем кэширование
         begin: (res) => {
+          console.log('Download started, size:', res.contentLength);
           if (res.contentLength && res.contentLength > 0) {
             contentLengthRef.current = res.contentLength;
             setContentLength(res.contentLength);
@@ -172,19 +198,51 @@ export const UpdateModal: React.FC<{
       });
 
       const result = await download.promise;
+      console.log('Download result:', result);
+      
       if (result.statusCode === 200) {
+        // Проверяем, что файл действительно существует
+        const fileExists = await RNFS.exists(filePath);
+        if (!fileExists) {
+          throw new Error('Файл не был сохранен');
+        }
+        
+        // Получаем информацию о файле
+        const fileStat = await RNFS.stat(filePath);
+        console.log('File info:', fileStat);
+        
+        if (fileStat.size === 0) {
+          throw new Error('Загруженный файл пустой');
+        }
+        
+        // Открываем файл для установки
         await FileViewer.open(filePath, {
           showOpenWithDialog: false,
           displayName: 'Обновление Koleso',
         });
+        
+        // Удаляем файл через 20 минут
         setTimeout(() => {
-          RNFS.unlink(filePath).catch(() => {});
+          RNFS.unlink(filePath).catch((err) => {
+            console.log('Error deleting file:', err);
+          });
         }, 1200000);
       } else {
-        throw new Error('Ошибка загрузки файла');
+        throw new Error(`Ошибка загрузки: код ${result.statusCode}`);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Произошла ошибка при обновлении');
+      console.error('Download error:', e);
+      const errorMessage = e instanceof Error ? e.message : 'Произошла ошибка при обновлении';
+      setError(errorMessage);
+      
+      // Показываем более подробную информацию об ошибке
+      Alert.alert(
+        'Ошибка обновления',
+        `${errorMessage}\n\nПопробуйте скачать обновление вручную с сайта.`,
+        [
+          { text: 'OK' }
+        ]
+      );
     } finally {
       setDownloading(false);
     }

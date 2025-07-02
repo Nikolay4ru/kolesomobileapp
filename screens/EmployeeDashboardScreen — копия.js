@@ -8,6 +8,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   StatusBar,
+  FlatList,
   SafeAreaView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -23,7 +24,7 @@ const EmployeeDashboardScreen = observer(() => {
   const navigation = useNavigation();
   const { colors, theme } = useTheme();
   const styles = useThemedStyles(themedStyles);
-
+  
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [orders, setOrders] = useState([]);
@@ -33,6 +34,7 @@ const EmployeeDashboardScreen = observer(() => {
     newOrdersCount: 0,
     processingOrdersCount: 0,
     completedOrdersCount: 0,
+    storeName: '',
   });
 
   const isDirector = authStore.admin?.role === 'director';
@@ -42,7 +44,7 @@ const EmployeeDashboardScreen = observer(() => {
   const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
-
+      
       // Загружаем заказы
       const ordersResponse = await fetch('https://api.koleso.app/api/adminOrders.php', {
         method: 'POST',
@@ -53,7 +55,7 @@ const EmployeeDashboardScreen = observer(() => {
         body: JSON.stringify({
           store_id: authStore.admin?.storeId,
           page: 1,
-          per_page: 1000
+          per_page: 20
         })
       });
 
@@ -75,7 +77,10 @@ const EmployeeDashboardScreen = observer(() => {
             date: new Date().toISOString().split('T')[0]
           })
         });
-
+        console.log(JSON.stringify({
+            store_id: authStore.admin?.storeId,
+            date: new Date().toISOString().split('T')[0]
+          }));
         const statsData = await statsResponse.json();
         if (statsData.success) {
           setStatistics({
@@ -84,6 +89,7 @@ const EmployeeDashboardScreen = observer(() => {
             newOrdersCount: ordersData.orders?.filter(o => o.status === 'Новый').length || 0,
             processingOrdersCount: ordersData.orders?.filter(o => o.status === 'Отгружается').length || 0,
             completedOrdersCount: ordersData.orders?.filter(o => o.status === 'Завершен').length || 0,
+            storeName: statsData.store_name || '',
           });
         }
       } else {
@@ -112,28 +118,33 @@ const EmployeeDashboardScreen = observer(() => {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
-const getStatusConfig = (status) => {
-  const statusConfig = {
-    'Новый': { label: 'Новый', color: '#FF9500', bg: '#FF950020', icon: 'fiber-new' },
-    'Товар зарезервирован': { label: 'Товар зарезервирован', color: '#007AFF', bg: '#007AFF20', icon: 'bookmark' },
-    'Готов к выдаче': { label: 'Готов к выдаче', color: '#34C759', bg: '#34C75920', icon: 'check-circle' },
-    'Выдан': { label: 'Выдан', color: '#30D158', bg: '#30D15820', icon: 'done-all' },
-    'Отменён (Удален)': { label: 'Отменён (Удален)', color: '#FF3B30', bg: '#FF3B3020', icon: 'cancel' },
-    'Отменён (Возврат товара)': { label: 'Отменён (Возврат товара)', color: '#FF3B30', bg: '#FF3B3020', icon: 'undo' },
-    'Завершен': { label: 'Завершен', color: '#32D74B', bg: '#32D74B20', icon: 'check-circle-outline' },
-    'default': { label: 'Статус неизвестен', color: '#8E8E93', bg: '#8E8E9320', icon: 'help-outline' }
+  const getStatusConfig = (status) => {
+    const configs = {
+      new: { label: 'Новый', color: colors.primary, bg: colors.primary + '20', icon: 'fiber-new' },
+      processing: { label: 'В обработке', color: colors.warning, bg: colors.warning + '20', icon: 'hourglass-empty' },
+      ready: { label: 'Готов', color: colors.info, bg: colors.info + '20', icon: 'check-circle' },
+      delivered: { label: 'Доставлен', color: colors.success, bg: colors.success + '20', icon: 'done-all' },
+      cancelled: { label: 'Отменен', color: colors.error, bg: colors.error + '20', icon: 'cancel' },
+    };
+    return configs[status] || configs.new;
   };
-  return statusConfig[status] || statusConfig['default'];
-};
 
-  // --- MAIN CHANGE: open order details in this stack, not in Profile/Admin ---
   const renderOrderItem = ({ item }) => {
     const statusConfig = getStatusConfig(item.status);
-    console.log(item);
+    
     return (
-      <TouchableOpacity
+      <TouchableOpacity 
         style={styles.orderCard}
-        onPress={() => navigation.push('AdminOrderDetail', { order: item })}
+        onPress={() => navigation.navigate('MainTabs', {
+          screen: 'ProfileMenu',
+          params: {
+            screen: 'Admin',
+            params: {
+              screen: 'AdminOrderDetail',
+              params: { order: item }
+            }
+          }
+        })}
         activeOpacity={0.7}
       >
         <View style={styles.orderHeader}>
@@ -146,9 +157,9 @@ const getStatusConfig = (status) => {
             <Text style={[styles.statusText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
           </View>
         </View>
-
+        
         <View style={styles.orderDivider} />
-
+        
         <View style={styles.orderFooter}>
           <Text style={styles.orderClient}>{item.client?.name || 'Клиент'}</Text>
           <Text style={styles.orderAmount}>{item.total_amount?.toLocaleString('ru-RU')} ₽</Text>
@@ -177,11 +188,11 @@ const getStatusConfig = (status) => {
 
   return (
     <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar
+      <StatusBar 
         barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
         backgroundColor={colors.background}
       />
-
+      
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={
@@ -195,7 +206,7 @@ const getStatusConfig = (status) => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity
+          <TouchableOpacity 
             style={styles.backButton}
             onPress={() => navigation.navigate('MainTabs')}
           >
@@ -207,9 +218,14 @@ const getStatusConfig = (status) => {
               {isDirector ? 'Директор' : isManager ? 'Менеджер' : 'Администратор'}
             </Text>
           </View>
-          <TouchableOpacity
+          <TouchableOpacity 
             style={styles.settingsButton}
-            onPress={() => navigation.push('EmployeeSettings')}
+            onPress={() => navigation.navigate('MainTabs', {
+              screen: 'ProfileMenu',
+              params: {
+                screen: 'Settings'
+              }
+            })}
           >
             <Icon name="settings" size={24} color={colors.text} />
           </TouchableOpacity>
@@ -218,7 +234,12 @@ const getStatusConfig = (status) => {
         {/* Statistics Cards */}
         {isDirector && (
           <View style={styles.statsSection}>
-            <Text style={styles.sectionTitle}>Статистика продаж</Text>
+            <View style={styles.statsSectionHeader}>
+              <Text style={styles.sectionTitle}>Статистика продаж</Text>
+              {statistics.storeName && (
+                <Text style={styles.storeNameBadge}>{statistics.storeName}</Text>
+              )}
+            </View>
             <View style={styles.statsGrid}>
               {renderStatCard(
                 'Продажи за сегодня',
@@ -240,9 +261,18 @@ const getStatusConfig = (status) => {
         <View style={styles.ordersSection}>
           <Text style={styles.sectionTitle}>Заказы</Text>
           <View style={styles.ordersSummary}>
-            <TouchableOpacity
+            <TouchableOpacity 
               style={[styles.summaryCard, { backgroundColor: colors.primary + '20' }]}
-             onPress={() => navigation.navigate('EmployeeOrderList', { filter: 'new' })}
+              onPress={() => navigation.navigate('MainTabs', {
+                screen: 'ProfileMenu',
+                params: {
+                  screen: 'Admin',
+                  params: {
+                    screen: 'AdminOrders',
+                    params: { filter: 'new' }
+                  }
+                }
+              })}
             >
               <Icon name="fiber-new" size={32} color={colors.primary} />
               <Text style={[styles.summaryCount, { color: colors.primary }]}>
@@ -250,11 +280,19 @@ const getStatusConfig = (status) => {
               </Text>
               <Text style={styles.summaryLabel}>Новые</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
+            
+            <TouchableOpacity 
               style={[styles.summaryCard, { backgroundColor: colors.warning + '20' }]}
-              onPress={() => navigation.navigate('EmployeeOrderList', { filter: 'processing' })}
-              
+              onPress={() => navigation.navigate('MainTabs', {
+                screen: 'ProfileMenu',
+                params: {
+                  screen: 'Admin',
+                  params: {
+                    screen: 'AdminOrders',
+                    params: { filter: 'processing' }
+                  }
+                }
+              })}
             >
               <Icon name="hourglass-empty" size={32} color={colors.warning} />
               <Text style={[styles.summaryCount, { color: colors.warning }]}>
@@ -262,11 +300,19 @@ const getStatusConfig = (status) => {
               </Text>
               <Text style={styles.summaryLabel}>В работе</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
+            
+            <TouchableOpacity 
               style={[styles.summaryCard, { backgroundColor: colors.success + '20' }]}
-              onPress={() => navigation.navigate('EmployeeOrderList', { filter: 'completed' })}
-              
+              onPress={() => navigation.navigate('MainTabs', {
+                screen: 'ProfileMenu',
+                params: {
+                  screen: 'Admin',
+                  params: {
+                    screen: 'AdminOrders',
+                    params: { filter: 'completed' }
+                  }
+                }
+              })}
             >
               <Icon name="check-circle" size={32} color={colors.success} />
               <Text style={[styles.summaryCount, { color: colors.success }]}>
@@ -282,12 +328,20 @@ const getStatusConfig = (status) => {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Последние заказы</Text>
             <TouchableOpacity
-              onPress={() => navigation.navigate('EmployeeOrderList')}
+              onPress={() => navigation.navigate('MainTabs', {
+                screen: 'ProfileMenu',
+                params: {
+                  screen: 'Admin',
+                  params: {
+                    screen: 'AdminOrders'
+                  }
+                }
+              })}
             >
               <Text style={styles.viewAllLink}>Все заказы</Text>
             </TouchableOpacity>
           </View>
-
+          
           {orders.slice(0, 5).map((order) => (
             <View key={order.id}>
               {renderOrderItem({ item: order })}
@@ -299,15 +353,23 @@ const getStatusConfig = (status) => {
         <View style={styles.quickActionsSection}>
           <Text style={styles.sectionTitle}>Быстрые действия</Text>
           <View style={styles.quickActionsGrid}>
-            <TouchableOpacity
+            <TouchableOpacity 
               style={styles.actionButton}
-              onPress={() => navigation.navigate('EmployeeOrderList')}
+              onPress={() => navigation.navigate('MainTabs', {
+                screen: 'ProfileMenu',
+                params: {
+                  screen: 'Admin',
+                  params: {
+                    screen: 'AdminOrders'
+                  }
+                }
+              })}
             >
               <Icon name="assignment" size={32} color={colors.primary} />
               <Text style={styles.actionLabel}>Заказы</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
+            
+            <TouchableOpacity 
               style={styles.actionButton}
               onPress={() => navigation.navigate('MainTabs', {
                 screen: 'ProfileMenu',
@@ -322,9 +384,9 @@ const getStatusConfig = (status) => {
               <Icon name="qr-code-scanner" size={32} color={colors.primary} />
               <Text style={styles.actionLabel}>Сканер</Text>
             </TouchableOpacity>
-
+            
             {isDirector && (
-              <TouchableOpacity
+              <TouchableOpacity 
                 style={styles.actionButton}
                 onPress={() => navigation.navigate('Reports')}
               >
@@ -389,11 +451,25 @@ const themedStyles = (colors, theme) => StyleSheet.create({
   statsSection: {
     padding: 20,
   },
+  statsSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: colors.text,
-    marginBottom: 16,
+  },
+  storeNameBadge: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '500',
+    backgroundColor: colors.primary + '15',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   statsGrid: {
     flexDirection: 'row',
