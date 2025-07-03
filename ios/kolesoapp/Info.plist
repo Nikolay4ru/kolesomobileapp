@@ -99,6 +99,8 @@
 			   </dict>
          </dict>
       </dict>
+	<key>NSUserNotificationUsageDescription</key>
+<string>Мы хотим отправлять вам важные уведомления</string>
     <key>NSBluetoothAlwaysUsageDescription</key>
 	 <string>Данные Bluetooth собираются и отправляются на сервер для безопасного проведения оплаты</string>
 	<key>UIBackgroundModes</key>

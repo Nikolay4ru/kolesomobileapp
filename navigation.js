@@ -399,8 +399,8 @@ const MainTabs = () => {
       }}>
       <Tab.Screen name="Home" component={HomeStack} />
       <Tab.Screen name="Catalog" component={CatalogStack} />
+       <Tab.Screen name="Cart" component={CartStack} />
       <Tab.Screen name="Favorites" component={FavoritesScreen} />
-      <Tab.Screen name="Cart" component={CartStack} />
       <Tab.Screen name="ProfileMenu" component={ProfileStack} />
     </Tab.Navigator>
   );

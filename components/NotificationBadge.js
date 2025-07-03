@@ -20,8 +20,6 @@ const NotificationBadge = ({ style }) => {
   const navigation = useNavigation();
   const { authStore } = useStores();
   const [unreadCount, setUnreadCount] = useState(0);
-console.log('NotificationBadge mounted');
-console.log('AuthStore isAuthenticated:', authStore);
   useEffect(() => {
     // Получаем количество непрочитанных уведомлений при монтировании
     if (authStore.isLoggedIn) {
@@ -46,7 +44,6 @@ console.log('AuthStore isAuthenticated:', authStore);
     try {
       // Получаем токен из MMKV
       const token = authStore.token;
-      console.log('Fetching unread notifications count with token:', token);
       if (!token) {
         setUnreadCount(0);
         return;
@@ -60,8 +57,7 @@ console.log('AuthStore isAuthenticated:', authStore);
       });
       
       const data = response.data;
-      console.log(response);
-      
+     
       if (data.success) {
         setUnreadCount(data.unread_count || 0);
       } else {
@@ -86,8 +82,7 @@ console.log('AuthStore isAuthenticated:', authStore);
 
   // Если пользователь не авторизован, не показываем счетчик
   const showBadge = authStore.isLoggedIn && unreadCount > 0;
-  console.log('Unread notifications count:', unreadCount);
-
+  
   return (
     <TouchableOpacity 
       style={[styles.container, style]}

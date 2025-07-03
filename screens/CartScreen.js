@@ -210,6 +210,16 @@ const CartScreen = observer(({ navigation }) => {
     const store = stores.find(s => s.id === selectedStoreId);
     if (!store) return false;
 
+
+    if (!selectedStoreId) {
+    // Разрешить выбрать, если есть на складе
+    const warehouse = stores.find(store => store.id === 8);
+    const warehouseStockItem = warehouse?.stock_info?.find(
+      si => si.product_id.toString() === productId.toString()
+    );
+    return warehouseStockItem ? warehouseStockItem.in_stock >= requiredQuantity : false;
+  }
+
     const stockItem = store.stock_info?.find(
       item => item.product_id.toString() === productId.toString()
     );

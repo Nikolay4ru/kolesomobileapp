@@ -156,7 +156,7 @@ class AuthStore {
 
     // Проверяем текущее разрешение из системы
     const currentPermission = await this.getSystemNotificationPermission();
-
+    console.log('Current notification permission:', currentPermission);
     if (currentPermission === 'notDetermined') {
       // Только если не определено — запрашиваем, и только 1 раз
       if (!this.isNotificationPermissionRequested) {
@@ -649,6 +649,83 @@ class AuthStore {
     }
   }
 
+
+  async getDeviceId() {
+    try {
+      // Сначала пытаемся получить device_id из локального хранилища MMKV
+      const storedDeviceId = storage.getString('device_id');
+      if (storedDeviceId) {
+        return storedDeviceId;
+      }
+
+      // Если нет в локальном хранилище и пользователь авторизован,
+      // получаем с сервера
+      if (!this.isLoggedIn || !this.token) {
+        console.log('User not logged in, cannot fetch device ID');
+        return null;
+      }
+
+      // Запрос к серверу для получения активного устройства
+      const response = await this.api.get('/get_user_device.php', {
+        headers: { 
+          Authorization: `Bearer ${this.token}` 
+        }
+      });
+
+      if (response.data.success && response.data.device) {
+        const deviceId = response.data.device.id;
+        
+        // Сохраняем в локальное хранилище для последующего использования
+        storage.set('device_id', deviceId.toString());
+        
+        return deviceId.toString();
+      }
+
+      // Если устройство не найдено на сервере, пытаемся создать новое
+      if (this.oneSignalId) {
+        const createResponse = await this.api.post('/update_user_devices.php', {
+          userId: this.user.id,
+          oneSignalId: this.oneSignalId,
+          pushSubscriptionId: this.pushSubscriptionId,
+          pushEnabled: this.hasNotificationPermission ? 1 : 0,
+          deviceType: Platform.OS
+        });
+
+        if (createResponse.data.success && createResponse.data.deviceId) {
+          const newDeviceId = createResponse.data.deviceId;
+          storage.set('device_id', newDeviceId.toString());
+          return newDeviceId.toString();
+        }
+      }
+
+      console.log('No device found for user');
+      return null;
+
+    } catch (error) {
+      console.error('Error getting device ID:', error);
+      
+      // В случае ошибки сети, возвращаем ID из локального хранилища
+      const fallbackDeviceId = storage.getString('device_id');
+      if (fallbackDeviceId) {
+        return fallbackDeviceId;
+      }
+      
+      return null;
+    }
+  }
+
+  // Вспомогательная функция для сохранения device_id
+  saveDeviceId(deviceId) {
+    if (deviceId) {
+      storage.set('device_id', deviceId.toString());
+    }
+  }
+
+  // Функция для очистки device_id (при logout)
+  clearDeviceId() {
+    storage.delete('device_id');
+  }
+
   logout() {
     // Logout из OneSignal
     if (this.oneSignalInitialized && this.user?.id) {
@@ -673,6 +750,8 @@ class AuthStore {
     // Очищаем хранилище
     storage.delete(STORAGE_KEYS.TOKEN);
     storage.delete(STORAGE_KEYS.USER);
+    // Очищаем device_id
+    this.clearDeviceId();
     // Сохраняем настройки уведомлений и панели
     // storage.delete(STORAGE_KEYS.NOTIFICATION_PERMISSION);
     // storage.delete(STORAGE_KEYS.SHOW_EMPLOYEE_DASHBOARD);

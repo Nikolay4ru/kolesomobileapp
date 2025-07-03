@@ -1354,7 +1354,7 @@ const handleAddRelatedProducts = async (relatedProducts) => {
       }
     ]}>
           <View style={styles.bottomPriceInfo}>
-            <Text style={styles.bottomPriceLabel}>Итого: {tabBarHeight}</Text>
+            <Text style={styles.bottomPriceLabel}>Итого:</Text>
             <Text style={styles.bottomPriceValue}>{parseFloat(product.price * quantity).toFixed(0)} ₽</Text>
           </View>
           
@@ -1442,10 +1442,7 @@ const handleAddRelatedProducts = async (relatedProducts) => {
             )}
           </View>
         </View>
-      </View>
-      
-
-      <AddToCartModal
+            <AddToCartModal
   visible={showCartModal}
   onClose={() => setShowCartModal(false)}
   onGoToCart={() => {
@@ -1458,6 +1455,10 @@ const handleAddRelatedProducts = async (relatedProducts) => {
   authStore={authStore}
   cartStore={cartStore}
 />
+      </View>
+      
+
+  
     </View>
   );
 });

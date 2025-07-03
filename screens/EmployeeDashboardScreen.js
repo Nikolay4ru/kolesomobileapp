@@ -242,7 +242,7 @@ const getStatusConfig = (status) => {
           <View style={styles.ordersSummary}>
             <TouchableOpacity
               style={[styles.summaryCard, { backgroundColor: colors.primary + '20' }]}
-             onPress={() => navigation.navigate('EmployeeOrderList', { filter: 'new' })}
+             onPress={() => navigation.navigate('EmployeeOrderList', { filter: 'Новый' })}
             >
               <Icon name="fiber-new" size={32} color={colors.primary} />
               <Text style={[styles.summaryCount, { color: colors.primary }]}>
@@ -253,7 +253,7 @@ const getStatusConfig = (status) => {
 
             <TouchableOpacity
               style={[styles.summaryCard, { backgroundColor: colors.warning + '20' }]}
-              onPress={() => navigation.navigate('EmployeeOrderList', { filter: 'processing' })}
+              onPress={() => navigation.navigate('EmployeeOrderList', { filter: 'Отгружается' })}
               
             >
               <Icon name="hourglass-empty" size={32} color={colors.warning} />
@@ -265,7 +265,7 @@ const getStatusConfig = (status) => {
 
             <TouchableOpacity
               style={[styles.summaryCard, { backgroundColor: colors.success + '20' }]}
-              onPress={() => navigation.navigate('EmployeeOrderList', { filter: 'completed' })}
+              onPress={() => navigation.navigate('EmployeeOrderList', { filter: 'Завершен' })}
               
             >
               <Icon name="check-circle" size={32} color={colors.success} />

@@ -19,7 +19,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useThemedStyles } from '../hooks/useThemedStyles';
 
-const ITEMS_PER_PAGE = 20;
+const ITEMS_PER_PAGE = 50;
 
 // Упрощенная конфигурация статусов
 const statusConfig = {
@@ -79,7 +79,7 @@ const AdminOrdersScreen = observer(() => {
       if (!response.ok) {
         throw new Error(data.message || 'Ошибка загрузки заказов');
       }
-
+      console.log(data);
       if (isRefreshing || currentPage === 1) {
         setOrders(data.orders || []);
       } else {
@@ -162,7 +162,6 @@ const formatDate = (dateString) => {
   const renderOrderItem = ({ item, index }) => {
     const statusDisplay = getStatusDisplay(item.status);
     const isFirstItem = index === 0;
-    
     return (
       <TouchableOpacity 
         style={[styles.orderItem, isFirstItem && styles.firstOrderItem]}
@@ -171,7 +170,7 @@ const formatDate = (dateString) => {
       >
         <View style={styles.orderHeader}>
           <View style={styles.orderNumberContainer}>
-            <Text style={styles.orderNumber}>#{item.number}</Text>
+            <Text style={styles.orderNumber}>{item.number}</Text>
             <View style={[styles.statusDot, { backgroundColor: statusDisplay.color }]} />
           </View>
           <Text style={styles.orderDate}>{formatDate(item.created_at)}</Text>
@@ -182,8 +181,8 @@ const formatDate = (dateString) => {
             <Text style={styles.clientName} numberOfLines={1}>
               {item.client || 'Клиент'}
             </Text>
-            {item.phone && (
-              <Text style={styles.clientPhone}>{item.phone}</Text>
+            {item.client_phone && (
+              <Text style={styles.clientPhone}>{item.client_phone}</Text>
             )}
           </View>
           

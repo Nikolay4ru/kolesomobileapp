@@ -48,6 +48,7 @@
     "react-native-linear-gradient": "^2.8.3",
     "react-native-maps": "^1.24.3",
     "react-native-mmkv": "^3.3.0",
+    "react-native-modal": "^14.0.0-rc.1",
     "react-native-modal-datetime-picker": "^18.0.0",
     "react-native-nitro-haptics": "^0.1.0",
     "react-native-nitro-modules": "^0.26.2",

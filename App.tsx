@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Platform, StatusBar } from "react-native";
+import { View, Platform } from "react-native";
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Navigation from "./navigation";
@@ -18,45 +18,114 @@ import { OneSignal } from 'react-native-onesignal';
 import { navigationRef } from './services/NavigationService';
 import NavigationService from './services/NavigationService';
 import { UpdateChecker } from './services/UpdateService';
+import { useAppVersionTracker } from './services/AppVersionTracker';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import DeviceInfo from 'react-native-device-info';
+import { makeAutoObservable } from 'mobx';
+import { observer } from 'mobx-react-lite';
 // Импортируем useStores
 import { useStores } from "./useStores";
 
-// Основной компонент приложения с полной функциональностью
-const FullApp = () => {
-  const { colors } = useTheme();
-  const [appReady, setAppReady] = useState(false);
-  
+// Создаем UpdateStore для управления обновлениями
+class UpdateStore {
+  updateInfo = null;
+  showModal = false;
+
+  constructor() {
+    makeAutoObservable(this);
+  }
+
+  setUpdateInfo(info) {
+    this.updateInfo = info;
+    this.showModal = true;
+  }
+
+  hideModal() {
+    this.showModal = false;
+  }
+
+  clearUpdateInfo() {
+    this.updateInfo = null;
+    this.showModal = false;
+  }
+}
+
+const updateStore = new UpdateStore();
+
+// Делаем updateStore глобально доступным
+if (typeof global !== 'undefined') {
+  global.updateStore = updateStore;
+  global.showUpdateModal = () => updateStore.setUpdateInfo(updateStore.updateInfo);
+}
+
+// Компонент для отслеживания версии (оставляем только OneSignal ID)
+const VersionTracker = observer(() => {
+  const { updateDeviceVersion, saveDeviceId } = useAppVersionTracker();
+  const { authStore } = useStores();
+
   useEffect(() => {
-    // Инициализация приложения
+    // Обработчик изменения OneSignal ID
+    const handleOneSignalChange = async (event) => {
+      if (event.current.onesignalId && authStore.isLoggedIn) {
+        const deviceId = await authStore.getDeviceId();
+        if (deviceId) {
+          saveDeviceId(deviceId);
+          await updateDeviceVersion(parseInt(deviceId, 10));
+        }
+      }
+    };
+
+    OneSignal.User.addEventListener('change', handleOneSignalChange);
+    return () => {
+      OneSignal.User.removeEventListener('change', handleOneSignalChange);
+    };
+  }, [authStore.isLoggedIn, updateDeviceVersion, saveDeviceId]);
+
+  return null;
+});
+
+// Основной компонент приложения с полной функциональностью
+const FullApp = observer(() => {
+  const { colors } = useTheme();
+  const { authStore } = useStores();
+  const [appReady, setAppReady] = useState(false);
+  const { sendVersionInfo, updateDeviceVersion } = useAppVersionTracker();
+
+  useEffect(() => {
     const initializeApp = async () => {
       try {
-        // Инициализация AppMetrica
         AppMetrica.activate({
           apiKey: 'fd80c859-f747-42dd-a512-5ef0b48fd129',
           sessionTimeout: 120,
           logs: true
         });
         AppMetrica.reportEvent('Запуск');
-        
-        // Инициализация OneSignal через AuthStore
         await authStore.initializeOneSignal();
-        
-        // Обработчик клика по уведомлению
+
         const handleNotificationClick = (event) => {
           console.log('OneSignal: notification clicked:', event);
-          
-          const { type, notification_id, order_id, booking_id, storage_id, promo_code } = 
-            event.notification.additionalData || {};
-          
-          // Навигация в зависимости от типа уведомления
-          // Используем setTimeout для гарантии, что навигация готова
+
+          const data = event.notification.additionalData || {};
+          if (data.type === 'app_update' || data.type === 'system') {
+            if (Platform.OS === 'android' && data.download_url) {
+              updateStore.setUpdateInfo({
+                isUpdateAvailable: true,
+                currentVersion: DeviceInfo.getVersion(),
+                newVersion: data.new_version || data.version,
+                downloadUrl: data.download_url,
+                releaseNotes: data.release_notes,
+                forceUpdate: data.force_update || false
+              });
+            }
+            return;
+          }
+
+          const { type, notification_id, order_id, booking_id, storage_id, promo_code } = data;
           setTimeout(() => {
             if (!navigationRef.isReady()) {
               console.log('Navigation not ready, waiting...');
               return;
             }
-            
             switch (type) {
               case 'order':
                 if (order_id) {
@@ -92,32 +161,40 @@ const FullApp = () => {
             }
           }, 500);
         };
-        
-        // Добавляем слушатель клика по уведомлению
+
         OneSignal.Notifications.addEventListener('click', handleNotificationClick);
-        
-        // Сохраняем функцию очистки для cleanup
+
         global.oneSignalNotificationClickCleanup = () => {
           OneSignal.Notifications.removeEventListener('click', handleNotificationClick);
         };
-        
+
+        // --- Исправленный блок: обновляем device version и отправляем версию при каждом запуске, если пользователь авторизован ---
+        if (authStore.isLoggedIn) {
+          setTimeout(async () => {
+            sendVersionInfo();
+            const deviceId = await authStore.getDeviceId();
+            if (deviceId) {
+              await updateDeviceVersion(parseInt(deviceId, 10));
+            }
+          }, 2000);
+        }
+
         setAppReady(true);
       } catch (error) {
         console.error('Ошибка инициализации:', error);
-        setAppReady(true); // Продолжаем даже при ошибке
+        setAppReady(true);
       }
     };
-    
+
     initializeApp();
-    
-    // Cleanup при размонтировании
+
     return () => {
       if (global.oneSignalNotificationClickCleanup) {
         global.oneSignalNotificationClickCleanup();
       }
     };
-  }, []);
-  
+  }, [authStore.isLoggedIn]); // Добавлено для корректной работы при выходе/входе пользователя
+
   if (!appReady) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
@@ -125,17 +202,18 @@ const FullApp = () => {
       </View>
     );
   }
-  
+
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
-      <PaperProvider>
-        
-        <Navigation />
-       
-      </PaperProvider>
+      <SafeAreaProvider>
+        <PaperProvider>
+          <VersionTracker />
+          <Navigation />
+        </PaperProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
-};
+});
 
 const App = () => {
   const stores = {
@@ -144,19 +222,17 @@ const App = () => {
     productStore,
     cartStore,
     ordersStore,
-    storagesStore
+    storagesStore,
+    updateStore
   };
-  
+
   return (
-     
     <StoreProvider value={stores}>
       <ThemeProvider>
-         <UpdateChecker/>
+        <UpdateChecker />
         <FullApp />
-        
       </ThemeProvider>
     </StoreProvider>
-   
   );
 };
 
