@@ -116,60 +116,142 @@ class AuthStore {
 
   // === ONESIGNAL МЕТОДЫ ===
   
-  async initializeOneSignal() {
-    if (this.oneSignalInitialized) return;
+async initializeOneSignal() {
+  if (this.oneSignalInitialized) return;
 
-    try {
-      console.log('Starting OneSignal initialization...');
-      
-      OneSignal.initialize(ONESIGNAL_APP_ID);
-      this.oneSignalInitialized = true;
-      console.log('OneSignal initialized successfully');
+  try {
+    console.log('Starting OneSignal initialization...');
+    
+    // ВАЖНО: Сбрасываем флаг запроса разрешений при каждой инициализации
+    this.isNotificationPermissionRequested = false;
+    
+    OneSignal.initialize(ONESIGNAL_APP_ID);
+    this.oneSignalInitialized = true;
+    console.log('OneSignal initialized successfully');
 
-      // Сначала устанавливаем слушатели
-      this.setupOneSignalListeners();
-      
-      // Затем настраиваем разрешения
-      await this.setupNotificationPermissions();
-      
-      // Пытаемся получить ID сразу после инициализации
+    // Сначала устанавливаем слушатели
+    this.setupOneSignalListeners();
+    
+    // Добавляем небольшую задержку для iOS
+    if (Platform.OS === 'ios') {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    // Затем настраиваем разрешения
+    await this.setupNotificationPermissions();
+    
+    // Пытаемся получить ID сразу после инициализации
+    await this.fetchOneSignalIds();
+    
+    // Если OneSignal ID все еще null, пытаемся через некоторое время
+    if (!this.oneSignalId) {
+      console.log('OneSignal ID not available immediately, retrying...');
+      setTimeout(() => this.retryFetchOneSignalId(), 2000);
+      setTimeout(() => this.retryFetchOneSignalId(), 5000);
+      setTimeout(() => this.retryFetchOneSignalId(), 10000);
+    }
+  } catch (error) {
+    console.error('OneSignal initialization error:', error);
+    this.oneSignalInitialized = false;
+  }
+}
+
+async setupNotificationPermissions() {
+  // Загружаем сохраненное значение
+  const savedPermission = storage.getBoolean(STORAGE_KEYS.NOTIFICATION_PERMISSION);
+  if (savedPermission !== undefined) {
+    this._hasNotificationPermission = Boolean(savedPermission);
+  }
+
+  // Проверяем текущее разрешение из системы
+  const currentPermission = await this.getSystemNotificationPermission();
+  console.log('Current notification permission:', currentPermission);
+  
+  if (currentPermission === 'notDetermined') {
+    // Для iOS всегда запрашиваем разрешение при первом запуске
+    if (Platform.OS === 'ios' && !this.isNotificationPermissionRequested) {
+      console.log('iOS: Requesting notification permission for the first time');
+      await this.requestNotificationPermission();
+    } else if (!this.isNotificationPermissionRequested) {
+      console.log('Requesting notification permission');
+      await this.requestNotificationPermission();
+    }
+  } else if (currentPermission === 'granted') {
+    this._hasNotificationPermission = true;
+    this.isNotificationPermissionRequested = true; // Помечаем что уже спрашивали
+  } else if (currentPermission === 'denied') {
+    this._hasNotificationPermission = false;
+    this.isNotificationPermissionRequested = true;
+  }
+}
+
+async requestNotificationPermission() {
+  if (!this.oneSignalInitialized) {
+    console.log('OneSignal not initialized, cannot request permission');
+    return false;
+  }
+
+  // Проверяем текущий статус
+  const currentPermission = await this.getSystemNotificationPermission();
+  console.log('Current permission before request:', currentPermission);
+  
+  if (currentPermission === 'denied') {
+    console.log('Permission already denied by user');
+    this.isNotificationPermissionRequested = true;
+    this._hasNotificationPermission = false;
+    return false;
+  }
+
+  try {
+    console.log('Requesting notification permission...');
+    
+    // Используем промпт iOS стиля
+    const result = await OneSignal.Notifications.requestPermission(true);
+    
+    console.log('Permission request result:', result);
+    
+    // Обновляем состояние
+    this.isNotificationPermissionRequested = true;
+    const boolResult = Boolean(result);
+    this.hasNotificationPermission = boolResult;
+    
+    if (boolResult) {
+      // Даем время системе обработать разрешение
+      await new Promise(resolve => setTimeout(resolve, 1000));
       await this.fetchOneSignalIds();
-      
-      // Если OneSignal ID все еще null, пытаемся через некоторое время
-      if (!this.oneSignalId) {
-        console.log('OneSignal ID not available immediately, retrying...');
-        setTimeout(() => this.retryFetchOneSignalId(), 2000);
-        setTimeout(() => this.retryFetchOneSignalId(), 5000);
-        setTimeout(() => this.retryFetchOneSignalId(), 10000);
-      }
-    } catch (error) {
-      console.error('OneSignal initialization error:', error);
-      this.oneSignalInitialized = false;
     }
+    
+    return boolResult;
+  } catch (error) {
+    console.error('Error requesting notification permission:', error);
+    this.isNotificationPermissionRequested = true;
+    return false;
+  }
+}
+
+async setupNotificationPermissions() {
+  const savedPermission = storage.getBoolean(STORAGE_KEYS.NOTIFICATION_PERMISSION);
+  if (savedPermission !== undefined) {
+    this._hasNotificationPermission = Boolean(savedPermission);
   }
 
-  async setupNotificationPermissions() {
-    const savedPermission = storage.getBoolean(STORAGE_KEYS.NOTIFICATION_PERMISSION);
-    if (savedPermission !== undefined) {
-      this._hasNotificationPermission = Boolean(savedPermission);
-    }
-
-    // Проверяем текущее разрешение из системы
-    const currentPermission = await this.getSystemNotificationPermission();
-    console.log('Current notification permission:', currentPermission);
-    if (currentPermission === 'notDetermined') {
-      // Только если не определено — запрашиваем, и только 1 раз
-      if (!this.isNotificationPermissionRequested) {
-        await this.requestNotificationPermission();
-      }
-    } else if (currentPermission === 'granted') {
-      this._hasNotificationPermission = true;
-    } else if (currentPermission === 'denied') {
-      // Не показываем повторно запрос, просто отмечаем как denied
-      this._hasNotificationPermission = false;
-      this.isNotificationPermissionRequested = true; // чтобы больше не запрашивать!
-    }
+  const currentPermission = await this.getSystemNotificationPermission();
+  console.log('Current notification permission:', currentPermission);
+  
+  // Для iOS всегда запрашиваем при первом запуске
+  if (Platform.OS === 'ios' && currentPermission === 'notDetermined') {
+    // Сбрасываем флаг для iOS
+    this.isNotificationPermissionRequested = false;
+    await this.requestNotificationPermission();
+  } else if (currentPermission === 'notDetermined' && !this.isNotificationPermissionRequested) {
+    await this.requestNotificationPermission();
+  } else if (currentPermission === 'granted') {
+    this._hasNotificationPermission = true;
+  } else if (currentPermission === 'denied') {
+    this._hasNotificationPermission = false;
+    this.isNotificationPermissionRequested = true;
   }
+}
 
   // хелпер для получения статуса разрешения
   async getSystemNotificationPermission() {
@@ -451,7 +533,7 @@ class AuthStore {
       }
     } catch (error) {
       console.error("Failed to load auth state:", error);
-      this.logout();
+    //  this.logout();
     }
   }
 
@@ -757,35 +839,49 @@ class AuthStore {
     // storage.delete(STORAGE_KEYS.SHOW_EMPLOYEE_DASHBOARD);
   }
 
-  async checkAuth() {
-    if (!this.token) return false;
+async checkAuth() {
+  if (!this.token) return false;
 
-    try {
-      const isConnected = await this.checkInternetConnection();
-      if (!isConnected) {
-        return true; // Считаем токен валидным при отсутствии соединения
-      }
+  try {
+    // Сначала проверяем наличие интернета
+    const isConnected = await this.checkInternetConnection();
+    if (!isConnected) {
+      console.log('No internet connection, keeping user logged in');
+      return true; // Считаем токен валидным при отсутствии соединения
+    }
 
-      const response = await this.api.get("/validate_token.php", {
-        headers: { Authorization: `Bearer ${this.token}` },
-      });
+    const response = await this.api.get("/validate_token.php", {
+      headers: { Authorization: `Bearer ${this.token}` },
+      timeout: 10000 // 10 секунд таймаут
+    });
 
-      if (!response.data.valid) {
-        this.logout();
-        return false;
-      }
+    if (!response.data.valid) {
+    //  this.logout();
+    //  return false;
+    }
 
+    return true;
+  } catch (error) {
+    console.log('CheckAuth error:', error.message);
+    
+    // При ЛЮБОЙ ошибке сети не разлогиниваем
+    if (this.isNetworkError(error) || !navigator.onLine) {
+      console.log('Network error detected, keeping user logged in');
       return true;
-    } catch (error) {
-      // Не разлогиниваем при проблемах с сетью
-      if (this.isNetworkError(error)) {
-        return true;
-      }
-      
-      this.logout();
+    }
+    
+    // Только при явной ошибке авторизации (401, 403) разлогиниваем
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      console.log('Authentication failed, logging out');
+     // this.logout();
       return false;
     }
+    
+    // Во всех остальных случаях сохраняем авторизацию
+    console.log('Unknown error, keeping user logged in');
+    return true;
   }
+}
 
   // === ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ===
 
@@ -800,23 +896,46 @@ class AuthStore {
     this.phoneNumber = phone;
   }
 
-  async checkInternetConnection() {
-    try {
-      const response = await fetch('https://www.google.com', { 
-        method: 'HEAD',
-        cache: 'no-store'
-      });
-      return response.ok;
-    } catch (error) {
-      return false;
-    }
+async checkInternetConnection() {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 секунд таймаут
+    
+    const response = await fetch('https://www.google.com/generate_204', { 
+      method: 'HEAD',
+      mode: 'no-cors',
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    return true; // Если запрос прошел, значит есть интернет
+  } catch (error) {
+    console.log('Internet check failed:', error.message);
+    return false;
   }
+}
 
-  isNetworkError(error) {
-    return error.message?.includes('Network Error') || 
-           error.message?.includes('offline') ||
-           !navigator.onLine;
-  }
+isNetworkError(error) {
+  // Проверяем различные типы сетевых ошибок
+  const errorMessage = error.message?.toLowerCase() || '';
+  const errorCode = error.code?.toLowerCase() || '';
+  
+  return (
+    errorMessage.includes('network') ||
+    errorMessage.includes('offline') ||
+    errorMessage.includes('fetch') ||
+    errorMessage.includes('connect') ||
+    errorMessage.includes('internet') ||
+    errorMessage.includes('timeout') ||
+    errorCode === 'network_error' ||
+    errorCode === 'econnaborted' ||
+    error.code === 'ENOTFOUND' ||
+    error.code === 'ETIMEDOUT' ||
+    error.response?.status === 0 ||
+    !navigator.onLine
+  );
+}
 
   persistAuthState() {
     if (this.token && this.user) {

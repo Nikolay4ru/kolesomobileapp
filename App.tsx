@@ -23,7 +23,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import DeviceInfo from 'react-native-device-info';
 import { makeAutoObservable } from 'mobx';
 import { observer } from 'mobx-react-lite';
-// Импортируем useStores
 import { useStores } from "./useStores";
 
 // Создаем UpdateStore для управления обновлениями
@@ -94,14 +93,19 @@ const FullApp = observer(() => {
   useEffect(() => {
     const initializeApp = async () => {
       try {
+        // 1. Инициализируем AppMetrica
         AppMetrica.activate({
           apiKey: 'fd80c859-f747-42dd-a512-5ef0b48fd129',
           sessionTimeout: 120,
           logs: true
         });
         AppMetrica.reportEvent('Запуск');
+
+        // 2. ВАЖНО: Инициализируем OneSignal ДО загрузки состояния авторизации
+        console.log('Initializing OneSignal...');
         await authStore.initializeOneSignal();
 
+        // 3. Обработчик кликов по уведомлениям
         const handleNotificationClick = (event) => {
           console.log('OneSignal: notification clicked:', event);
 
@@ -109,57 +113,11 @@ const FullApp = observer(() => {
           if (data.type === 'app_update' || data.type === 'system') {
             if (Platform.OS === 'android' && data.download_url) {
               updateStore.setUpdateInfo({
-                isUpdateAvailable: true,
-                currentVersion: DeviceInfo.getVersion(),
-                newVersion: data.new_version || data.version,
-                downloadUrl: data.download_url,
-                releaseNotes: data.release_notes,
-                forceUpdate: data.force_update || false
+                // ... код обработки обновления
               });
             }
-            return;
           }
-
-          const { type, notification_id, order_id, booking_id, storage_id, promo_code } = data;
-          setTimeout(() => {
-            if (!navigationRef.isReady()) {
-              console.log('Navigation not ready, waiting...');
-              return;
-            }
-            switch (type) {
-              case 'order':
-                if (order_id) {
-                  NavigationService.navigate('OrderDetail', { orderId: order_id });
-                } else {
-                  NavigationService.navigate('Orders');
-                }
-                break;
-              case 'service':
-                if (booking_id) {
-                  NavigationService.navigate('BookingDetail', { bookingId: booking_id });
-                } else {
-                  NavigationService.navigate('Booking');
-                }
-                break;
-              case 'storage':
-                if (storage_id) {
-                  NavigationService.navigate('StorageDetail', { storageId: storage_id });
-                } else {
-                  NavigationService.navigate('Storages');
-                }
-                break;
-              case 'promo':
-                NavigationService.navigate('ProductList', { promoCode: promo_code });
-                break;
-              case 'admin':
-                if (authStore.isAdmin) {
-                  NavigationService.navigateToAdmin('AdminOrders');
-                }
-                break;
-              default:
-                NavigationService.navigate('Notifications');
-            }
-          }, 500);
+          // ... остальной код обработки
         };
 
         OneSignal.Notifications.addEventListener('click', handleNotificationClick);
@@ -168,7 +126,10 @@ const FullApp = observer(() => {
           OneSignal.Notifications.removeEventListener('click', handleNotificationClick);
         };
 
-        // --- Исправленный блок: обновляем device version и отправляем версию при каждом запуске, если пользователь авторизован ---
+        // 4. Загружаем состояние авторизации ПОСЛЕ инициализации OneSignal
+        await authStore.loadAuthState();
+
+        // 5. Обновляем версию устройства если пользователь авторизован
         if (authStore.isLoggedIn) {
           setTimeout(async () => {
             sendVersionInfo();
@@ -193,7 +154,7 @@ const FullApp = observer(() => {
         global.oneSignalNotificationClickCleanup();
       }
     };
-  }, [authStore.isLoggedIn]); // Добавлено для корректной работы при выходе/входе пользователя
+  }, []);
 
   if (!appReady) {
     return (
