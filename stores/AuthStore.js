@@ -3,6 +3,7 @@ import { makeAutoObservable } from "mobx";
 import { MMKV } from "react-native-mmkv";
 import { createApi, ApiInstance } from "../api";
 import { OneSignal } from 'react-native-onesignal';
+import { Platform, PermissionsAndroid } from 'react-native';
 
 const storage = new MMKV();
 const ONESIGNAL_APP_ID = "77c64a7c-678f-4de8-811f-9cac6c1b58e1";
@@ -11,6 +12,7 @@ const ONESIGNAL_APP_ID = "77c64a7c-678f-4de8-811f-9cac6c1b58e1";
 const STORAGE_KEYS = {
   TOKEN: "token",
   USER: "user",
+  COURIER: 'courier_profile', // новый ключ для профиля курьера
   NOTIFICATION_PERMISSION: "hasNotificationPermission",
   STARTUP_SCREEN: "startupScreen", // новый ключ для настройки стартового экрана
   SHOW_EMPLOYEE_DASHBOARD: "showEmployeeDashboard" // показывать ли панель сотрудника при запуске
@@ -25,13 +27,28 @@ type UserProfile = {
   email?: string;
   birthDate?: string; // Формат YYYY-MM-DD
   gender?: 'male' | 'female' | 'other';
+  userType?: 'customer' | 'courier';
 };
 
 type AdminProfile = {
   id: string;
   userId: string;
   storeId: number | null;
-  role: 'admin' | 'manager' | 'director'; // добавлена роль директора
+  role: 'admin' | 'manager' | 'director' | 'courier'; // добавлена роль директора
+};
+
+
+// Добавить новый тип для профиля курьера
+type CourierProfile = {
+  id: string;
+  name: string;
+  phone: string;
+  vehicleType?: 'car' | 'bike' | 'foot';
+  vehicleModel?: string;
+  vehicleNumber?: string;
+  rating: number;
+  completedOrders: number;
+  isOnline: boolean;
 };
 
 class AuthStore {
@@ -46,6 +63,12 @@ class AuthStore {
   // Админ поля
   isAdmin = false;
   admin: AdminProfile | null = null;
+
+  isCourier = false;
+  courierProfile: CourierProfile | null = null;
+
+
+  
   
   // Настройки стартового экрана
   showEmployeeDashboard = false;
@@ -64,6 +87,20 @@ class AuthStore {
     makeAutoObservable(this);
     this.api = createApi(this);
     this.loadAuthState();
+  }
+
+
+   // Добавить новые геттеры
+  get isCourierUser() {
+    return this.user?.userType === 'courier' || this.isCourier;
+  }
+
+  get canAccessCourierDashboard() {
+    return this.isCourierUser && this.courierProfile !== null;
+  }
+
+  get canAccessDeliveryTracking() {
+    return this.isLoggedIn && (this.user?.userType === 'customer' || !this.isCourierUser);
   }
 
   // Геттеры для ролей
@@ -115,12 +152,59 @@ class AuthStore {
   }
 
   // === ONESIGNAL МЕТОДЫ ===
+
+async checkAndroidNotificationPermission() {
+  if (Platform.OS !== 'android') return true;
+  
+  try {
+    // Для Android 13+ (API 33+) нужно явно запросить разрешение
+    if (Platform.Version >= 33) {
+      const granted = await PermissionsAndroid.check(
+        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+      );
+      
+      if (!granted) {
+        console.log('Android 13+: POST_NOTIFICATIONS permission not granted, requesting...');
+        const result = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+          {
+            title: 'Разрешение на уведомления',
+            message: 'Приложению необходимо разрешение для отправки уведомлений',
+            buttonNeutral: 'Позже',
+            buttonNegative: 'Отмена',
+            buttonPositive: 'Разрешить',
+          }
+        );
+        
+        return result === PermissionsAndroid.RESULTS.GRANTED;
+      }
+      
+      return true;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error checking Android notification permission:', error);
+    return false;
+  }
+}
   
 async initializeOneSignal() {
-  if (this.oneSignalInitialized) return;
+  if (this.oneSignalInitialized) {
+    console.log('OneSignal already initialized');
+    return;
+  }
 
   try {
     console.log('Starting OneSignal initialization...');
+    
+    // Для Android 13+ сначала проверяем разрешение
+    if (Platform.OS === 'android') {
+      const hasAndroidPermission = await this.checkAndroidNotificationPermission();
+      if (!hasAndroidPermission) {
+        console.log('Android notification permission denied');
+      }
+    }
     
     // ВАЖНО: Сбрасываем флаг запроса разрешений при каждой инициализации
     this.isNotificationPermissionRequested = false;
@@ -157,28 +241,27 @@ async initializeOneSignal() {
 }
 
 async setupNotificationPermissions() {
-  // Загружаем сохраненное значение
   const savedPermission = storage.getBoolean(STORAGE_KEYS.NOTIFICATION_PERMISSION);
   if (savedPermission !== undefined) {
     this._hasNotificationPermission = Boolean(savedPermission);
   }
 
-  // Проверяем текущее разрешение из системы
   const currentPermission = await this.getSystemNotificationPermission();
   console.log('Current notification permission:', currentPermission);
   
   if (currentPermission === 'notDetermined') {
-    // Для iOS всегда запрашиваем разрешение при первом запуске
-    if (Platform.OS === 'ios' && !this.isNotificationPermissionRequested) {
-      console.log('iOS: Requesting notification permission for the first time');
+    if (Platform.OS === 'ios') {
+      console.log('iOS: Will request notification permission');
+      // Задержка перед запросом для iOS
+      await new Promise(resolve => setTimeout(resolve, 1000));
       await this.requestNotificationPermission();
     } else if (!this.isNotificationPermissionRequested) {
-      console.log('Requesting notification permission');
+      console.log('Android: Requesting notification permission');
       await this.requestNotificationPermission();
     }
   } else if (currentPermission === 'granted') {
     this._hasNotificationPermission = true;
-    this.isNotificationPermissionRequested = true; // Помечаем что уже спрашивали
+    this.isNotificationPermissionRequested = true;
   } else if (currentPermission === 'denied') {
     this._hasNotificationPermission = false;
     this.isNotificationPermissionRequested = true;
@@ -191,13 +274,11 @@ async requestNotificationPermission() {
     return false;
   }
 
-  // Проверяем текущий статус
   const currentPermission = await this.getSystemNotificationPermission();
   console.log('Current permission before request:', currentPermission);
   
   if (currentPermission === 'denied') {
     console.log('Permission already denied by user');
-    this.isNotificationPermissionRequested = true;
     this._hasNotificationPermission = false;
     return false;
   }
@@ -205,18 +286,21 @@ async requestNotificationPermission() {
   try {
     console.log('Requesting notification permission...');
     
-    // Используем промпт iOS стиля
+    // Для iOS используем нативный промпт
     const result = await OneSignal.Notifications.requestPermission(true);
     
     console.log('Permission request result:', result);
     
-    // Обновляем состояние
-    this.isNotificationPermissionRequested = true;
+    // Устанавливаем флаг ПОСЛЕ получения результата
     const boolResult = Boolean(result);
     this.hasNotificationPermission = boolResult;
     
+    // Устанавливаем флаг только если действительно показали диалог
+    if (Platform.OS === 'ios' || boolResult !== null) {
+      this.isNotificationPermissionRequested = true;
+    }
+    
     if (boolResult) {
-      // Даем время системе обработать разрешение
       await new Promise(resolve => setTimeout(resolve, 1000));
       await this.fetchOneSignalIds();
     }
@@ -224,9 +308,104 @@ async requestNotificationPermission() {
     return boolResult;
   } catch (error) {
     console.error('Error requesting notification permission:', error);
-    this.isNotificationPermissionRequested = true;
     return false;
   }
+}
+
+
+
+// Добавьте эти методы в AuthStore.js:
+
+// Метод для сброса состояния и повторного запроса разрешений
+async resetAndRequestPermissions() {
+  console.log('Resetting notification permissions state...');
+  
+  // Сбрасываем флаг
+  this.isNotificationPermissionRequested = false;
+  
+  // Запрашиваем разрешение заново
+  const result = await this.requestNotificationPermission();
+  console.log('Permission request result:', result);
+  
+  return result;
+}
+
+// Метод для принудительного запроса разрешений (для использования в UI)
+async forceRequestNotificationPermission() {
+  if (!this.oneSignalInitialized) {
+    console.log('OneSignal not initialized, initializing...');
+    await this.initializeOneSignal();
+  }
+
+  try {
+    console.log('Force requesting notification permission...');
+    
+    // Для Android 13+ сначала проверяем системное разрешение
+    if (Platform.OS === 'android' && Platform.Version >= 33) {
+      const hasAndroidPermission = await this.checkAndroidNotificationPermission();
+      if (!hasAndroidPermission) {
+        console.log('Android system permission denied');
+        return false;
+      }
+    }
+    
+    // Сбрасываем флаг для повторного запроса
+    this.isNotificationPermissionRequested = false;
+    
+    // Запрашиваем через OneSignal
+    const result = await OneSignal.Notifications.requestPermission(true);
+    console.log('OneSignal permission result:', result);
+    
+    const boolResult = Boolean(result);
+    this.hasNotificationPermission = boolResult;
+    
+    if (boolResult) {
+      // Даем время на обработку
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Пытаемся получить ID
+      await this.fetchOneSignalIds();
+      
+      // Синхронизируем с сервером
+      await this.syncNotificationStatus();
+    }
+    
+    return boolResult;
+  } catch (error) {
+    console.error('Error in forceRequestNotificationPermission:', error);
+    return false;
+  }
+}
+
+// Улучшенный метод отладки
+async debugNotificationState() {
+  console.log('=== NOTIFICATION DEBUG INFO ===');
+  console.log('Platform:', Platform.OS, 'Version:', Platform.Version);
+  console.log('OneSignal initialized:', this.oneSignalInitialized);
+  console.log('Permission requested flag:', this.isNotificationPermissionRequested);
+  console.log('Has permission (internal):', this._hasNotificationPermission);
+  console.log('OneSignal ID:', this.oneSignalId);
+  console.log('Push Subscription ID:', this.pushSubscriptionId);
+  
+  if (this.oneSignalInitialized) {
+    try {
+      const systemPermission = await this.getSystemNotificationPermission();
+      console.log('System permission status:', systemPermission);
+      
+      const currentPermission = await OneSignal.Notifications.getPermissionAsync();
+      console.log('OneSignal permission (raw):', currentPermission);
+      
+      const hasPermission = await OneSignal.Notifications.canRequestPermission();
+      console.log('Can request permission:', hasPermission);
+      
+      const subscriptionState = await OneSignal.User.pushSubscription.getOptedIn();
+      console.log('Push subscription opted in:', subscriptionState);
+      
+    } catch (e) {
+      console.log('Error getting permission state:', e.message);
+    }
+  }
+  console.log('=== END DEBUG INFO ===');
 }
 
 async setupNotificationPermissions() {
@@ -498,6 +677,8 @@ async setupNotificationPermissions() {
     try {
       const token = storage.getString(STORAGE_KEYS.TOKEN);
       const userJson = storage.getString(STORAGE_KEYS.USER);
+      const courierJson = storage.getString(STORAGE_KEYS.COURIER); // НОВОЕ
+  
       const notificationPermission = storage.getBoolean(STORAGE_KEYS.NOTIFICATION_PERMISSION);
       const showEmployeeDashboard = storage.getBoolean(STORAGE_KEYS.SHOW_EMPLOYEE_DASHBOARD);
       
@@ -506,6 +687,12 @@ async setupNotificationPermissions() {
         this.user = JSON.parse(userJson);
         this.phoneNumber = this.user.phone;
         this.isLoggedIn = true;
+
+        // Загружаем данные курьера если есть
+        if (courierJson) {
+          this.courierProfile = JSON.parse(courierJson);
+          this.isCourier = true;
+        }
         
         if (notificationPermission !== undefined) {
           this._hasNotificationPermission = Boolean(notificationPermission);
@@ -527,6 +714,7 @@ async setupNotificationPermissions() {
         
         await Promise.all([
           this.checkAdminStatus(),
+          this.checkCourierStatus(),
           this.checkAuth(),
           this.fetchProfile(),
         ]);
@@ -578,7 +766,8 @@ async setupNotificationPermissions() {
       this.token = response.data.token;
       this.user = {
         id: response.data.user_id,
-        phone: this.phoneNumber
+        phone: this.phoneNumber,
+        userType: response.data.user_type || 'customer'
       };
       this.isLoggedIn = true;
 
@@ -596,6 +785,7 @@ async setupNotificationPermissions() {
       await Promise.all([
         this.fetchProfile(),
         this.checkAdminStatus(),
+        this.checkCourierStatus(),
         this.syncOneSignalIdWithServer(),
         this.syncNotificationStatus()
       ]);
@@ -608,6 +798,61 @@ async setupNotificationPermissions() {
       throw error;
     } finally {
       this.setLoadingState(false);
+    }
+  }
+
+
+
+
+  // Новый метод для проверки статуса курьера
+  async checkCourierStatus() {
+    if (!this.user) return;
+
+    try {
+      const response = await this.api.get("/check_courier.php");
+      
+      if (response.data.isCourier) {
+        this.isCourier = true;
+        this.courierProfile = {
+          id: response.data.id,
+          name: response.data.name,
+          phone: response.data.phone,
+          vehicleType: response.data.vehicleType,
+          vehicleModel: response.data.vehicleModel,
+          vehicleNumber: response.data.vehicleNumber,
+          rating: response.data.rating,
+          completedOrders: response.data.completedOrders,
+          isOnline: response.data.isOnline
+        };
+      } else {
+        this.isCourier = false;
+        this.courierProfile = null;
+      }
+    } catch (error) {
+      console.error("Failed to check courier status:", error);
+      this.isCourier = false;
+      this.courierProfile = null;
+    }
+  }
+
+  // Новый метод для обновления статуса курьера (онлайн/офлайн)
+  async updateCourierOnlineStatus(isOnline: boolean) {
+    if (!this.isCourier || !this.courierProfile) return;
+
+    try {
+      const response = await this.api.post("/courier/status", {
+        status: isOnline ? 'online' : 'offline'
+      });
+
+      if (response.data.success) {
+        this.courierProfile.isOnline = isOnline;
+        this.persistAuthState();
+      }
+
+      return response.data;
+    } catch (error) {
+      console.error("Failed to update courier status:", error);
+      throw error;
     }
   }
 
@@ -808,13 +1053,22 @@ async setupNotificationPermissions() {
     storage.delete('device_id');
   }
 
-  logout() {
+  async logout() {
     // Logout из OneSignal
     if (this.oneSignalInitialized && this.user?.id) {
       try {
         OneSignal.logout();
       } catch (error) {
         console.error('Error logging out from OneSignal:', error);
+      }
+    }
+
+    // Если курьер - устанавливаем статус офлайн
+    if (this.isCourier && this.courierProfile?.isOnline) {
+      try {
+        await this.updateCourierOnlineStatus(false);
+      } catch (error) {
+        console.error("Failed to set courier offline:", error);
       }
     }
 
@@ -828,10 +1082,13 @@ async setupNotificationPermissions() {
     this.error = "";
     this.oneSignalId = null;
     this.pushSubscriptionId = null;
+    this.isCourier = false; // НОВОЕ
+    this.courierProfile = null; // НОВОЕ
 
     // Очищаем хранилище
     storage.delete(STORAGE_KEYS.TOKEN);
     storage.delete(STORAGE_KEYS.USER);
+    storage.delete(STORAGE_KEYS.COURIER);
     // Очищаем device_id
     this.clearDeviceId();
     // Сохраняем настройки уведомлений и панели
@@ -941,6 +1198,10 @@ isNetworkError(error) {
     if (this.token && this.user) {
       storage.set(STORAGE_KEYS.TOKEN, this.token);
       storage.set(STORAGE_KEYS.USER, JSON.stringify(this.user));
+       // Сохраняем данные курьера
+      if (this.courierProfile) {
+        storage.set(STORAGE_KEYS.COURIER, JSON.stringify(this.courierProfile));
+      }
     }
   }
 

@@ -10,7 +10,8 @@ import {
   Platform,
   StatusBar,
   Modal,
-  SafeAreaView
+  SafeAreaView,
+  Linking
 } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -22,8 +23,8 @@ import { MMKV } from 'react-native-mmkv';
 import { useStores } from '../useStores';
 import { useTheme } from '../contexts/ThemeContext';
 import { useThemedStyles } from '../hooks/useThemedStyles';
-//import BannerNotificationPermission from '../components/BannerNotificationPermission';
 import EmployeeDashboardSwitch from '../components/EmployeeDashboardSwitch';
+
 const storage = new MMKV();
 
 // Компонент модального окна выбора темы
@@ -111,6 +112,8 @@ const SettingsScreen = observer(() => {
 
   const [themeModalVisible, setThemeModalVisible] = useState(false);
   const [appVersion, setAppVersion] = useState('');
+  const [permissionStatus, setPermissionStatus] = useState('checking');
+  const [isLoading, setIsLoading] = useState(false);
 
   // Только useState для уведомлений
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -119,15 +122,18 @@ const SettingsScreen = observer(() => {
   // showEmployeeDashboard — только MobX!
   const showEmployeeDashboard = authStore.showEmployeeDashboard;
 
-  
-
-
   // Загрузка сохраненных настроек при монтировании
   useEffect(() => {
-      loadSettings();
-      loadServerSettings();
-      setAppVersion(DeviceInfo.getReadableVersion());
+    loadSettings();
+    loadServerSettings();
+    setAppVersion(DeviceInfo.getReadableVersion());
+    checkPermissionStatus();
   }, []);
+
+  const checkPermissionStatus = async () => {
+    const status = await authStore.getSystemNotificationPermission();
+    setPermissionStatus(status);
+  };
 
   const loadSettings = () => {
     try {
@@ -175,9 +181,68 @@ const SettingsScreen = observer(() => {
   };
 
   const handleNotificationToggle = async (value) => {
+    setIsLoading(true);
     setNotificationsEnabled(value);
     saveSetting('notifications', value);
 
+    try {
+      if (value) {
+        // Используем принудительный запрос
+        const granted = await authStore.forceRequestNotificationPermission();
+        
+        if (!granted) {
+          // Проверяем, заблокированы ли уведомления в системе
+          const systemStatus = await authStore.getSystemNotificationPermission();
+          
+          if (systemStatus === 'denied') {
+            Alert.alert(
+              'Уведомления заблокированы',
+              'Уведомления отключены в настройках устройства. Хотите открыть настройки?',
+              [
+                { 
+                  text: 'Отмена', 
+                  style: 'cancel',
+                  onPress: () => {
+                    // Откатываем изменение если пользователь отменил
+                    setNotificationsEnabled(false);
+                    saveSetting('notifications', false);
+                  }
+                },
+                { 
+                  text: 'Открыть настройки', 
+                  onPress: () => {
+                    if (Platform.OS === 'ios') {
+                      Linking.openURL('app-settings:');
+                    } else {
+                      Linking.openSettings();
+                    }
+                  }
+                }
+              ]
+            );
+          } else {
+            // Если разрешение не получено по другой причине
+            setNotificationsEnabled(false);
+            saveSetting('notifications', false);
+          }
+        }
+      } else {
+        // Выключаем уведомления
+        authStore.hasNotificationPermission = false;
+        await authStore.syncNotificationStatus();
+      }
+    } catch (error) {
+      console.error('Error toggling notifications:', error);
+      Alert.alert('Ошибка', 'Не удалось изменить настройки уведомлений');
+      // Откатываем изменение при ошибке
+      setNotificationsEnabled(!value);
+      saveSetting('notifications', !value);
+    } finally {
+      setIsLoading(false);
+      await checkPermissionStatus();
+    }
+
+    // Синхронизация с сервером
     try {
       const response = await fetch('https://api.koleso.app/api/update_push_settings.php', {
         method: 'POST',
@@ -192,14 +257,10 @@ const SettingsScreen = observer(() => {
       });
       const data = await response.json();
       if (!data.success) {
-        Alert.alert('Ошибка', 'Не удалось обновить настройки уведомлений');
-        setNotificationsEnabled(!value);
-        saveSetting('notifications', !value);
+        Alert.alert('Ошибка', 'Не удалось обновить настройки уведомлений на сервере');
       }
     } catch (error) {
-      Alert.alert('Ошибка', 'Не удалось обновить настройки уведомлений');
-      setNotificationsEnabled(!value);
-      saveSetting('notifications', !value);
+      console.error('Error updating server settings:', error);
     }
   };
 
@@ -232,8 +293,7 @@ const SettingsScreen = observer(() => {
     }
   };
 
-
-const handleEmployeeDashboardToggle = (value) => {
+  const handleEmployeeDashboardToggle = (value) => {
     authStore.setShowEmployeeDashboard(value);
     if (value) {
       Alert.alert(
@@ -281,7 +341,44 @@ const handleEmployeeDashboardToggle = (value) => {
     );
   };
 
-  const SettingItem = ({ icon, title, subtitle, value, onValueChange, isLast = false, disabled = false }) => (
+  const handleDebug = async () => {
+    await authStore.debugNotificationState();
+    Alert.alert('Debug Info', 'Проверьте консоль для подробной информации');
+  };
+
+  const renderPermissionStatus = () => {
+    switch (permissionStatus) {
+      case 'granted':
+        return (
+          <View style={styles.statusContainer}>
+            <Icon name="check-circle" size={16} color="#10B981" />
+            <Text style={styles.statusText}>Разрешены</Text>
+          </View>
+        );
+      case 'denied':
+        return (
+          <View style={styles.statusContainer}>
+            <Icon name="cancel" size={16} color="#EF4444" />
+            <Text style={[styles.statusText, { color: '#EF4444' }]}>
+              Заблокированы в настройках
+            </Text>
+          </View>
+        );
+      case 'notDetermined':
+        return (
+          <View style={styles.statusContainer}>
+            <Icon name="help" size={16} color="#F59E0B" />
+            <Text style={[styles.statusText, { color: '#F59E0B' }]}>
+              Не запрашивались
+            </Text>
+          </View>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const SettingItem = ({ icon, title, subtitle, value, onValueChange, isLast = false, disabled = false, showStatus = false }) => (
     <View style={[styles.settingItem, isLast && styles.settingItemLast]}>
       <View style={styles.settingItemLeft}>
         <View style={[styles.iconContainer, disabled && styles.iconContainerDisabled]}>
@@ -292,6 +389,7 @@ const handleEmployeeDashboardToggle = (value) => {
           {subtitle && (
             <Text style={[styles.settingSubtitle, disabled && styles.disabledText]}>{subtitle}</Text>
           )}
+          {showStatus && renderPermissionStatus()}
         </View>
       </View>
       <Switch
@@ -300,7 +398,7 @@ const handleEmployeeDashboardToggle = (value) => {
         trackColor={{ false: colors.border, true: colors.primary + '50' }}
         thumbColor={value ? colors.primary : colors.surface}
         ios_backgroundColor={colors.border}
-        disabled={disabled}
+        disabled={disabled || isLoading}
       />
     </View>
   );
@@ -344,7 +442,13 @@ const handleEmployeeDashboardToggle = (value) => {
           <Icon name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Настройки</Text>
-        <View style={styles.backButton} />
+        <View style={styles.backButton}>
+          {__DEV__ && (
+            <TouchableOpacity onPress={handleDebug}>
+              <Icon name="bug-report" size={24} color={colors.text} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <ScrollView
@@ -362,7 +466,8 @@ const handleEmployeeDashboardToggle = (value) => {
               subtitle="Получать уведомления о заказах и акциях"
               value={notificationsEnabled}
               onValueChange={handleNotificationToggle}
-              isLast={!authStore.isAdmin}
+              isLast={!authStore.isAdmin && permissionStatus !== 'denied'}
+              showStatus={true}
             />
             {authStore.isAdmin && (
               <SettingItem
@@ -371,23 +476,54 @@ const handleEmployeeDashboardToggle = (value) => {
                 subtitle="Получать уведомления о новых заказах магазина"
                 value={adminNotificationsEnabled}
                 onValueChange={handleAdminNotificationToggle}
-                isLast
+                isLast={permissionStatus !== 'denied'}
+                disabled={!notificationsEnabled}
               />
             )}
+            {permissionStatus === 'denied' && (
+              <TouchableOpacity 
+                style={[styles.settingItem, styles.settingItemLast]}
+                onPress={() => {
+                  if (Platform.OS === 'ios') {
+                    Linking.openURL('app-settings:');
+                  } else {
+                    Linking.openSettings();
+                  }
+                }}
+              >
+                <View style={styles.settingItemLeft}>
+                  <View style={[styles.iconContainer, { backgroundColor: colors.error + '15' }]}>
+                    <Icon name="settings" size={22} color={colors.error} />
+                  </View>
+                  <View style={styles.textContainer}>
+                    <Text style={[styles.settingTitle, { color: colors.error }]}>
+                      Открыть настройки устройства
+                    </Text>
+                    <Text style={styles.settingSubtitle}>
+                      Разрешите уведомления в настройках
+                    </Text>
+                  </View>
+                </View>
+                <Icon name="open-in-new" size={20} color={colors.error} />
+              </TouchableOpacity>
+            )}
           </View>
+          {authStore.hasNotificationPermission && authStore.oneSignalId && (
+            <View style={styles.infoContainer}>
+              <Text style={styles.infoLabel}>ID устройства: {authStore.oneSignalId}</Text>
+            </View>
+          )}
         </View>
 
-
-         {/* Employee Settings Section */}
+        {/* Employee Settings Section */}
         {authStore.canAccessEmployeeDashboard && (
-  <View style={styles.section}>
-    <Text style={styles.sectionTitle}>Настройки сотрудника</Text>
-    <View style={styles.settingsCard}>
-      <EmployeeDashboardSwitch styles={styles} />
-    </View>
-  </View>
-)}
-        
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Настройки сотрудника</Text>
+            <View style={styles.settingsCard}>
+              <EmployeeDashboardSwitch styles={styles} />
+            </View>
+          </View>
+        )}
 
         {/* Внешний вид */}
         <View style={styles.section}>
@@ -408,14 +544,14 @@ const handleEmployeeDashboardToggle = (value) => {
           <Text style={styles.sectionTitle}>Общие</Text>
           <View style={styles.settingsCard}>
             <ActionItem
-  icon="info-outline"
-  title="О приложении"
-  subtitle={`Версия ${appVersion || ''}`}
-  onPress={() => Alert.alert(
-    'О приложении', 
-    `Колесо v${appVersion}\n\n© 2025 Все права защищены`
-  )}
-/>
+              icon="info-outline"
+              title="О приложении"
+              subtitle={`Версия ${appVersion || ''}`}
+              onPress={() => Alert.alert(
+                'О приложении', 
+                `Колесо v${appVersion}\n\n© 2025 Все права защищены`
+              )}
+            />
             <ActionItem
               icon="shield"
               iconComponent={Ionicons}
@@ -459,9 +595,7 @@ const handleEmployeeDashboardToggle = (value) => {
           </Text>
         </View>
       </ScrollView>
-      {/* {authStore.isNotificationDenied && (
-        <BannerNotificationPermission />
-      )}*/}
+
       <ThemeSelector 
         visible={themeModalVisible}
         onClose={() => setThemeModalVisible(false)}
@@ -574,6 +708,28 @@ const themedStyles = (colors, theme) => ({
   },
   dangerText: {
     color: colors.error,
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  statusText: {
+    fontSize: 12,
+    marginLeft: 4,
+    color: '#10B981',
+  },
+  infoContainer: {
+    backgroundColor: colors.surface,
+    padding: 12,
+    marginHorizontal: 20,
+    marginTop: 8,
+    borderRadius: 8,
+  },
+  infoLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   footer: {
     marginTop: 40,
