@@ -101,11 +101,16 @@
       </dict>
 	<key>NSUserNotificationUsageDescription</key>
 <string>Мы хотим отправлять вам важные уведомления</string>
+<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+<string>Приложение использует геолокацию для отслеживания доставки</string>
+<key>NSLocationWhenInUseUsageDescription</key>
+<string>Приложение использует геолокацию для показа ближайших заказов</string>
     <key>NSBluetoothAlwaysUsageDescription</key>
 	 <string>Данные Bluetooth собираются и отправляются на сервер для безопасного проведения оплаты</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
+		 <string>location</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>

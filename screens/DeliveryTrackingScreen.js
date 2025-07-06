@@ -10,28 +10,38 @@ import {
   Platform,
   StatusBar,
   Animated,
-  Alert
+  Alert,
+  Linking
 } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { observer } from 'mobx-react-lite';
+import { useStores } from '../useStores';
+import { useOrderTracking } from '../hooks/useOrderTracking';
+import { useTheme } from '../contexts/ThemeContext';
+import { useThemedStyles } from '../hooks/useThemedStyles';
 import axios from 'axios';
 
 const { width, height } = Dimensions.get('window');
 const API_URL = 'https://api.koleso.app/api'; // Используем тот же API
 
-const DeliveryTrackingScreen = () => {
+const DeliveryTrackingScreen = observer(() => {
   const navigation = useNavigation();
   const route = useRoute();
   const insets = useSafeAreaInsets();
   const { orderId } = route.params;
+  const { authStore } = useStores();
+  const { colors, theme } = useTheme();
+  const styles = useThemedStyles(themedStyles);
+
+  // Используем хук для отслеживания в реальном времени
+  const { courierLocation, orderStatus, loading, error } = useOrderTracking(orderId);
 
   // States
-  const [courierLocation, setCourierLocation] = useState(null);
   const [deliveryInfo, setDeliveryInfo] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [mapRegion, setMapRegion] = useState({
     latitude: 59.4370,
     longitude: 24.7536,
@@ -41,13 +51,11 @@ const DeliveryTrackingScreen = () => {
 
   // Refs
   const mapRef = useRef(null);
-  const pollingInterval = useRef(null);
   const slideAnim = useRef(new Animated.Value(300)).current;
 
   useEffect(() => {
     StatusBar.setBarStyle('dark-content', true);
     loadDeliveryInfo();
-    startLocationPolling();
 
     // Анимация появления карточки
     Animated.spring(slideAnim, {
@@ -56,17 +64,26 @@ const DeliveryTrackingScreen = () => {
       tension: 40,
       useNativeDriver: true,
     }).start();
-
-    return () => {
-      if (pollingInterval.current) {
-        clearInterval(pollingInterval.current);
-      }
-    };
   }, []);
+
+  // Центрируем карту при обновлении местоположения
+  useEffect(() => {
+    if (courierLocation && mapRef.current) {
+      mapRef.current.animateToRegion({
+        ...courierLocation,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      }, 1000);
+    }
+  }, [courierLocation]);
 
   const loadDeliveryInfo = async () => {
     try {
-      const response = await axios.get(`${API_URL}/delivery/${orderId}`);
+      const response = await axios.get(`${API_URL}/delivery/${orderId}`, {
+        headers: {
+          'Authorization': `Bearer ${authStore.token}`
+        }
+      });
       setDeliveryInfo(response.data);
       
       if (response.data.destination) {
@@ -77,40 +94,14 @@ const DeliveryTrackingScreen = () => {
           longitudeDelta: 0.0421,
         });
       }
-      
-      setLoading(false);
     } catch (error) {
       console.error('Error loading delivery info:', error);
       Alert.alert('Ошибка', 'Не удалось загрузить информацию о доставке');
-      setLoading(false);
     }
   };
 
-  const startLocationPolling = () => {
-    // Получаем позицию курьера каждые 5 секунд
-    pollingInterval.current = setInterval(async () => {
-      try {
-        const response = await axios.get(`${API_URL}/courier/location/${orderId}`);
-        if (response.data && response.data.location) {
-          setCourierLocation(response.data.location);
-          
-          // Центрируем карту на курьере
-          if (mapRef.current && response.data.location) {
-            mapRef.current.animateToRegion({
-              ...response.data.location,
-              latitudeDelta: 0.01,
-              longitudeDelta: 0.01,
-            }, 1000);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching courier location:', error);
-      }
-    }, 5000);
-  };
-
   const getStatusIcon = (status) => {
-    switch (status) {
+    switch (status || orderStatus) {
       case 'assigned':
         return 'assignment';
       case 'on_way':
@@ -125,7 +116,7 @@ const DeliveryTrackingScreen = () => {
   };
 
   const getStatusText = (status) => {
-    switch (status) {
+    switch (status || orderStatus) {
       case 'assigned':
         return 'Курьер назначен';
       case 'on_way':
@@ -141,15 +132,17 @@ const DeliveryTrackingScreen = () => {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#006363" />
-        <Text style={styles.loadingText}>Загрузка информации о доставке...</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+          Загрузка информации о доставке...
+        </Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
@@ -291,28 +284,28 @@ const DeliveryTrackingScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const themedStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.background,
   },
   loadingText: {
     marginTop: 10,
     fontSize: 16,
-    color: '#666',
+    color: colors.textSecondary,
   },
   header: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#006363',
+    backgroundColor: colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -382,7 +375,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
@@ -406,7 +399,7 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
+    color: colors.text,
     marginLeft: 10,
   },
   detailsContainer: {
@@ -415,7 +408,7 @@ const styles = StyleSheet.create({
   orderNumber: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#333',
+    color: colors.text,
     marginBottom: 10,
   },
   timeContainer: {
@@ -425,7 +418,7 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
     marginLeft: 8,
   },
   addressContainer: {
@@ -434,8 +427,76 @@ const styles = StyleSheet.create({
   },
   addressText: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
     marginLeft: 8,
+    flex: 1,
+  },
+  courierInfo: {
+    backgroundColor: colors.background,
+    padding: 15,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  courierHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  courierTitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  callButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  callText: {
+    color: '#fff',
+    fontSize: 12,
+    marginLeft: 5,
+    fontWeight: '500',
+  },
+  courierName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  vehicleInfo: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  actions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: colors.background,
+    marginHorizontal: 5,
+  },
+  cancelButton: {
+    backgroundColor: '#FFE5E5',
+  },
+  actionText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.primary,
+    marginLeft: 5,
+  },
+});
+
+export default DeliveryTrackingScreen; 8,
     flex: 1,
   },
   courierInfo: {
