@@ -19,12 +19,16 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import Geolocation from '@react-native-community/geolocation';
 import BackgroundGeolocation from 'react-native-background-geolocation';
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MMKV } from 'react-native-mmkv';
+import { observer } from 'mobx-react-lite';
+import { useStores } from '../useStores';
 
 const API_URL = 'https://api.koleso.app/api';
+const storage = new MMKV();
 
-const CourierMainScreen = ({ navigation }) => {
+const CourierMainScreen = observer(({ navigation }) => {
   const insets = useSafeAreaInsets();
+  const { authStore } = useStores();
   
   // States
   const [courierId, setCourierId] = useState(null);
@@ -43,14 +47,14 @@ const CourierMainScreen = ({ navigation }) => {
 
   const loadCourierData = async () => {
     try {
-      // Получаем ID курьера из AsyncStorage
-      const id = await AsyncStorage.getItem('courierId');
-      if (id) {
-        setCourierId(id);
-        await loadOrders(id);
+      // Получаем ID курьера из MMKV
+      const courierProfile = authStore.courierProfile;
+      if (courierProfile && courierProfile.id) {
+        setCourierId(courierProfile.id);
+        await loadOrders(courierProfile.id);
       } else {
-        // Если нет ID, отправляем на экран авторизации
-        navigation.replace('CourierAuth');
+        // Если нет профиля курьера, отправляем на экран авторизации
+        navigation.replace('Auth');
       }
     } catch (error) {
       console.error('Error loading courier data:', error);
@@ -59,129 +63,166 @@ const CourierMainScreen = ({ navigation }) => {
     }
   };
 
+  const configureBackgroundGeolocation = async () => {
+    try {
+      // Конфигурация для отслеживания местоположения в фоне
+      BackgroundGeolocation.configure({
+        desiredAccuracy: BackgroundGeolocation.HIGH_ACCURACY,
+        stationaryRadius: 50,
+        distanceFilter: 50,
+        notificationTitle: 'Koleso Доставка',
+        notificationText: 'Отслеживание местоположения активно',
+        debug: false,
+        startOnBoot: false,
+        stopOnTerminate: true,
+        locationProvider: BackgroundGeolocation.ACTIVITY_PROVIDER,
+        interval: 10000,
+        fastestInterval: 5000,
+        activitiesInterval: 10000,
+        stopOnStillActivity: false,
+      });
+
+      BackgroundGeolocation.on('location', (location) => {
+        // Отправляем местоположение на сервер
+        updateCourierLocation(location);
+      });
+
+      BackgroundGeolocation.on('error', (error) => {
+        console.warn('[ERROR] BackgroundGeolocation error:', error);
+      });
+
+      BackgroundGeolocation.on('authorization', (status) => {
+        setLocationEnabled(status === BackgroundGeolocation.AUTHORIZED);
+      });
+
+      // Проверяем разрешения
+      const status = await BackgroundGeolocation.checkStatus();
+      setLocationEnabled(status.isRunning);
+    } catch (error) {
+      console.error('Error configuring background geolocation:', error);
+    }
+  };
+
+  const updateCourierLocation = async (location) => {
+    if (!courierId || !isOnline) return;
+
+    try {
+      await axios.post(
+        `${API_URL}/courier/update-location`,
+        {
+          courier_id: courierId,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          timestamp: new Date().toISOString(),
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${authStore.token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+    } catch (error) {
+      console.error('Error updating location:', error);
+    }
+  };
+
+  const toggleOnlineStatus = async (value) => {
+    setIsOnline(value);
+    
+    if (value) {
+      // Включаем отслеживание местоположения
+      BackgroundGeolocation.start();
+      // Сохраняем статус в MMKV
+      storage.set('courier_online_status', true);
+    } else {
+      // Выключаем отслеживание
+      BackgroundGeolocation.stop();
+      storage.set('courier_online_status', false);
+    }
+
+    // Обновляем статус на сервере
+    try {
+      await axios.post(
+        `${API_URL}/courier/update-status`,
+        {
+          courier_id: courierId,
+          is_online: value,
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${authStore.token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+    } catch (error) {
+      console.error('Error updating online status:', error);
+    }
+  };
+
   const loadOrders = async (id) => {
     try {
-      const response = await axios.get(`${API_URL}/courier/${id}/orders`);
-      setOrders(response.data.available || []);
-      setActiveOrder(response.data.active || null);
+      const response = await axios.get(
+        `${API_URL}/courier/available-orders`,
+        {
+          headers: {
+            'Authorization': `Bearer ${authStore.token}`,
+          },
+          params: {
+            courier_id: id,
+          },
+        }
+      );
+
+      if (response.data.success) {
+        setOrders(response.data.orders || []);
+        
+        // Проверяем активный заказ
+        const active = response.data.orders.find(order => 
+          order.status === 'assigned' || order.status === 'on_way'
+        );
+        setActiveOrder(active);
+      }
     } catch (error) {
       console.error('Error loading orders:', error);
       Alert.alert('Ошибка', 'Не удалось загрузить заказы');
     }
   };
 
-  const configureBackgroundGeolocation = async () => {
-    BackgroundGeolocation.configure({
-      desiredAccuracy: BackgroundGeolocation.HIGH_ACCURACY,
-      stationaryRadius: 50,
-      distanceFilter: 50,
-      notificationTitle: 'Отслеживание местоположения',
-      notificationText: 'Включено',
-      startOnBoot: false,
-      stopOnTerminate: true,
-      locationProvider: BackgroundGeolocation.ACTIVITY_PROVIDER,
-      interval: 5000,
-      fastestInterval: 3000,
-      activitiesInterval: 10000,
-      stopOnStillActivity: false,
-    });
-
-    BackgroundGeolocation.on('location', (location) => {
-      sendLocationUpdate(location);
-    });
-
-    BackgroundGeolocation.on('error', (error) => {
-      console.error('[ERROR] BackgroundGeolocation error:', error);
-    });
-
-    BackgroundGeolocation.checkStatus((status) => {
-      setLocationEnabled(status.isRunning);
-    });
-  };
-
-  const toggleOnlineStatus = async () => {
-    const newStatus = !isOnline;
-    setIsOnline(newStatus);
-
-    if (newStatus) {
-      // Начинаем отслеживание
-      BackgroundGeolocation.start();
-      setLocationEnabled(true);
-      
-      // Обновляем статус на сервере
-      try {
-        await axios.post(`${API_URL}/courier/${courierId}/status`, {
-          status: 'online'
-        });
-      } catch (error) {
-        console.error('Error updating status:', error);
-      }
-    } else {
-      // Останавливаем отслеживание
-      BackgroundGeolocation.stop();
-      setLocationEnabled(false);
-      
-      // Обновляем статус на сервере
-      try {
-        await axios.post(`${API_URL}/courier/${courierId}/status`, {
-          status: 'offline'
-        });
-      } catch (error) {
-        console.error('Error updating status:', error);
-      }
-    }
-  };
-
-  const sendLocationUpdate = async (location) => {
-    if (!courierId || !activeOrder) return;
-
-    try {
-      await axios.post(`${API_URL}/courier/${courierId}/location`, {
-        orderId: activeOrder.id,
-        latitude: location.latitude,
-        longitude: location.longitude,
-        speed: location.speed,
-        heading: location.heading,
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      console.error('Error sending location:', error);
-    }
-  };
-
   const acceptOrder = async (order) => {
-    Alert.alert(
-      'Принять заказ',
-      `Вы хотите принять заказ №${order.id}?`,
-      [
-        { text: 'Отмена', style: 'cancel' },
+    try {
+      const response = await axios.post(
+        `${API_URL}/courier/accept-order`,
         {
-          text: 'Принять',
-          onPress: async () => {
-            try {
-              await axios.post(`${API_URL}/courier/${courierId}/accept`, {
-                orderId: order.id
-              });
-              
-              setActiveOrder(order);
-              setOrders(orders.filter(o => o.id !== order.id));
-              
-              // Переходим на экран активной доставки
-              navigation.navigate('CourierDelivery', { order });
-            } catch (error) {
-              Alert.alert('Ошибка', 'Не удалось принять заказ');
-            }
-          }
+          courier_id: courierId,
+          order_id: order.id,
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${authStore.token}`,
+            'Content-Type': 'application/json',
+          },
         }
-      ]
-    );
+      );
+
+      if (response.data.success) {
+        setActiveOrder(order);
+        navigation.navigate('CourierDelivery', { order });
+      } else {
+        Alert.alert('Ошибка', response.data.message || 'Не удалось принять заказ');
+      }
+    } catch (error) {
+      console.error('Error accepting order:', error);
+      Alert.alert('Ошибка', 'Не удалось принять заказ');
+    }
   };
 
-  const onRefresh = async () => {
+  const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
     await loadOrders(courierId);
     setRefreshing(false);
-  };
+  }, [courierId]);
 
   const renderOrderItem = ({ item }) => (
     <TouchableOpacity 
@@ -285,9 +326,7 @@ const CourierMainScreen = ({ navigation }) => {
             <View style={styles.emptyContainer}>
               <MaterialIcons name="inbox" size={64} color="#ccc" />
               <Text style={styles.emptyText}>Нет доступных заказов</Text>
-              <Text style={styles.emptySubtext}>
-                Потяните вниз для обновления
-              </Text>
+              <Text style={styles.emptySubtext}>Потяните вниз для обновления</Text>
             </View>
           }
         />
@@ -296,37 +335,29 @@ const CourierMainScreen = ({ navigation }) => {
           <MaterialIcons name="wifi-off" size={64} color="#ccc" />
           <Text style={styles.offlineText}>Вы не в сети</Text>
           <Text style={styles.offlineSubtext}>
-            Включите статус "В сети" для получения заказов
+            Включите статус "В сети", чтобы получать заказы
           </Text>
         </View>
       ) : null}
 
       {/* Bottom Navigation */}
-      <View style={[styles.bottomNav, { paddingBottom: insets.bottom }]}>
+      <View style={[styles.bottomNav, { paddingBottom: insets.bottom + 10 }]}>
         <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="home" size={24} color="#006363" />
-          <Text style={styles.navText}>Главная</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.navItem}
-          onPress={() => navigation.navigate('CourierEarnings')}
-        >
-          <Ionicons name="cash-outline" size={24} color="#666" />
-          <Text style={[styles.navText, { color: '#666' }]}>Заработок</Text>
+          <Ionicons name="list" size={24} color="#006363" />
+          <Text style={styles.navText}>Заказы</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
           style={styles.navItem}
           onPress={() => navigation.navigate('CourierProfile')}
         >
-          <Ionicons name="person-outline" size={24} color="#666" />
-          <Text style={[styles.navText, { color: '#666' }]}>Профиль</Text>
+          <Ionicons name="person" size={24} color="#006363" />
+          <Text style={styles.navText}>Профиль</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
