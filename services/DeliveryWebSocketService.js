@@ -1,6 +1,8 @@
 // services/DeliveryWebSocketService.js
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MMKV } from 'react-native-mmkv';
+
+const storage = new MMKV();
 
 class DeliveryWebSocketService {
   constructor() {
@@ -14,11 +16,16 @@ class DeliveryWebSocketService {
     this.token = null;
     this.userId = null;
     this.role = null;
+    this.pingInterval = null;
   }
 
-  async initialize(token) {
-    this.token = token;
-    this.connect();
+  async initialize() {
+    // Получаем токен из MMKV
+    const token = storage.getString('userToken');
+    if (token) {
+      this.token = token;
+      this.connect();
+    }
   }
 
   connect() {
@@ -27,7 +34,7 @@ class DeliveryWebSocketService {
     }
 
     try {
-      // Замените на ваш WebSocket URL
+      // WebSocket URL
       this.ws = new WebSocket('wss://api.koleso.app/ws');
       
       this.ws.onopen = () => {
@@ -40,6 +47,8 @@ class DeliveryWebSocketService {
           type: 'auth',
           token: this.token
         });
+
+        this.startPing();
       };
 
       this.ws.onmessage = (event) => {
@@ -58,6 +67,7 @@ class DeliveryWebSocketService {
       this.ws.onclose = () => {
         console.log('WebSocket disconnected');
         this.isConnected = false;
+        this.stopPing();
         this.reconnect();
       };
 
@@ -216,6 +226,7 @@ class DeliveryWebSocketService {
   stopPing() {
     if (this.pingInterval) {
       clearInterval(this.pingInterval);
+      this.pingInterval = null;
     }
   }
 
