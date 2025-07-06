@@ -43,6 +43,13 @@ import LoyaltyCardScreen from './screens/LoyaltyCardScreen';
 import PromotionsScreen from './screens/PromotionsScreen';
 import StoresMapScreen from './screens/StoresMapScreen';
 
+// курьерские экраны
+import CourierMainScreen from './screens/CourierMainScreen';
+import CourierDeliveryScreen from './screens/CourierDeliveryScreen';
+import CourierOrderDetailsScreen from './screens/CourierOrderDetailsScreen';
+import CourierProfileScreen from './screens/CourierProfileScreen';
+import DeliveryTrackingScreen from './screens/DeliveryTrackingScreen';
+
 // Админские экраны
 import ScanProductsScreen from './screens/AdminOrdersScreen';
 import AdminOrdersScreen from './screens/AdminOrdersScreen';
@@ -77,6 +84,23 @@ const HomeStack = () => {
     </Stack.Navigator>
   );
 };
+
+
+const CourierStack = createStackNavigator();
+
+function CourierNavigator() {
+  return (
+    <CourierStack.Navigator
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
+      <CourierStack.Screen name="CourierMain" component={CourierMainScreen} />
+      <CourierStack.Screen name="CourierDelivery" component={CourierDeliveryScreen} />
+      <CourierStack.Screen name="CourierOrderDetails" component={CourierOrderDetailsScreen} />
+    </CourierStack.Navigator>
+  );
+}
 
 const CatalogStack = () => {
   const { colors } = useTheme();

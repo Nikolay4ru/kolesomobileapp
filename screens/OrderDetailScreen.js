@@ -264,6 +264,17 @@ const OrderDetailScreen = observer(() => {
           </View>
         </View>
 
+        {order.delivery_status && 
+ ['assigned', 'on_way', 'near'].includes(order.delivery_status) && (
+  <TouchableOpacity
+    style={styles.trackDeliveryButton}
+    onPress={() => navigation.navigate('DeliveryTracking', { orderId: order.id })}
+  >
+    <MaterialIcons name="local-shipping" size={20} color="#fff" />
+    <Text style={styles.trackDeliveryText}>Отследить доставку</Text>
+  </TouchableOpacity>
+)}
+
         {/* Действия */}
         {order.status === 'Новый' && (
           <View style={styles.actionsSection}>
@@ -327,6 +338,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  trackDeliveryButton: {
+  backgroundColor: colors.primary,
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 15,
+  borderRadius: 12,
+  marginTop: 15,
+},
+trackDeliveryText: {
+  color: '#fff',
+  fontSize: 16,
+  fontWeight: '600',
+  marginLeft: 8,
+},
   headerTitle: {
     fontSize: 17,
     fontWeight: '600',
