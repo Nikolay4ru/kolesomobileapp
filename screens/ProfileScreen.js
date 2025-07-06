@@ -368,6 +368,57 @@ console.log(authStore);
           </View>
         )}
 
+
+        {/* Courier Section */}
+{authStore.user?.userType === 'courier' && (
+  <View style={styles.menuSection}>
+    <Text style={[styles.sectionTitle, styles.courierSectionTitle]}>
+      <Icon name="local-shipping" size={16} color="#006363" style={{ marginRight: 8 }} />
+      Курьерская служба
+    </Text>
+    <View style={[styles.menuCard, styles.courierMenuCard]}>
+      <MenuItem 
+        icon="list-alt" 
+        title="Доступные заказы" 
+        subtitle="Просмотр и принятие заказов"
+        onPress={() => navigation.navigate('CourierMain')}
+        isCourier
+      />
+      <MenuItem 
+        icon="delivery-dining" 
+        title="Активная доставка" 
+        subtitle="Текущий заказ"
+        onPress={() => {
+          // Проверяем есть ли активный заказ
+          if (authStore.courierProfile?.activeOrderId) {
+            navigation.navigate('CourierDelivery', { 
+              orderId: authStore.courierProfile.activeOrderId 
+            });
+          } else {
+            Alert.alert('Нет активной доставки', 'У вас нет активных заказов');
+          }
+        }}
+        isCourier
+      />
+      <MenuItem 
+        icon="bar-chart" 
+        title="Статистика" 
+        subtitle="Ваши показатели"
+        onPress={() => navigation.navigate('CourierProfile')}
+        isCourier
+      />
+      <MenuItem 
+        icon="schedule" 
+        title="История доставок" 
+        subtitle="Выполненные заказы"
+        onPress={() => navigation.navigate('Orders', { courierMode: true })}
+        isCourier
+        isLast
+      />
+    </View>
+  </View>
+)}
+
         <View style={styles.menuSection}>
           <Text style={styles.sectionTitle}>Общее</Text>
           <View style={styles.menuCard}>
