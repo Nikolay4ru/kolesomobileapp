@@ -40,7 +40,7 @@ const HomeScreen = () => {
   const [searchModalVisible, setSearchModalVisible] = useState(false);
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  authStore.debugNotificationState();
+  //authStore.debugNotificationState();
 
   const handleOpenSettings = () => {
     // Открыть настройки приложения (RN Linking)

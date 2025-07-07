@@ -47,17 +47,27 @@ const CourierMainScreen = observer(({ navigation }) => {
 
   const loadCourierData = async () => {
     try {
-      // Получаем ID курьера из MMKV
-      const courierProfile = authStore.courierProfile;
-      if (courierProfile && courierProfile.id) {
-        setCourierId(courierProfile.id);
-        await loadOrders(courierProfile.id);
+      // Получаем профиль курьера
+      const response = await axios.get(`${API_URL}/courier/profile`, {
+        headers: {
+          'Authorization': `Bearer ${authStore.token}`
+        }
+      });
+
+      if (response.data.success) {
+        const courierData = response.data.courier;
+        setCourierId(courierData.id);
+        setIsOnline(courierData.is_online);
+        authStore.saveCourierProfile(courierData);
+        
+        // Загружаем заказы
+        await loadOrders();
       } else {
-        // Если нет профиля курьера, отправляем на экран авторизации
         navigation.replace('Auth');
       }
     } catch (error) {
       console.error('Error loading courier data:', error);
+      navigation.replace('Auth');
     } finally {
       setLoading(false);
     }
@@ -65,61 +75,52 @@ const CourierMainScreen = observer(({ navigation }) => {
 
   const configureBackgroundGeolocation = async () => {
     try {
-      // Конфигурация для отслеживания местоположения в фоне
-      BackgroundGeolocation.configure({
-        desiredAccuracy: BackgroundGeolocation.HIGH_ACCURACY,
-        stationaryRadius: 50,
-        distanceFilter: 50,
-        notificationTitle: 'Koleso Доставка',
-        notificationText: 'Отслеживание местоположения активно',
-        debug: false,
+      await BackgroundGeolocation.configure({
+        desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
+        stationaryRadius: 25,
+        distanceFilter: 10,
+        notification: {
+          title: 'Koleso - Курьерская доставка',
+          text: 'Отслеживание местоположения включено'
+        },
+        enableHeadless: true,
         startOnBoot: false,
-        stopOnTerminate: true,
         locationProvider: BackgroundGeolocation.ACTIVITY_PROVIDER,
         interval: 10000,
         fastestInterval: 5000,
         activitiesInterval: 10000,
-        stopOnStillActivity: false,
+        stopOnTerminate: false,
+        startForeground: true,
       });
 
       BackgroundGeolocation.on('location', (location) => {
-        // Отправляем местоположение на сервер
-        updateCourierLocation(location);
+        updateLocationOnServer(location);
       });
 
-      BackgroundGeolocation.on('error', (error) => {
-        console.warn('[ERROR] BackgroundGeolocation error:', error);
-      });
-
-      BackgroundGeolocation.on('authorization', (status) => {
-        setLocationEnabled(status === BackgroundGeolocation.AUTHORIZED);
-      });
-
-      // Проверяем разрешения
-      const status = await BackgroundGeolocation.checkStatus();
-      setLocationEnabled(status.isRunning);
+      setLocationEnabled(true);
     } catch (error) {
-      console.error('Error configuring background geolocation:', error);
+      console.error('BackgroundGeolocation error:', error);
     }
   };
 
-  const updateCourierLocation = async (location) => {
-    if (!courierId || !isOnline) return;
-
+  const updateLocationOnServer = async (location) => {
     try {
+      const orderId = activeOrder?.id;
       await axios.post(
-        `${API_URL}/courier/update-location`,
+        `${API_URL}/courier/location`,
         {
-          courier_id: courierId,
           latitude: location.latitude,
           longitude: location.longitude,
-          timestamp: new Date().toISOString(),
+          speed: location.speed,
+          heading: location.heading,
+          accuracy: location.accuracy,
+          order_id: orderId
         },
         {
           headers: {
             'Authorization': `Bearer ${authStore.token}`,
             'Content-Type': 'application/json',
-          },
+          }
         }
       );
     } catch (error) {
@@ -131,9 +132,8 @@ const CourierMainScreen = observer(({ navigation }) => {
     setIsOnline(value);
     
     if (value) {
-      // Включаем отслеживание местоположения
+      // Включаем отслеживание
       BackgroundGeolocation.start();
-      // Сохраняем статус в MMKV
       storage.set('courier_online_status', true);
     } else {
       // Выключаем отслеживание
@@ -144,9 +144,8 @@ const CourierMainScreen = observer(({ navigation }) => {
     // Обновляем статус на сервере
     try {
       await axios.post(
-        `${API_URL}/courier/update-status`,
+        `${API_URL}/courier/status`,
         {
-          courier_id: courierId,
           is_online: value,
         },
         {
@@ -156,33 +155,45 @@ const CourierMainScreen = observer(({ navigation }) => {
           },
         }
       );
+      
+      // Обновляем профиль в store
+      authStore.updateCourierOnlineStatus(value);
     } catch (error) {
       console.error('Error updating online status:', error);
+      // Откатываем изменения
+      setIsOnline(!value);
+      BackgroundGeolocation.stop();
     }
   };
 
-  const loadOrders = async (id) => {
+  const loadOrders = async () => {
     try {
+      // Загружаем доступные заказы
       const response = await axios.get(
-        `${API_URL}/courier/available-orders`,
+        `${API_URL}/courier/orders`,
         {
           headers: {
             'Authorization': `Bearer ${authStore.token}`,
-          },
-          params: {
-            courier_id: id,
-          },
+          }
         }
       );
 
       if (response.data.success) {
         setOrders(response.data.orders || []);
-        
-        // Проверяем активный заказ
-        const active = response.data.orders.find(order => 
-          order.status === 'assigned' || order.status === 'on_way'
-        );
-        setActiveOrder(active);
+      }
+
+      // Загружаем активный заказ
+      const activeResponse = await axios.get(
+        `${API_URL}/courier/orders/active`,
+        {
+          headers: {
+            'Authorization': `Bearer ${authStore.token}`,
+          }
+        }
+      );
+
+      if (activeResponse.data.success && activeResponse.data.order) {
+        setActiveOrder(activeResponse.data.order);
       }
     } catch (error) {
       console.error('Error loading orders:', error);
@@ -193,11 +204,8 @@ const CourierMainScreen = observer(({ navigation }) => {
   const acceptOrder = async (order) => {
     try {
       const response = await axios.post(
-        `${API_URL}/courier/accept-order`,
-        {
-          courier_id: courierId,
-          order_id: order.id,
-        },
+        `${API_URL}/courier/order/${order.id}/accept`,
+        {},
         {
           headers: {
             'Authorization': `Bearer ${authStore.token}`,
@@ -218,46 +226,44 @@ const CourierMainScreen = observer(({ navigation }) => {
     }
   };
 
-  const onRefresh = React.useCallback(async () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    await loadOrders(courierId);
+    await loadOrders();
     setRefreshing(false);
-  }, [courierId]);
+  };
 
   const renderOrderItem = ({ item }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.orderCard}
       onPress={() => navigation.navigate('CourierOrderDetails', { order: item })}
     >
       <View style={styles.orderHeader}>
-        <Text style={styles.orderId}>Заказ №{item.id}</Text>
-        <Text style={styles.orderPrice}>{item.deliveryPrice} ₽</Text>
+        <Text style={styles.orderId}>Заказ №{item.order_number}</Text>
+        <Text style={styles.orderPrice}>{item.delivery_price} ₽</Text>
       </View>
       
       <View style={styles.orderInfo}>
         <View style={styles.infoRow}>
           <Ionicons name="location-outline" size={16} color="#666" />
-          <Text style={styles.infoText} numberOfLines={2}>
-            {item.address}
-          </Text>
-        </View>
-        
-        <View style={styles.infoRow}>
-          <Ionicons name="time-outline" size={16} color="#666" />
-          <Text style={styles.infoText}>
-            {item.estimatedTime} мин
-          </Text>
+          <Text style={styles.infoText}>{item.delivery_address}</Text>
         </View>
         
         <View style={styles.infoRow}>
           <MaterialIcons name="route" size={16} color="#666" />
           <Text style={styles.infoText}>
-            {item.distance} км
+            {item.distance} км • ~{item.estimated_time} мин
+          </Text>
+        </View>
+        
+        <View style={styles.infoRow}>
+          <Ionicons name="cash-outline" size={16} color="#666" />
+          <Text style={styles.infoText}>
+            {item.payment_method === 'cash' ? 'Наличные' : 'Безналичная оплата'}
           </Text>
         </View>
       </View>
-
-      <TouchableOpacity 
+      
+      <TouchableOpacity
         style={styles.acceptButton}
         onPress={() => acceptOrder(item)}
       >
@@ -278,8 +284,7 @@ const CourierMainScreen = observer(({ navigation }) => {
     <View style={styles.container}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <Text style={styles.headerTitle}>Доступные заказы</Text>
-        
+        <Text style={styles.headerTitle}>Курьерская доставка</Text>
         <View style={styles.onlineToggle}>
           <Text style={styles.onlineText}>
             {isOnline ? 'В сети' : 'Не в сети'}
@@ -287,58 +292,59 @@ const CourierMainScreen = observer(({ navigation }) => {
           <Switch
             value={isOnline}
             onValueChange={toggleOnlineStatus}
-            trackColor={{ false: '#ccc', true: '#4CAF50' }}
-            thumbColor={isOnline ? '#fff' : '#f4f3f4'}
+            trackColor={{ false: '#767577', true: '#81b0ff' }}
+            thumbColor={isOnline ? '#006363' : '#f4f3f4'}
           />
         </View>
       </View>
 
       {/* Active Order Banner */}
       {activeOrder && (
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.activeOrderBanner}
           onPress={() => navigation.navigate('CourierDelivery', { order: activeOrder })}
         >
-          <MaterialIcons name="local-shipping" size={24} color="#fff" />
+          <MaterialIcons name="delivery-dining" size={24} color="#fff" />
           <View style={styles.activeOrderInfo}>
             <Text style={styles.activeOrderText}>Активная доставка</Text>
-            <Text style={styles.activeOrderId}>Заказ №{activeOrder.id}</Text>
+            <Text style={styles.activeOrderId}>Заказ №{activeOrder.order_number}</Text>
           </View>
-          <Ionicons name="chevron-forward" size={24} color="#fff" />
+          <Ionicons name="chevron-forward" size={20} color="#fff" />
         </TouchableOpacity>
       )}
 
       {/* Orders List */}
-      {!activeOrder && isOnline ? (
-        <FlatList
-          data={orders}
-          renderItem={renderOrderItem}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={['#006363']}
-            />
-          }
-          ListEmptyComponent={
+      <FlatList
+        data={isOnline ? orders : []}
+        renderItem={renderOrderItem}
+        keyExtractor={(item) => item.id.toString()}
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+          />
+        }
+        ListEmptyComponent={
+          isOnline ? (
             <View style={styles.emptyContainer}>
               <MaterialIcons name="inbox" size={64} color="#ccc" />
               <Text style={styles.emptyText}>Нет доступных заказов</Text>
-              <Text style={styles.emptySubtext}>Потяните вниз для обновления</Text>
+              <Text style={styles.emptySubtext}>
+                Новые заказы появятся здесь
+              </Text>
             </View>
-          }
-        />
-      ) : !isOnline ? (
-        <View style={styles.offlineContainer}>
-          <MaterialIcons name="wifi-off" size={64} color="#ccc" />
-          <Text style={styles.offlineText}>Вы не в сети</Text>
-          <Text style={styles.offlineSubtext}>
-            Включите статус "В сети", чтобы получать заказы
-          </Text>
-        </View>
-      ) : null}
+          ) : (
+            <View style={styles.offlineContainer}>
+              <MaterialIcons name="wifi-off" size={64} color="#ccc" />
+              <Text style={styles.offlineText}>Вы не в сети</Text>
+              <Text style={styles.offlineSubtext}>
+                Включите статус "В сети", чтобы получать заказы
+              </Text>
+            </View>
+          )
+        }
+      />
 
       {/* Bottom Navigation */}
       <View style={[styles.bottomNav, { paddingBottom: insets.bottom + 10 }]}>

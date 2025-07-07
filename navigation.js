@@ -89,18 +89,22 @@ const HomeStack = () => {
 const CourierStack = createStackNavigator();
 
 function CourierNavigator() {
+  const { colors } = useTheme();
   return (
     <CourierStack.Navigator
       screenOptions={{
         headerShown: false,
+        cardStyle: { backgroundColor: colors.background },
       }}
     >
       <CourierStack.Screen name="CourierMain" component={CourierMainScreen} />
       <CourierStack.Screen name="CourierDelivery" component={CourierDeliveryScreen} />
       <CourierStack.Screen name="CourierOrderDetails" component={CourierOrderDetailsScreen} />
+      <CourierStack.Screen name="CourierProfile" component={CourierProfileScreen} />
     </CourierStack.Navigator>
   );
 }
+
 
 const CatalogStack = () => {
   const { colors } = useTheme();
@@ -155,6 +159,9 @@ const ProfileStack = () => {
       <Stack.Screen name="Settings" component={SettingsScreen} options={{ headerShown: false, animation: 'slide_from_right' }} />
       <Stack.Screen name="StoresMap" component={StoresMapScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Admin" component={AdminStack} options={{ headerShown: false }} />
+       {/* Добавляем DeliveryTracking для отслеживания курьерской доставки */}
+      <Stack.Screen name="DeliveryTracking" component={DeliveryTrackingScreen} options={{ headerShown: false }} />
+   
     </Stack.Navigator>
   );
 };
@@ -528,8 +535,12 @@ const NavigationContent = observer(() => {
       await authStore.loadAuthState();
       
       // Определяем начальный маршрут в зависимости от состояния авторизации
+      // Определяем начальный маршрут
       if (!authStore.isLoggedIn) {
         setInitialRoute('AuthStack');
+      } else if (authStore.courierProfile && authStore.isCourier) {
+        // Если это курьер, переходим на курьерский интерфейс
+        setInitialRoute('CourierStack');
       } else if (authStore.canAccessEmployeeDashboard && authStore.showEmployeeDashboard) {
         setInitialRoute('EmployeeDashboard');
       } else {
@@ -576,6 +587,8 @@ const NavigationContent = observer(() => {
         <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
         {/* Меняем EmployeeDashboard на свой Stack */}
         <Stack.Screen name="EmployeeDashboard" component={EmployeeDashboardStack} options={{ headerShown: false }} />
+         <Stack.Screen name="CourierStack" component={CourierNavigator} options={{ headerShown: false }} />
+        
         <Stack.Screen name="Booking" component={ServicePages} options={{ headerShown: false }} />
         <Stack.Screen name="FilterScreen" component={FilterScreen} options={{ presentation: 'modal', headerShown: false }} />
         <Stack.Screen name="FilterModalScreen" component={FilterModalScreen} options={{ presentation: 'modal', headerShown: false }} />

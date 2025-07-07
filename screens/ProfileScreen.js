@@ -19,6 +19,7 @@ const ProfileScreen = observer(() => {
   const { authStore } = useStores();
   const { colors, theme } = useTheme();
   const styles = useThemedStyles(themedStyles);
+
   
   const [adminMode, setAdminMode] = useState(false);
   const [biometryType, setBiometryType] = useState(null);
@@ -370,7 +371,7 @@ console.log(authStore);
 
 
         {/* Courier Section */}
-{authStore.user?.userType === 'courier' && (
+{authStore.isCourier && (
   <View style={styles.menuSection}>
     <Text style={[styles.sectionTitle, styles.courierSectionTitle]}>
       <Icon name="local-shipping" size={16} color="#006363" style={{ marginRight: 8 }} />

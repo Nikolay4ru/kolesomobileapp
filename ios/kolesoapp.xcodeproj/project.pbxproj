@@ -28,6 +28,7 @@
 		E4003A252DBA1B5700F5E22C /* google-services.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "google-services.json"; sourceTree = "<group>"; };
 		E47EFBAD2DD3501000BEB385 /* ClickstreamAnalytics */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = ClickstreamAnalytics; path = "ClickstreamAnalytics.xcframework/ios-arm64/ClickstreamAnalytics.framework/ClickstreamAnalytics"; sourceTree = "<group>"; };
 		E4F7B7EE2DBB961F0050E117 /* kolesoapp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = kolesoapp.entitlements; path = kolesoapp/kolesoapp.entitlements; sourceTree = "<group>"; };
+		E4F7C7662E1AE068003B1807 /* kolesoappRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = kolesoappRelease.entitlements; path = kolesoapp/kolesoappRelease.entitlements; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -46,6 +47,7 @@
 		13B07FAE1A68108700A75B9A /* kolesoapp */ = {
 			isa = PBXGroup;
 			children = (
+				E4F7C7662E1AE068003B1807 /* kolesoappRelease.entitlements */,
 				E4F7B7EE2DBB961F0050E117 /* kolesoapp.entitlements */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				761780EC2CA45674006654EE /* AppDelegate.swift */,
@@ -198,13 +200,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-kolesoapp/Pods-kolesoapp-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-kolesoapp/Pods-kolesoapp-resources-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -219,13 +217,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-kolesoapp/Pods-kolesoapp-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-kolesoapp/Pods-kolesoapp-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -319,7 +313,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = kolesoapp/kolesoapp.entitlements;
+				CODE_SIGN_ENTITLEMENTS = kolesoapp/kolesoappRelease.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 50;
@@ -432,7 +426,10 @@
 					"-DFOLLY_CFG_NO_COROUTINES=1",
 					"-DFOLLY_HAVE_CLOCK_GETTIME=1",
 				);
-				OTHER_LDFLAGS = "$(inherited)  ";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					" ",
+				);
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
@@ -513,7 +510,10 @@
 					"-DFOLLY_CFG_NO_COROUTINES=1",
 					"-DFOLLY_HAVE_CLOCK_GETTIME=1",
 				);
-				OTHER_LDFLAGS = "$(inherited)  ";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					" ",
+				);
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
 				USE_HERMES = true;

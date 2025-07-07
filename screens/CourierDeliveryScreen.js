@@ -19,15 +19,19 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Geolocation from '@react-native-community/geolocation';
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MMKV } from 'react-native-mmkv';
+import { observer } from 'mobx-react-lite';
+import { useStores } from '../useStores';
 
 const API_URL = 'https://api.koleso.app/api';
+const storage = new MMKV();
 
-const CourierDeliveryScreen = () => {
+const CourierDeliveryScreen = observer(() => {
   const navigation = useNavigation();
   const route = useRoute();
   const insets = useSafeAreaInsets();
   const { order } = route.params;
+  const { authStore } = useStores();
 
   // States
   const [currentLocation, setCurrentLocation] = useState(null);
@@ -96,12 +100,18 @@ const CourierDeliveryScreen = () => {
 
   const updateLocationOnServer = async (location) => {
     try {
-      const courierId = await AsyncStorage.getItem('courierId');
-      await axios.post(`${API_URL}/courier/${courierId}/location`, {
-        orderId: order.id,
+      await axios.post(`${API_URL}/courier/location`, {
+        order_id: order.id,
         latitude: location.latitude,
         longitude: location.longitude,
-        timestamp: new Date().toISOString()
+        speed: location.speed || null,
+        heading: location.heading || null,
+        accuracy: location.accuracy || null
+      }, {
+        headers: {
+          'Authorization': `Bearer ${authStore.token}`,
+          'Content-Type': 'application/json'
+        }
       });
     } catch (error) {
       console.error('Error updating location:', error);
@@ -111,11 +121,19 @@ const CourierDeliveryScreen = () => {
   const updateOrderStatus = async (newStatus) => {
     setLoading(true);
     try {
-      const courierId = await AsyncStorage.getItem('courierId');
-      await axios.post(`${API_URL}/courier/${courierId}/order/status`, {
-        orderId: order.id,
-        status: newStatus
-      });
+      const courierId = authStore.courierProfile?.id || storage.getString('courierId');
+      console.log(`Sending request to: ${API_URL}/courier/${courierId}/order/status`);
+       const response = await axios.post(
+        `${API_URL}/courier/order/${order.id}/status`, 
+        { status: newStatus }, // Теперь отправляем только статус
+        {
+          headers: {
+            'Authorization': `Bearer ${authStore.token}`
+          }
+        }
+      );
+      console.log(response);
+      console.log('order delivered');
       setOrderStatus(newStatus);
 
       if (newStatus === 'delivered') {
@@ -126,8 +144,12 @@ const CourierDeliveryScreen = () => {
         );
       }
     } catch (error) {
-      Alert.alert('Ошибка', 'Не удалось обновить статус заказа');
-    } finally {
+  console.error('Error updating order status:', error.response?.data || error.message);
+  Alert.alert(
+    'Ошибка', 
+    error.response?.data?.message || 'Не удалось обновить статус заказа'
+  );
+} finally {
       setLoading(false);
     }
   };
@@ -216,167 +238,107 @@ const CourierDeliveryScreen = () => {
       {/* Map */}
       <MapView
         ref={mapRef}
-        provider={PROVIDER_GOOGLE}
+        //provider={PROVIDER_GOOGLE}
         style={styles.map}
         initialRegion={mapRegion}
         showsUserLocation={true}
+        followsUserLocation={true}
       >
-        {/* Маркер текущей позиции курьера */}
-        {currentLocation && (
+        {order.destination && (
           <Marker
-            coordinate={currentLocation}
-            title="Ваша позиция"
+            coordinate={order.destination}
+            title="Адрес доставки"
           >
-            <View style={styles.courierMarker}>
-              <MaterialIcons name="delivery-dining" size={30} color="#006363" />
+            <View style={styles.destinationMarker}>
+              <Ionicons name="location" size={30} color="#FF5252" />
             </View>
           </Marker>
         )}
-
-        {/* Маркер места доставки */}
-        <Marker
-          coordinate={order.destination}
-          title="Адрес доставки"
-          description={order.address}
-        >
-          <View style={styles.destinationMarker}>
-            <Ionicons name="location" size={30} color="#FF5252" />
-          </View>
-        </Marker>
-
-        {/* Линия маршрута */}
-        {currentLocation && (
+        
+        {currentLocation && order.destination && (
           <Polyline
             coordinates={[currentLocation, order.destination]}
             strokeColor="#006363"
             strokeWidth={3}
-            lineDashPattern={[5, 5]}
           />
         )}
       </MapView>
 
-      {/* Info Card */}
-      <Animated.View
-        style={[
-          styles.infoCard,
-          {
-            transform: [{ translateY: slideAnim }],
-            paddingBottom: insets.bottom + 20
-          }
-        ]}
-      >
-        {/* Order Info */}
-        <View style={styles.orderInfo}>
-          <Text style={styles.orderNumber}>Заказ №{order.id}</Text>
-          <Text style={styles.orderAmount}>{order.totalAmount} ₽</Text>
-        </View>
-
-        {/* Customer Info */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Клиент</Text>
+      {/* Order Info Card */}
+      <Animated.View style={[styles.infoCard, { transform: [{ translateY: slideAnim }] }]}>
+        <View style={styles.orderSection}>
+          <Text style={styles.sectionTitle}>Информация о заказе</Text>
+          
           <View style={styles.customerInfo}>
             <Text style={styles.customerName}>{order.customerName}</Text>
             <TouchableOpacity
               style={styles.callButton}
               onPress={() => Linking.openURL(`tel:${order.customerPhone}`)}
             >
-              <Ionicons name="call" size={20} color="#006363" />
+              <Ionicons name="call" size={18} color="#006363" />
             </TouchableOpacity>
           </View>
-        </View>
 
-        {/* Delivery Address */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Адрес доставки</Text>
           <View style={styles.addressRow}>
             <Text style={styles.addressText}>{order.address}</Text>
             <TouchableOpacity
               style={styles.navigationButton}
               onPress={openNavigation}
             >
-              <MaterialIcons name="navigation" size={20} color="#006363" />
+              <MaterialIcons name="navigation" size={18} color="#006363" />
             </TouchableOpacity>
           </View>
-        </View>
 
-        {/* Order Details */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Детали заказа</Text>
-          <Text style={styles.detailText}>
-            Оплата: {order.paymentMethod === 'cash' ? 'Наличными' : 'Картой'}
-          </Text>
+          <Text style={styles.detailText}>Заказ: {order.totalAmount} ₽</Text>
+          <Text style={styles.detailText}>Доставка: {order.deliveryPrice} ₽</Text>
+          {order.paymentMethod && (
+            <Text style={styles.detailText}>Оплата: {order.paymentMethod}</Text>
+          )}
           {order.comment && (
             <Text style={styles.commentText}>Комментарий: {order.comment}</Text>
           )}
         </View>
 
-        {/* Status Button */}
         {getStatusButtons()}
       </Animated.View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#fff',
   },
   header: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
+    zIndex: 10,
     backgroundColor: '#006363',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 15,
-    paddingBottom: 15,
-    zIndex: 1000,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 3,
-      },
-      android: {
-        elevation: 8,
-      },
-    }),
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
+    paddingBottom: 10,
   },
   backButton: {
     padding: 5,
   },
+  headerTitle: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
   map: {
     flex: 1,
   },
-  courierMarker: {
-    backgroundColor: '#fff',
-    padding: 8,
-    borderRadius: 25,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3,
-      },
-      android: {
-        elevation: 5,
-      },
-    }),
-  },
   destinationMarker: {
     backgroundColor: '#fff',
-    padding: 5,
     borderRadius: 20,
+    padding: 5,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -398,7 +360,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
-    maxHeight: '60%',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -411,34 +372,20 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  orderInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  orderNumber: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  orderAmount: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#006363',
-  },
-  section: {
+  orderSection: {
     marginBottom: 20,
   },
   sectionTitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 15,
   },
   customerInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 10,
   },
   customerName: {
     fontSize: 16,
@@ -454,6 +401,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    marginBottom: 10,
   },
   addressText: {
     fontSize: 16,
@@ -475,6 +423,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     fontStyle: 'italic',
+    marginTop: 5,
   },
   statusButton: {
     flexDirection: 'row',

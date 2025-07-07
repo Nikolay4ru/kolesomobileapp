@@ -810,19 +810,20 @@ async setupNotificationPermissions() {
 
     try {
       const response = await this.api.get("/check_courier.php");
-      
+      console.log('check_courier');
+      console.log(response.data.courier);
       if (response.data.isCourier) {
         this.isCourier = true;
         this.courierProfile = {
-          id: response.data.id,
-          name: response.data.name,
-          phone: response.data.phone,
-          vehicleType: response.data.vehicleType,
-          vehicleModel: response.data.vehicleModel,
-          vehicleNumber: response.data.vehicleNumber,
-          rating: response.data.rating,
-          completedOrders: response.data.completedOrders,
-          isOnline: response.data.isOnline
+          id: response.data.courier.id,
+          name: response.data.courier.name,
+          phone: response.data.courier.phone,
+          vehicleType: response.data.courier.vehicleType,
+          vehicleModel: response.data.courier.vehicleModel,
+          vehicleNumber: response.data.courier.vehicleNumber,
+          rating: response.data.courier.rating,
+          completedOrders: response.data.courier.completedOrders,
+          isOnline: response.data.courier.isOnline
         };
       } else {
         this.isCourier = false;

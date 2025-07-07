@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   trackDeliveryButton: {
-  backgroundColor: colors.primary,
+  backgroundColor: '#FFFFFF',
   flexDirection: 'row',
   alignItems: 'center',
   justifyContent: 'center',
