@@ -36,7 +36,7 @@
     "react": "^19.0.0",
     "react-native": "^0.79.1",
     "react-native-advanced-input-mask": "^1.4.1",
-    "react-native-background-fetch": "^4.2.8",
+    "react-native-background-actions": "^4.0.1",
     "react-native-biometrics": "^3.0.1",
     "react-native-btr": "^2.2.1",
     "react-native-calendars": "^1.1312.1",

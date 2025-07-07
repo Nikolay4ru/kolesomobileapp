@@ -11,13 +11,14 @@ import {
   Platform,
   StatusBar,
   RefreshControl,
-  Switch
+  Switch,
+  AppState
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import Geolocation from '@react-native-community/geolocation';
-import BackgroundGeolocation from 'react-native-background-geolocation';
+import BackgroundActions from 'react-native-background-actions';
 import axios from 'axios';
 import { MMKV } from 'react-native-mmkv';
 import { observer } from 'mobx-react-lite';
@@ -25,6 +26,22 @@ import { useStores } from '../useStores';
 
 const API_URL = 'https://api.koleso.app/api';
 const storage = new MMKV();
+
+// Конфигурация для фонового сервиса
+const locationTaskOptions = {
+  taskName: 'Отслеживание местоположения',
+  taskTitle: 'Koleso Курьер',
+  taskDesc: 'Отслеживание местоположения включено',
+  taskIcon: {
+    name: 'ic_launcher',
+    type: 'mipmap',
+  },
+  color: '#006363',
+  linkingURI: 'koleso://courier',
+  parameters: {
+    delay: 10000, // 10 секунд
+  },
+};
 
 const CourierMainScreen = observer(({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -38,12 +55,34 @@ const CourierMainScreen = observer(({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [isOnline, setIsOnline] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
+  
+  // Refs
+  const appStateRef = useRef(AppState.currentState);
+  const locationWatchId = useRef(null);
 
   useEffect(() => {
     StatusBar.setBarStyle('light-content', true);
     loadCourierData();
-    configureBackgroundGeolocation();
+    setupLocationPermissions();
+    
+    // Слушаем изменения состояния приложения
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    
+    return () => {
+      subscription?.remove();
+      stopLocationTracking();
+    };
   }, []);
+
+  const handleAppStateChange = (nextAppState) => {
+    if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
+      // Приложение вернулось в активное состояние
+      if (isOnline) {
+        startLocationTracking();
+      }
+    }
+    appStateRef.current = nextAppState;
+  };
 
   const loadCourierData = async () => {
     try {
@@ -60,6 +99,11 @@ const CourierMainScreen = observer(({ navigation }) => {
         setIsOnline(courierData.is_online);
         authStore.saveCourierProfile(courierData);
         
+        // Если курьер онлайн, запускаем отслеживание
+        if (courierData.is_online) {
+          await startLocationTracking();
+        }
+        
         // Загружаем заказы
         await loadOrders();
       } else {
@@ -73,33 +117,103 @@ const CourierMainScreen = observer(({ navigation }) => {
     }
   };
 
-  const configureBackgroundGeolocation = async () => {
+  const setupLocationPermissions = async () => {
     try {
-      await BackgroundGeolocation.configure({
-        desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
-        stationaryRadius: 25,
-        distanceFilter: 10,
-        notification: {
-          title: 'Koleso - Курьерская доставка',
-          text: 'Отслеживание местоположения включено'
-        },
-        enableHeadless: true,
-        startOnBoot: false,
-        locationProvider: BackgroundGeolocation.ACTIVITY_PROVIDER,
-        interval: 10000,
-        fastestInterval: 5000,
-        activitiesInterval: 10000,
-        stopOnTerminate: false,
-        startForeground: true,
-      });
-
-      BackgroundGeolocation.on('location', (location) => {
-        updateLocationOnServer(location);
-      });
-
+      if (Platform.OS === 'ios') {
+        Geolocation.requestAuthorization('always');
+      }
       setLocationEnabled(true);
     } catch (error) {
-      console.error('BackgroundGeolocation error:', error);
+      console.error('Location permission error:', error);
+      Alert.alert(
+        'Разрешение на геолокацию',
+        'Для работы курьером необходимо разрешить доступ к местоположению',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
+  // Фоновая задача для отслеживания местоположения
+  const locationTask = async (taskDataArguments) => {
+    await new Promise(async (resolve) => {
+      const { delay } = taskDataArguments;
+      
+      const intervalId = setInterval(async () => {
+        if (BackgroundActions.isRunning()) {
+          Geolocation.getCurrentPosition(
+            async (position) => {
+              await updateLocationOnServer({
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                speed: position.coords.speed,
+                heading: position.coords.heading,
+                accuracy: position.coords.accuracy,
+              });
+            },
+            (error) => console.error('Background location error:', error),
+            { 
+              enableHighAccuracy: true, 
+              timeout: 20000, 
+              maximumAge: 0 
+            }
+          );
+        }
+      }, delay);
+      
+      // Сохраняем ID интервала для последующей очистки
+      storage.set('locationIntervalId', intervalId);
+    });
+  };
+
+  const startLocationTracking = async () => {
+    try {
+      // Запускаем отслеживание в foreground
+      locationWatchId.current = Geolocation.watchPosition(
+        async (position) => {
+          await updateLocationOnServer({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            speed: position.coords.speed,
+            heading: position.coords.heading,
+            accuracy: position.coords.accuracy,
+          });
+        },
+        (error) => console.error('Location error:', error),
+        { 
+          enableHighAccuracy: true,
+          distanceFilter: 50, // Обновление каждые 50 метров
+          interval: 10000, // Обновление каждые 10 секунд
+          fastestInterval: 5000
+        }
+      );
+
+      // Запускаем фоновую задачу
+      if (Platform.OS === 'android') {
+        await BackgroundActions.start(locationTask, locationTaskOptions);
+      }
+      
+      console.log('Location tracking started');
+    } catch (error) {
+      console.error('Error starting location tracking:', error);
+    }
+  };
+
+  const stopLocationTracking = async () => {
+    try {
+      // Останавливаем foreground отслеживание
+      if (locationWatchId.current !== null) {
+        Geolocation.clearWatch(locationWatchId.current);
+        locationWatchId.current = null;
+      }
+      
+      // Останавливаем фоновую задачу
+      if (Platform.OS === 'android' && BackgroundActions.isRunning()) {
+        await BackgroundActions.stop();
+      }
+      
+      console.log('Location tracking stopped');
+    } catch (error) {
+      console.error('Error stopping location tracking:', error);
     }
   };
 
@@ -133,11 +247,11 @@ const CourierMainScreen = observer(({ navigation }) => {
     
     if (value) {
       // Включаем отслеживание
-      BackgroundGeolocation.start();
+      await startLocationTracking();
       storage.set('courier_online_status', true);
     } else {
       // Выключаем отслеживание
-      BackgroundGeolocation.stop();
+      await stopLocationTracking();
       storage.set('courier_online_status', false);
     }
 
@@ -162,7 +276,7 @@ const CourierMainScreen = observer(({ navigation }) => {
       console.error('Error updating online status:', error);
       // Откатываем изменения
       setIsOnline(!value);
-      BackgroundGeolocation.stop();
+      await stopLocationTracking();
     }
   };
 

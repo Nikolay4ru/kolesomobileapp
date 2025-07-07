@@ -10,7 +10,6 @@ xmlns:tools="http://schemas.android.com/tools">
 <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 <uses-permission android:name="android.permission.VIBRATE" />
-<service android:name="com.mauron85.reactnativebackgroundgeolocation.BackgroundGeolocationService" />
     <application
       android:name=".MainApplication"
       android:label="@string/app_name"
