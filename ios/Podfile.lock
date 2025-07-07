@@ -1,6 +1,4 @@
 PODS:
-  - "@mauron85_react-native-background-geolocation (0.6.3)":
-    - React
   - appmetrica-react-native-analytics (3.3.0):
     - AppMetricaAnalytics (= 5.8.0)
     - DoubleConversion
@@ -1593,6 +1591,8 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
+  - react-native-background-actions (4.0.1):
+    - React-Core
   - react-native-biometrics (3.0.1):
     - React-Core
   - react-native-blur (4.4.1):
@@ -1667,6 +1667,8 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
+  - react-native-geolocation-service (5.3.1):
+    - React
   - react-native-image-picker (8.2.1):
     - DoubleConversion
     - glog
@@ -2194,8 +2196,6 @@ PODS:
     - React-logger (= 0.79.1)
     - React-perflogger (= 0.79.1)
     - React-utils (= 0.79.1)
-  - RNBackgroundFetch (4.2.8):
-    - React-Core
   - RNCClipboard (1.16.2):
     - DoubleConversion
     - glog
@@ -2638,7 +2638,6 @@ PODS:
   - Yoga (0.0.0)
 
 DEPENDENCIES:
-  - "@mauron85_react-native-background-geolocation (from `../node_modules/@mauron85/react-native-background-geolocation`)"
   - "appmetrica-react-native-analytics (from `../node_modules/@appmetrica/react-native-analytics`)"
   - boost (from `../node_modules/react-native/third-party-podspecs/boost.podspec`)
   - BVLinearGradient (from `../node_modules/react-native-linear-gradient`)
@@ -2685,10 +2684,12 @@ DEPENDENCIES:
   - React-Mapbuffer (from `../node_modules/react-native/ReactCommon`)
   - React-microtasksnativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
   - react-native-advanced-input-mask (from `../node_modules/react-native-advanced-input-mask`)
+  - react-native-background-actions (from `../node_modules/react-native-background-actions`)
   - react-native-biometrics (from `../node_modules/react-native-biometrics`)
   - "react-native-blur (from `../node_modules/@react-native-community/blur`)"
   - react-native-date-picker (from `../node_modules/react-native-date-picker`)
   - "react-native-geolocation (from `../node_modules/@react-native-community/geolocation`)"
+  - react-native-geolocation-service (from `../node_modules/react-native-geolocation-service`)
   - react-native-image-picker (from `../node_modules/react-native-image-picker`)
   - react-native-maps (from `../node_modules/react-native-maps`)
   - react-native-mmkv (from `../node_modules/react-native-mmkv`)
@@ -2728,7 +2729,6 @@ DEPENDENCIES:
   - ReactAppDependencyProvider (from `build/generated/ios`)
   - ReactCodegen (from `build/generated/ios`)
   - ReactCommon/turbomodule/core (from `../node_modules/react-native/ReactCommon`)
-  - RNBackgroundFetch (from `../node_modules/react-native-background-fetch`)
   - "RNCClipboard (from `../node_modules/@react-native-clipboard/clipboard`)"
   - "RNCMaskedView (from `../node_modules/@react-native-masked-view/masked-view`)"
   - "RNCPicker (from `../node_modules/@react-native-picker/picker`)"
@@ -2777,8 +2777,6 @@ SPEC REPOS:
     - SocketRocket
 
 EXTERNAL SOURCES:
-  "@mauron85_react-native-background-geolocation":
-    :path: "../node_modules/@mauron85/react-native-background-geolocation"
   appmetrica-react-native-analytics:
     :path: "../node_modules/@appmetrica/react-native-analytics"
   boost:
@@ -2868,6 +2866,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/microtasks"
   react-native-advanced-input-mask:
     :path: "../node_modules/react-native-advanced-input-mask"
+  react-native-background-actions:
+    :path: "../node_modules/react-native-background-actions"
   react-native-biometrics:
     :path: "../node_modules/react-native-biometrics"
   react-native-blur:
@@ -2876,6 +2876,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-date-picker"
   react-native-geolocation:
     :path: "../node_modules/@react-native-community/geolocation"
+  react-native-geolocation-service:
+    :path: "../node_modules/react-native-geolocation-service"
   react-native-image-picker:
     :path: "../node_modules/react-native-image-picker"
   react-native-maps:
@@ -2954,8 +2956,6 @@ EXTERNAL SOURCES:
     :path: build/generated/ios
   ReactCommon:
     :path: "../node_modules/react-native/ReactCommon"
-  RNBackgroundFetch:
-    :path: "../node_modules/react-native-background-fetch"
   RNCClipboard:
     :path: "../node_modules/@react-native-clipboard/clipboard"
   RNCMaskedView:
@@ -2990,7 +2990,6 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
-  "@mauron85_react-native-background-geolocation": 07b5d318dc7079c3b492d9dae1c5cc948545d85f
   appmetrica-react-native-analytics: 81d90837e1649cc800514667a926c5550a51b48b
   AppMetricaAdSupport: 493b39102f35b69a2db4c3656d776ab69890b1df
   AppMetricaAnalytics: f01c797b9a413bd1825bb32faa8cf1ad2ff2cca3
@@ -3058,10 +3057,12 @@ SPEC CHECKSUMS:
   React-Mapbuffer: 8df5296f9d9a61f980d293b55026cfebcd8dfb0a
   React-microtasksnativemodule: c8ed30f8ec30affbc73411c54207bd67b1125bbb
   react-native-advanced-input-mask: 593d42c9648dc25a5f902ceb4a893d7701dc7e7d
+  react-native-background-actions: 48e6bad9e2a47e3b04858634c5a05ea11062f680
   react-native-biometrics: 43ed5b828646a7862dbc7945556446be00798e7d
   react-native-blur: 06d0f9906ecd6cde3a42de16c6cd829a2bf0710c
   react-native-date-picker: e687e018f66da4734b3db3ddf3d323e930425d56
   react-native-geolocation: d43962eb0be1b0056ba5c1f95e94fb7907494268
+  react-native-geolocation-service: 32b2c2a3b91e70ce2a8d0c684801aaeb0a07e0ec
   react-native-image-picker: db0b3e3c7ae57680876318d4f42e7dbedd72244a
   react-native-maps: a48f905ccf2048f130c0a55996880d479299bc1c
   react-native-mmkv: fb6fdab2e83b892959e32586b7814078fe6c1a6a
@@ -3101,7 +3102,6 @@ SPEC CHECKSUMS:
   ReactAppDependencyProvider: 642d266e12ef5ea8cb22ca9576df1f4e036258a2
   ReactCodegen: 86758c0e13c6b245ff0cd7123cc5e8910d67546a
   ReactCommon: aa48e4fddbc6a0afa19dca39a1b6016c150b5db4
-  RNBackgroundFetch: e44c9e85d7fb3122c37d8a806278f62c7682d7ea
   RNCClipboard: 37de6995ef72dc869422879e51a46a520d3f08b3
   RNCMaskedView: ae521efb1c6c2b183ae0f8479487db03c826184c
   RNCPicker: e43c792aa6a990f94a252aa73556da2dfa9a5c05

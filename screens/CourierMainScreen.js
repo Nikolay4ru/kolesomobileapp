@@ -12,7 +12,8 @@ import {
   StatusBar,
   RefreshControl,
   Switch,
-  AppState
+  AppState,
+  PermissionsAndroid
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -120,16 +121,51 @@ const CourierMainScreen = observer(({ navigation }) => {
   const setupLocationPermissions = async () => {
     try {
       if (Platform.OS === 'ios') {
-        Geolocation.requestAuthorization('always');
+        Geolocation.requestAuthorization(
+          () => {
+            // Успешно получили разрешение
+            console.log('Location permission granted');
+            setLocationEnabled(true);
+          },
+          (error) => {
+            // Ошибка получения разрешения
+            console.error('Location permission denied:', error);
+            Alert.alert(
+              'Разрешение на геолокацию',
+              'Для работы курьером необходимо разрешить доступ к местоположению',
+              [{ text: 'OK' }]
+            );
+          }
+        );
+      } else {
+        // Для Android проверяем разрешения через PermissionsAndroid
+        const { PermissionsAndroid } = require('react-native');
+        
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: 'Разрешение на геолокацию',
+            message: 'Приложению необходим доступ к вашему местоположению для отслеживания доставки',
+            buttonNeutral: 'Позже',
+            buttonNegative: 'Отмена',
+            buttonPositive: 'OK',
+          }
+        );
+        
+        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+          console.log('Location permission granted');
+          setLocationEnabled(true);
+        } else {
+          console.log('Location permission denied');
+          Alert.alert(
+            'Разрешение на геолокацию',
+            'Для работы курьером необходимо разрешить доступ к местоположению',
+            [{ text: 'OK' }]
+          );
+        }
       }
-      setLocationEnabled(true);
     } catch (error) {
       console.error('Location permission error:', error);
-      Alert.alert(
-        'Разрешение на геолокацию',
-        'Для работы курьером необходимо разрешить доступ к местоположению',
-        [{ text: 'OK' }]
-      );
     }
   };
 

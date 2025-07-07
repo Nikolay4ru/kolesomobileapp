@@ -17,7 +17,7 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { observer } from 'mobx-react-lite';
 import { useStores } from '../useStores';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import YandexMapView from '../components/YandexMapView';
 import axios from 'axios';
 
 const API_URL = 'https://api.koleso.app/api';
@@ -33,8 +33,7 @@ const CourierOrderDetailsScreen = observer(() => {
   const [mapRegion, setMapRegion] = useState({
     latitude: order.destination?.latitude || 59.4370,
     longitude: order.destination?.longitude || 24.7536,
-    latitudeDelta: 0.01,
-    longitudeDelta: 0.01,
+    zoom: 14,
   });
 
   const acceptOrder = async () => {
@@ -49,18 +48,28 @@ const CourierOrderDetailsScreen = observer(() => {
             setLoading(true);
             try {
               const response = await axios.post(
-                `${API_URL}/courier/${authStore.courierProfile.id}/accept`,
-                { orderId: order.id },
+                `${API_URL}/courier/order/${order.id}/accept`,
+                {},
                 {
                   headers: {
-                    'Authorization': `Bearer ${authStore.token}`
+                    'Authorization': `Bearer ${authStore.token}`,
+                    'Content-Type': 'application/json'
                   }
                 }
               );
+
+              console.log('courier log');
+              console.log(response);
               
               if (response.data.success) {
-                Alert.alert('Успешно', 'Заказ принят!');
-                navigation.replace('CourierDelivery', { order: response.data.order });
+                Alert.alert('Успешно', 'Заказ принят!', [
+                  {
+                    text: 'OK',
+                    onPress: () => navigation.navigate('CourierDelivery', { order })
+                  }
+                ]);
+              } else {
+                Alert.alert('Ошибка', response.data.message || 'Не удалось принять заказ');
               }
             } catch (error) {
               Alert.alert('Ошибка', 'Не удалось принять заказ');
@@ -74,28 +83,48 @@ const CourierOrderDetailsScreen = observer(() => {
   };
 
   const openNavigation = () => {
-    const destination = order.destination;
+    const destination = order.destination || order.pickup;
     const url = Platform.select({
-      ios: `maps:0,0?q=${order.address}@${destination.latitude},${destination.longitude}`,
-      android: `geo:0,0?q=${destination.latitude},${destination.longitude}(${order.address})`
+      ios: `yandexnavi://route?lat_to=${destination.latitude}&lon_to=${destination.longitude}`,
+      android: `yandexnavi://route?lat_to=${destination.latitude}&lon_to=${destination.longitude}`
     });
     
-    Linking.openURL(url).catch(() => {
-      Alert.alert('Ошибка', 'Не удалось открыть навигацию');
+    Linking.canOpenURL(url).then(supported => {
+      if (supported) {
+        Linking.openURL(url);
+      } else {
+        // Fallback на веб-версию
+        const webUrl = `https://yandex.ru/maps/?rtext=~${destination.latitude},${destination.longitude}`;
+        Linking.openURL(webUrl);
+      }
     });
   };
 
-  const formatPaymentMethod = (method) => {
-    switch (method) {
-      case 'cash':
-        return 'Наличными';
-      case 'card':
-        return 'Картой курьеру';
-      case 'online':
-        return 'Оплачено онлайн';
-      default:
-        return method;
+  // Подготовка маркеров для карты
+  const getMarkers = () => {
+    const markers = [];
+    
+    if (order.pickup) {
+      markers.push({
+        id: 'pickup',
+        coordinate: order.pickup,
+        title: order.pickup.name || 'Магазин',
+        description: order.pickup.address,
+        pinColor: 'green'
+      });
     }
+    
+    if (order.destination) {
+      markers.push({
+        id: 'destination',
+        coordinate: order.destination,
+        title: 'Адрес доставки',
+        description: order.delivery_address,
+        pinColor: 'red'
+      });
+    }
+    
+    return markers;
   };
 
   return (
@@ -103,31 +132,22 @@ const CourierOrderDetailsScreen = observer(() => {
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
+          <Ionicons name="arrow-back" size={24} color="#006363" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Заказ №{order.id}</Text>
+        <Text style={styles.headerTitle}>Заказ №{order.order_number}</Text>
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Map Preview */}
         <View style={styles.mapContainer}>
-          <MapView
-            provider={PROVIDER_GOOGLE}
+          <YandexMapView
             style={styles.map}
             initialRegion={mapRegion}
+            markers={getMarkers()}
             scrollEnabled={false}
             zoomEnabled={false}
-          >
-            <Marker
-              coordinate={order.destination}
-              title="Адрес доставки"
-            >
-              <View style={styles.markerContainer}>
-                <Ionicons name="location" size={30} color="#FF5252" />
-              </View>
-            </Marker>
-          </MapView>
+          />
           
           <TouchableOpacity 
             style={styles.navigationButton}
@@ -142,13 +162,13 @@ const CourierOrderDetailsScreen = observer(() => {
         <View style={styles.section}>
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>Стоимость доставки:</Text>
-            <Text style={styles.priceValue}>{order.deliveryPrice} ₽</Text>
+            <Text style={styles.priceValue}>{order.delivery_price} ₽</Text>
           </View>
           
           <View style={styles.infoRow}>
             <Ionicons name="time-outline" size={20} color="#666" />
             <Text style={styles.infoText}>
-              Примерное время: {order.estimatedTime} мин
+              Примерное время: {order.estimated_time} мин
             </Text>
           </View>
           
@@ -160,10 +180,19 @@ const CourierOrderDetailsScreen = observer(() => {
           </View>
         </View>
 
+        {/* Pickup Point */}
+        {order.pickup && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Точка забора</Text>
+            <Text style={styles.addressText}>{order.pickup.name}</Text>
+            <Text style={styles.addressSubtext}>{order.pickup.address}</Text>
+          </View>
+        )}
+
         {/* Delivery Address */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Адрес доставки</Text>
-          <Text style={styles.addressText}>{order.address}</Text>
+          <Text style={styles.addressText}>{order.delivery_address}</Text>
         </View>
 
         {/* Customer Info */}
@@ -171,12 +200,12 @@ const CourierOrderDetailsScreen = observer(() => {
           <Text style={styles.sectionTitle}>Клиент</Text>
           <View style={styles.customerRow}>
             <View style={styles.customerInfo}>
-              <Text style={styles.customerName}>{order.customerName}</Text>
-              <Text style={styles.customerPhone}>{order.customerPhone}</Text>
+              <Text style={styles.customerName}>{order.customer_name}</Text>
+              <Text style={styles.customerPhone}>{order.customer_phone}</Text>
             </View>
             <TouchableOpacity
               style={styles.callButton}
-              onPress={() => Linking.openURL(`tel:${order.customerPhone}`)}
+              onPress={() => Linking.openURL(`tel:${order.customer_phone}`)}
             >
               <Ionicons name="call" size={20} color="#006363" />
             </TouchableOpacity>
@@ -188,19 +217,19 @@ const CourierOrderDetailsScreen = observer(() => {
           <Text style={styles.sectionTitle}>Детали заказа</Text>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Сумма заказа:</Text>
-            <Text style={styles.detailValue}>{order.totalAmount} ₽</Text>
+            <Text style={styles.detailValue}>{order.total_amount} ₽</Text>
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Оплата:</Text>
             <Text style={styles.detailValue}>
-              {formatPaymentMethod(order.paymentMethod)}
+              {order.payment_method === 'cash' ? 'Наличные' : 'Оплачено картой'}
             </Text>
           </View>
-          {order.paymentMethod === 'cash' && (
+          {order.payment_method === 'cash' && (
             <View style={[styles.detailRow, styles.warningRow]}>
-              <Ionicons name="alert-circle" size={20} color="#FF9800" />
+              <Ionicons name="warning-outline" size={20} color="#FF9800" />
               <Text style={styles.warningText}>
-                Необходимо получить {order.totalAmount} ₽ наличными
+                Получите оплату наличными: {order.total_amount} ₽
               </Text>
             </View>
           )}
@@ -215,19 +244,21 @@ const CourierOrderDetailsScreen = observer(() => {
         )}
 
         {/* Items */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Товары в заказе</Text>
-          {order.items?.map((item, index) => (
-            <View key={index} style={styles.itemRow}>
-              <Text style={styles.itemName}>{item.name}</Text>
-              <Text style={styles.itemQuantity}>x{item.quantity}</Text>
-            </View>
-          ))}
-        </View>
+        {order.items && order.items.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Товары ({order.items.length})</Text>
+            {order.items.map((item, index) => (
+              <View key={item.id || index} style={styles.itemRow}>
+                <Text style={styles.itemName}>{item.name}</Text>
+                <Text style={styles.itemQuantity}>×{item.quantity}</Text>
+              </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
 
-      {/* Accept Button */}
-      <View style={[styles.bottomContainer, { paddingBottom: insets.bottom + 20 }]}>
+      {/* Bottom Action */}
+      <View style={[styles.bottomContainer, { paddingBottom: insets.bottom + 10 }]}>
         <TouchableOpacity
           style={[styles.acceptButton, loading && styles.disabledButton]}
           onPress={acceptOrder}
@@ -237,7 +268,7 @@ const CourierOrderDetailsScreen = observer(() => {
             <ActivityIndicator size="small" color="#fff" />
           ) : (
             <>
-              <MaterialIcons name="check-circle" size={24} color="#fff" />
+              <Ionicons name="checkmark-circle" size={20} color="#fff" />
               <Text style={styles.acceptButtonText}>Принять заказ</Text>
             </>
           )}
@@ -253,22 +284,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
   header: {
-    backgroundColor: '#006363',
+    backgroundColor: '#fff',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 15,
-    paddingBottom: 15,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
   backButton: {
     padding: 5,
   },
-  content: {
+  headerTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+  },
+  scrollView: {
     flex: 1,
   },
   mapContainer: {
@@ -278,32 +312,16 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
-  markerContainer: {
-    backgroundColor: '#fff',
-    padding: 5,
-    borderRadius: 20,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3,
-      },
-      android: {
-        elevation: 5,
-      },
-    }),
-  },
   navigationButton: {
     position: 'absolute',
-    bottom: 10,
-    right: 10,
+    bottom: 15,
+    right: 15,
     backgroundColor: '#006363',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 15,
     paddingVertical: 10,
-    borderRadius: 25,
+    borderRadius: 20,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -362,6 +380,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
     lineHeight: 22,
+  },
+  addressSubtext: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
   },
   customerRow: {
     flexDirection: 'row',

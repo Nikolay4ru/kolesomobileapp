@@ -12,7 +12,7 @@ import {
   Animated,
   ActivityIndicator,
 } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import YandexMapView from '../components/YandexMapView';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -38,8 +38,8 @@ const CourierDeliveryScreen = observer(() => {
   const [orderStatus, setOrderStatus] = useState(order.status || 'assigned');
   const [loading, setLoading] = useState(false);
   const [mapRegion, setMapRegion] = useState({
-    latitude: 59.4370,
-    longitude: 24.7536,
+    latitude: 60.07934823,
+    longitude: 30.33669985,
     latitudeDelta: 0.0922,
     longitudeDelta: 0.0421,
   });
@@ -122,8 +122,7 @@ const CourierDeliveryScreen = observer(() => {
     setLoading(true);
     try {
       const courierId = authStore.courierProfile?.id || storage.getString('courierId');
-      console.log(`Sending request to: ${API_URL}/courier/${courierId}/order/status`);
-       const response = await axios.post(
+      const response = await axios.post(
         `${API_URL}/courier/order/${order.id}/status`, 
         { status: newStatus }, // Теперь отправляем только статус
         {
@@ -132,8 +131,7 @@ const CourierDeliveryScreen = observer(() => {
           }
         }
       );
-      console.log(response);
-      console.log('order delivered');
+      
       setOrderStatus(newStatus);
 
       if (newStatus === 'delivered') {
@@ -144,12 +142,8 @@ const CourierDeliveryScreen = observer(() => {
         );
       }
     } catch (error) {
-  console.error('Error updating order status:', error.response?.data || error.message);
-  Alert.alert(
-    'Ошибка', 
-    error.response?.data?.message || 'Не удалось обновить статус заказа'
-  );
-} finally {
+      Alert.alert('Ошибка', 'Не удалось обновить статус заказа');
+    } finally {
       setLoading(false);
     }
   };
@@ -236,33 +230,24 @@ const CourierDeliveryScreen = observer(() => {
       </View>
 
       {/* Map */}
-      <MapView
+      <YandexMapView
         ref={mapRef}
-        //provider={PROVIDER_GOOGLE}
         style={styles.map}
         initialRegion={mapRegion}
         showsUserLocation={true}
         followsUserLocation={true}
-      >
-        {order.destination && (
-          <Marker
-            coordinate={order.destination}
-            title="Адрес доставки"
-          >
-            <View style={styles.destinationMarker}>
-              <Ionicons name="location" size={30} color="#FF5252" />
-            </View>
-          </Marker>
-        )}
-        
-        {currentLocation && order.destination && (
-          <Polyline
-            coordinates={[currentLocation, order.destination]}
-            strokeColor="#006363"
-            strokeWidth={3}
-          />
-        )}
-      </MapView>
+        markers={order.destination ? [{
+          coordinate: order.destination,
+          title: "Адрес доставки",
+          pinColor: "red",
+          id: "destination"
+        }] : []}
+        polylines={currentLocation && order.destination ? [{
+          coordinates: [currentLocation, order.destination],
+          strokeColor: "#006363",
+          strokeWidth: 3
+        }] : []}
+      />
 
       {/* Order Info Card */}
       <Animated.View style={[styles.infoCard, { transform: [{ translateY: slideAnim }] }]}>

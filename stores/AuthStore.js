@@ -689,10 +689,13 @@ async setupNotificationPermissions() {
         this.isLoggedIn = true;
 
         // Загружаем данные курьера если есть
-        if (courierJson) {
-          this.courierProfile = JSON.parse(courierJson);
-          this.isCourier = true;
-        }
+        //if (courierJson) {
+        //  this.courierProfile = JSON.parse(courierJson);
+        //  this.isCourier = true;
+       // }
+        // Загружаем курьерский профиль если есть
+        await this.loadCourierProfile();
+
         
         if (notificationPermission !== undefined) {
           this._hasNotificationPermission = Boolean(notificationPermission);
@@ -836,26 +839,47 @@ async setupNotificationPermissions() {
     }
   }
 
-  // Новый метод для обновления статуса курьера (онлайн/офлайн)
-  async updateCourierOnlineStatus(isOnline: boolean) {
-    if (!this.isCourier || !this.courierProfile) return;
-
+// Метод для обновления статуса онлайн курьера
+updateCourierOnlineStatus = async (isOnline) => {
     try {
-      const response = await this.api.post("/courier/status", {
-        status: isOnline ? 'online' : 'offline'
-      });
-
+      const response = await axios.post(
+        `${API_URL}/courier/${this.courierProfile.id}/status`,
+        { isOnline },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.token}`
+          }
+        }
+      );
+      
       if (response.data.success) {
         this.courierProfile.isOnline = isOnline;
-        this.persistAuthState();
+        this.saveCourierProfile(this.courierProfile);
       }
-
-      return response.data;
     } catch (error) {
-      console.error("Failed to update courier status:", error);
+      console.error('Error updating courier status:', error);
       throw error;
     }
-  }
+  };
+
+   // Метод для загрузки курьерского профиля
+  loadCourierProfile = async () => {
+    try {
+      const courierData = storage.getString('courierProfile');
+      if (courierData) {
+        this.courierProfile = JSON.parse(courierData);
+        this.isCourier = true;
+      }
+    } catch (error) {
+      console.error('Error loading courier profile:', error);
+    }
+  };
+
+  saveCourierProfile = (profile) => {
+    this.courierProfile = profile;
+    this.isCourier = true;
+    storage.set('courierProfile', JSON.stringify(profile));
+  };
 
   // Альтернативный метод login для обратной совместимости
   async login(phone: string, code: string) {
