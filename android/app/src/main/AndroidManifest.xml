@@ -13,6 +13,9 @@
     <uses-permission android:name="android.permission.VIBRATE" />
 <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.WAKE_LOCK" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
     <application
         android:name=".MainApplication"
@@ -23,7 +26,6 @@
         android:forceDarkAllowed="false"
         android:theme="@style/AppTheme"
         android:supportsRtl="true">
-
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"
@@ -40,7 +42,7 @@
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize"
             android:exported="true">
-
+            
             <!-- Основной intent-filter для лаунчера -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -58,6 +60,7 @@
                 <data android:scheme="https" android:host="koleso.app" android:pathPrefix="/open/" />
             </intent-filter>
         </activity>
-
+        
     </application>
+   
 </manifest>

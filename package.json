@@ -7,7 +7,9 @@
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
-    "test": "jest"
+    "test": "jest",
+    "postinstall": "patch-package",
+    "postinstall": "npx jetify"
   },
   "dependencies": {
     "@appmetrica/react-native-analytics": "^3.3.0",
@@ -36,7 +38,6 @@
     "react": "^19.0.0",
     "react-native": "^0.79.1",
     "react-native-advanced-input-mask": "^1.4.1",
-    "react-native-background-actions": "^4.0.1",
     "react-native-biometrics": "^3.0.1",
     "react-native-btr": "^2.2.1",
     "react-native-calendars": "^1.1312.1",
@@ -44,11 +45,11 @@
     "react-native-device-info": "^14.0.4",
     "react-native-file-viewer": "^2.1.5",
     "react-native-fs": "^2.20.0",
-    "react-native-geolocation-service": "^5.3.1",
     "react-native-gesture-handler": "^2.26.0",
     "react-native-image-picker": "^8.2.1",
     "react-native-keychain": "^10.0.0",
     "react-native-linear-gradient": "^2.8.3",
+    "react-native-location": "^2.5.0",
     "react-native-maps": "^1.24.3",
     "react-native-mmkv": "^3.3.0",
     "react-native-modal": "^14.0.0-rc.1",
@@ -86,6 +87,8 @@
     "eslint": "^8.19.0",
     "gh-pages": "^6.3.0",
     "jest": "^29.6.3",
+    "jetifier": "^2.0.0",
+    "patch-package": "^8.0.0",
     "prettier": "2.8.8",
     "react-test-renderer": "19.0.0",
     "typescript": "5.0.4"

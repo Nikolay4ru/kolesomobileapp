@@ -18,8 +18,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import Geolocation from '@react-native-community/geolocation';
-import BackgroundActions from 'react-native-background-actions';
+import RNLocation from 'react-native-location';
 import axios from 'axios';
 import { MMKV } from 'react-native-mmkv';
 import { observer } from 'mobx-react-lite';
@@ -27,22 +26,6 @@ import { useStores } from '../useStores';
 
 const API_URL = 'https://api.koleso.app/api';
 const storage = new MMKV();
-
-// Конфигурация для фонового сервиса
-const locationTaskOptions = {
-  taskName: 'Отслеживание местоположения',
-  taskTitle: 'Koleso Курьер',
-  taskDesc: 'Отслеживание местоположения включено',
-  taskIcon: {
-    name: 'ic_launcher',
-    type: 'mipmap',
-  },
-  color: '#006363',
-  linkingURI: 'koleso://courier',
-  parameters: {
-    delay: 10000, // 10 секунд
-  },
-};
 
 const CourierMainScreen = observer(({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -59,12 +42,12 @@ const CourierMainScreen = observer(({ navigation }) => {
   
   // Refs
   const appStateRef = useRef(AppState.currentState);
-  const locationWatchId = useRef(null);
+  const locationSubscription = useRef(null);
 
   useEffect(() => {
     StatusBar.setBarStyle('light-content', true);
     loadCourierData();
-    setupLocationPermissions();
+    configureLocation();
     
     // Слушаем изменения состояния приложения
     const subscription = AppState.addEventListener('change', handleAppStateChange);
@@ -76,12 +59,6 @@ const CourierMainScreen = observer(({ navigation }) => {
   }, []);
 
   const handleAppStateChange = (nextAppState) => {
-    if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
-      // Приложение вернулось в активное состояние
-      if (isOnline) {
-        startLocationTracking();
-      }
-    }
     appStateRef.current = nextAppState;
   };
 
@@ -118,30 +95,45 @@ const CourierMainScreen = observer(({ navigation }) => {
     }
   };
 
-  const setupLocationPermissions = async () => {
+  const configureLocation = async () => {
+    // Настройка RNLocation
+    RNLocation.configure({
+      distanceFilter: 30, // Обновление каждые 30 метров
+      desiredAccuracy: {
+        ios: "best",
+        android: "highAccuracy"
+      },
+      androidProvider: "auto",
+      interval: 10000, // Обновление каждые 10 секунд
+      fastestInterval: 5000, // Но не чаще чем раз в 5 секунд
+      maxWaitTime: 10000,
+      allowsBackgroundLocationUpdates: true,
+      showsBackgroundLocationIndicator: true,
+      notificationTitle: "Koleso Курьер",
+      notificationText: "Отслеживание местоположения включено",
+      notificationColor: "#006363",
+      notificationIconColor: "#FFFFFF",
+      notificationIconLarge: "ic_launcher",
+      notificationIconSmall: "ic_notification"
+    });
+
+    await requestLocationPermission();
+  };
+
+  const requestLocationPermission = async () => {
     try {
+      let permission = false;
+
       if (Platform.OS === 'ios') {
-        Geolocation.requestAuthorization(
-          () => {
-            // Успешно получили разрешение
-            console.log('Location permission granted');
-            setLocationEnabled(true);
-          },
-          (error) => {
-            // Ошибка получения разрешения
-            console.error('Location permission denied:', error);
-            Alert.alert(
-              'Разрешение на геолокацию',
-              'Для работы курьером необходимо разрешить доступ к местоположению',
-              [{ text: 'OK' }]
-            );
+        permission = await RNLocation.requestPermission({
+          ios: 'always',
+          android: {
+            detail: 'fine'
           }
-        );
+        });
       } else {
-        // Для Android проверяем разрешения через PermissionsAndroid
-        const { PermissionsAndroid } = require('react-native');
-        
-        const granted = await PermissionsAndroid.request(
+        // Для Android запрашиваем разрешения поэтапно
+        const fineLocationGranted = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
           {
             title: 'Разрешение на геолокацию',
@@ -151,102 +143,83 @@ const CourierMainScreen = observer(({ navigation }) => {
             buttonPositive: 'OK',
           }
         );
-        
-        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-          console.log('Location permission granted');
-          setLocationEnabled(true);
-        } else {
-          console.log('Location permission denied');
-          Alert.alert(
-            'Разрешение на геолокацию',
-            'Для работы курьером необходимо разрешить доступ к местоположению',
-            [{ text: 'OK' }]
-          );
+
+        if (fineLocationGranted === PermissionsAndroid.RESULTS.GRANTED) {
+          // Для Android 10+ запрашиваем фоновую геолокацию
+          if (Platform.Version >= 29) {
+            const backgroundGranted = await PermissionsAndroid.request(
+              PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION,
+              {
+                title: 'Фоновая геолокация',
+                message: 'Приложению нужен доступ к местоположению в фоновом режиме для корректной работы доставки',
+                buttonNeutral: 'Позже',
+                buttonNegative: 'Отмена',
+                buttonPositive: 'OK',
+              }
+            );
+            permission = backgroundGranted === PermissionsAndroid.RESULTS.GRANTED;
+          } else {
+            permission = true;
+          }
         }
+      }
+
+      setLocationEnabled(permission);
+      
+      if (!permission) {
+        Alert.alert(
+          'Требуется разрешение',
+          'Для работы курьером необходимо разрешить доступ к геолокации',
+          [{ text: 'OK' }]
+        );
       }
     } catch (error) {
       console.error('Location permission error:', error);
     }
   };
 
-  // Фоновая задача для отслеживания местоположения
-  const locationTask = async (taskDataArguments) => {
-    await new Promise(async (resolve) => {
-      const { delay } = taskDataArguments;
-      
-      const intervalId = setInterval(async () => {
-        if (BackgroundActions.isRunning()) {
-          Geolocation.getCurrentPosition(
-            async (position) => {
-              await updateLocationOnServer({
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-                speed: position.coords.speed,
-                heading: position.coords.heading,
-                accuracy: position.coords.accuracy,
-              });
-            },
-            (error) => console.error('Background location error:', error),
-            { 
-              enableHighAccuracy: true, 
-              timeout: 20000, 
-              maximumAge: 0 
-            }
-          );
-        }
-      }, delay);
-      
-      // Сохраняем ID интервала для последующей очистки
-      storage.set('locationIntervalId', intervalId);
-    });
-  };
-
   const startLocationTracking = async () => {
     try {
-      // Запускаем отслеживание в foreground
-      locationWatchId.current = Geolocation.watchPosition(
-        async (position) => {
-          await updateLocationOnServer({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            speed: position.coords.speed,
-            heading: position.coords.heading,
-            accuracy: position.coords.accuracy,
-          });
-        },
-        (error) => console.error('Location error:', error),
-        { 
-          enableHighAccuracy: true,
-          distanceFilter: 50, // Обновление каждые 50 метров
-          interval: 10000, // Обновление каждые 10 секунд
-          fastestInterval: 5000
+      // Проверяем разрешения
+      const hasPermission = await RNLocation.checkPermission({
+        ios: 'always',
+        android: { detail: 'fine' }
+      });
+
+      if (!hasPermission) {
+        await requestLocationPermission();
+        return;
+      }
+
+      // Запускаем отслеживание
+      locationSubscription.current = RNLocation.subscribeToLocationUpdates(
+        async (locations) => {
+          if (locations && locations.length > 0) {
+            const location = locations[0];
+            await updateLocationOnServer({
+              latitude: location.latitude,
+              longitude: location.longitude,
+              speed: location.speed || 0,
+              heading: location.course || 0,
+              accuracy: location.accuracy || 0,
+            });
+          }
         }
       );
-
-      // Запускаем фоновую задачу
-      if (Platform.OS === 'android') {
-        await BackgroundActions.start(locationTask, locationTaskOptions);
-      }
       
-      console.log('Location tracking started');
+      console.log('Location tracking started with react-native-location');
     } catch (error) {
       console.error('Error starting location tracking:', error);
+      Alert.alert('Ошибка', 'Не удалось запустить отслеживание местоположения');
     }
   };
 
   const stopLocationTracking = async () => {
     try {
-      // Останавливаем foreground отслеживание
-      if (locationWatchId.current !== null) {
-        Geolocation.clearWatch(locationWatchId.current);
-        locationWatchId.current = null;
+      if (locationSubscription.current) {
+        locationSubscription.current();
+        locationSubscription.current = null;
       }
-      
-      // Останавливаем фоновую задачу
-      if (Platform.OS === 'android' && BackgroundActions.isRunning()) {
-        await BackgroundActions.stop();
-      }
-      
       console.log('Location tracking stopped');
     } catch (error) {
       console.error('Error stopping location tracking:', error);
@@ -448,6 +421,19 @@ const CourierMainScreen = observer(({ navigation }) => {
         </View>
       </View>
 
+      {/* Location Permission Warning */}
+      {!locationEnabled && (
+        <TouchableOpacity
+          style={styles.permissionBanner}
+          onPress={requestLocationPermission}
+        >
+          <MaterialIcons name="location-off" size={20} color="#FF9800" />
+          <Text style={styles.permissionText}>
+            Нажмите для включения геолокации
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {/* Active Order Banner */}
       {activeOrder && (
         <TouchableOpacity
@@ -546,6 +532,22 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginRight: 10,
     fontSize: 14,
+  },
+  permissionBanner: {
+    backgroundColor: '#FFF3E0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    marginHorizontal: 15,
+    marginTop: 10,
+    borderRadius: 8,
+  },
+  permissionText: {
+    color: '#E65100',
+    fontSize: 14,
+    marginLeft: 8,
+    fontWeight: '500',
   },
   activeOrderBanner: {
     backgroundColor: '#4CAF50',

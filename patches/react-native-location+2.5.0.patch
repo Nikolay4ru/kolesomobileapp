@@ -1,0 +1,15 @@
+diff --git a/node_modules/react-native-location/android/src/main/java/com/github/reactnativecommunity/location/RNPlayServicesLocationProvider.java b/node_modules/react-native-location/android/src/main/java/com/github/reactnativecommunity/location/RNPlayServicesLocationProvider.java
+index 6dbdd3b..8422808 100644
+--- a/node_modules/react-native-location/android/src/main/java/com/github/reactnativecommunity/location/RNPlayServicesLocationProvider.java
++++ b/node_modules/react-native-location/android/src/main/java/com/github/reactnativecommunity/location/RNPlayServicesLocationProvider.java
+@@ -7,8 +7,8 @@ import android.content.IntentSender;
+ import android.content.pm.PackageManager;
+ import android.location.Location;
+ import android.support.annotation.NonNull;
+-import android.support.v4.app.ActivityCompat;
+-
++//import android.support.v4.app.ActivityCompat;
++import androidx.core.app.ActivityCompat;
+ import com.facebook.react.bridge.Arguments;
+ import com.facebook.react.bridge.Promise;
+ import com.facebook.react.bridge.ReactApplicationContext;

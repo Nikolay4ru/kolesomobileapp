@@ -22,12 +22,12 @@
 <string>????</string>
 <key>CFBundleURLTypes</key>
 <array>
-<dict>
+
 <key>CFBundleURLSchemes</key>
 <array>
 <string>koleso.app</string>
 </array>
-</dict>
+
 </array>
 <key>CFBundleVersion</key>
 <string>$(CURRENT_PROJECT_VERSION)</string>
@@ -69,7 +69,9 @@
 <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 <string>Приложение использует геолокацию для отслеживания доставки</string>
 <key>NSLocationWhenInUseUsageDescription</key>
-<string>Приложение использует геолокацию для показа ближайших заказов</string>
+<string>Приложение использует ваше местоположение для отслеживания доставки в фоновом режиме</string>
+<key>NSLocationAlwaysUsageDescription</key>
+<string>Приложение использует ваше местоположение для отслеживания доставки в фоновом режиме</string>
 <key>NSMotionUsageDescription</key>
 <string>Приложение может использовать данные движения для улучшения пользовательского опыта</string>
 <key>NSPhotoLibraryUsageDescription</key>
