@@ -9,7 +9,8 @@ import {
   Keyboard, 
   Animated,
   StatusBar,
-  InteractionManager
+  InteractionManager,
+  SafeAreaView
 } from "react-native";
 import { Button, Text } from "react-native-paper";
 import { observer } from "mobx-react-lite";
@@ -21,23 +22,29 @@ import CustomHeader from "../components/CustomHeader";
 
 const RESEND_TIMEOUT = 60;
 
-const CodeVerificationScreen = observer(() => {
-  const [code, setCode] = useState("");
+// Отдельный компонент для таймера, чтобы его ре-рендер не влиял на остальное
+const TimerButton = observer(({ onResend, isResending, colors }) => {
   const [timeLeft, setTimeLeft] = useState(RESEND_TIMEOUT);
-  const [isResending, setIsResending] = useState(false);
-  const [shakeAnim] = useState(new Animated.Value(0));
-  const [isFocused, setIsFocused] = useState(false);
-  const { authStore } = useStores();
-  const navigation = useNavigation();
-  const { colors, theme } = useTheme();
-  const styles = useThemedStyles(themedStyles);
-  const textInputRef = useRef(null);
   const timerRef = useRef(null);
 
-  // Таймер обратного отсчета
   useEffect(() => {
+    if (timeLeft <= 0) {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+      return;
+    }
+
     timerRef.current = setInterval(() => {
-      setTimeLeft((prev) => (prev <= 1 ? 0 : prev - 1));
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
 
     return () => {
@@ -45,7 +52,65 @@ const CodeVerificationScreen = observer(() => {
         clearInterval(timerRef.current);
       }
     };
-  }, []);
+  }, [timeLeft <= 0]);
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  const handleResend = async () => {
+    if (timeLeft > 0 || isResending) return;
+    await onResend();
+    setTimeLeft(RESEND_TIMEOUT);
+  };
+
+  return (
+    <Button
+      mode="text"
+      onPress={handleResend}
+      disabled={timeLeft > 0 || isResending}
+      style={styles.resendButton}
+      loading={isResending}
+      labelStyle={[
+        styles.resendButtonText,
+        { 
+          color: timeLeft > 0 ? colors.textTertiary : colors.primary,
+          fontWeight: '500'
+        }
+      ]}
+    >
+      {timeLeft > 0 ? 
+        `Повторить через ${formatTime(timeLeft)}` : 
+        "Отправить код повторно"
+      }
+    </Button>
+  );
+});
+
+const styles = StyleSheet.create({
+  resendButton: {
+    marginBottom: 16,
+    paddingVertical: 4,
+  },
+  resendButtonText: {
+    fontSize: 16,
+  },
+});
+
+const CodeVerificationScreen = observer(() => {
+  const [code, setCode] = useState("");
+  const [isResending, setIsResending] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  
+  const { authStore } = useStores();
+  const navigation = useNavigation();
+  const { colors, theme } = useTheme();
+  const themedStyles = useThemedStyles(createThemedStyles);
+  
+  const textInputRef = useRef(null);
+  const shakeAnim = useRef(new Animated.Value(0)).current;
 
   // Автофокус при входе на экран с задержкой для Android
   useFocusEffect(
@@ -53,7 +118,6 @@ const CodeVerificationScreen = observer(() => {
       const focusTimeout = setTimeout(() => {
         InteractionManager.runAfterInteractions(() => {
           if (textInputRef.current && Platform.OS === 'android') {
-            // Для Android используем задержку и принудительный фокус
             textInputRef.current.focus();
             setIsFocused(true);
           }
@@ -84,7 +148,6 @@ const CodeVerificationScreen = observer(() => {
     } catch (error) {
       setCode("");
       shakeAnimation();
-      // Восстанавливаем фокус после ошибки
       setTimeout(() => {
         if (textInputRef.current) {
           textInputRef.current.focus();
@@ -94,15 +157,10 @@ const CodeVerificationScreen = observer(() => {
   };
 
   const handleResendCode = async () => {
-    if (timeLeft > 0 || isResending) return;
-
     setIsResending(true);
     try {
-      // Здесь код для повторной отправки SMS
-      await authStore.resendCode?.(); // Предполагаем, что есть такой метод
-      setTimeLeft(RESEND_TIMEOUT);
+      await authStore.resendCode?.();
       setCode("");
-      // Возвращаем фокус после очистки
       setTimeout(() => {
         if (textInputRef.current) {
           textInputRef.current.focus();
@@ -115,23 +173,13 @@ const CodeVerificationScreen = observer(() => {
     }
   };
 
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-  };
-
   const handleCodeChange = (text) => {
-    // Оставляем только цифры
     const formattedText = text.replace(/[^0-9]/g, '');
-    
-    // Ограничиваем длину
     if (formattedText.length > 4) return;
     
     setCode(formattedText);
     
     if (formattedText.length === 4) {
-      // Задержка перед верификацией для лучшего UX
       setTimeout(() => handleVerify(formattedText), 100);
     }
   };
@@ -143,161 +191,151 @@ const CodeVerificationScreen = observer(() => {
     }
   };
 
-  const handleFocus = () => {
-    setIsFocused(true);
-  };
-
-  const handleBlur = () => {
-    setIsFocused(false);
-  };
+  const handleFocus = () => setIsFocused(true);
+  const handleBlur = () => setIsFocused(false);
 
   const formattedPhone = authStore.phoneNumber?.replace(
     /(\d{1})(\d{3})(\d{3})(\d{2})(\d{2})/,
     '+7 $2 $3-$4-$5'
   ) || '';
 
-  return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.container}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
-      >
-        <StatusBar 
-          barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
-          backgroundColor={colors.background}
-        />
-        
-        <CustomHeader 
-          title=""
-          statusBarProps={{
-            barStyle: theme === 'dark' ? 'light-content' : 'dark-content',
-            backgroundColor: colors.background
-          }}
-          safeAreaStyle={{
-            backgroundColor: colors.background
-          }}
-          headerStyle={{
-            backgroundColor: colors.background,
-            borderBottomWidth: 0,
-            elevation: 0,
-            shadowOpacity: 0
-          }}
-          iconColor={colors.text}
-        />
-        
-        <View style={styles.content}>
-          <View style={styles.header}>
-            <View style={styles.iconContainer}>
-              <View style={styles.iconCircle}>
-                <Text style={styles.iconText}>📱</Text>
-              </View>
-            </View>
-            
-            <Text style={styles.title}>
-              Подтвердите номер
-            </Text>
-            
-            <Text style={styles.subtitle}>
-              Введите 4-значный код, отправленный на
-            </Text>
-            
-            <Text style={styles.phoneNumber}>
-              {formattedPhone}
-            </Text>
-          </View>
+  // Мемоизируем стили ячеек кода
+  const getCodeInputStyle = React.useCallback((index) => {
+    const isActive = isFocused && code.length === index;
+    const hasFilled = !!code[index];
+    
+    return [
+      themedStyles.codeInput,
+      { 
+        borderColor: isActive ? colors.primary : 
+                     hasFilled ? colors.success : colors.border,
+        backgroundColor: hasFilled ? 
+          (theme === 'dark' ? colors.surface : '#F0F9FF') : 
+          colors.card,
+        borderWidth: isActive ? 2 : 1,
+      }
+    ];
+  }, [isFocused, code, colors, theme, themedStyles.codeInput]);
 
-          <Animated.View 
-            style={[
-              styles.inputContainer,
-              { transform: [{ translateX: shakeAnim }] }
-            ]}
-          >
-            <TextInput
-              ref={textInputRef}
-              style={styles.hiddenInput}
-              value={code}
-              onChangeText={handleCodeChange}
-              onFocus={handleFocus}
-              onBlur={handleBlur}
-              keyboardType="number-pad"
-              maxLength={4}
-              autoFocus={Platform.OS === 'ios'} // Автофокус только для iOS
-              returnKeyType="done"
-              caretHidden={Platform.OS === 'android'} // Скрываем курсор на Android
-              selection={Platform.OS === 'android' ? { start: code.length, end: code.length } : undefined}
-              importantForAutofill="no"
-              autoComplete="one-time-code"
-              textContentType="oneTimeCode"
-            />
-            
-            <TouchableWithoutFeedback onPress={focusTextInput}>
-              <View style={styles.codeContainer}>
-                {[0, 1, 2, 3].map((index) => (
-                  <View 
-                    key={index}
-                    style={[
-                      styles.codeInput,
-                      { 
-                        borderColor: isFocused && code.length === index ? colors.primary : 
-                                   code[index] ? colors.success : colors.border,
-                        backgroundColor: code[index] ? 
-                          (theme === 'dark' ? colors.surface : '#F0F9FF') : 
-                          colors.card,
-                        borderWidth: isFocused && code.length === index ? 2 : 1,
-                        transform: [{ scale: isFocused && code.length === index ? 1.05 : 1 }]
-                      }
-                    ]}
-                  >
-                    <Text style={[
-                      styles.codeText, 
-                      { 
-                        color: code[index] ? colors.text : colors.placeholder,
-                      }
-                    ]}>
-                      {code[index] || '•'}
-                    </Text>
-                  </View>
-                ))}
+  return (
+    
+    <View style={themedStyles.container}>  
+      <CustomHeader 
+        title=""
+        statusBarProps={{
+          barStyle: theme === 'dark' ? 'light-content' : 'dark-content',
+          backgroundColor: colors.background
+        }}
+        safeAreaStyle={{
+          backgroundColor: colors.background
+        }}
+        headerStyle={{
+          backgroundColor: colors.background,
+          borderBottomWidth: 0,
+          elevation: 0,
+          shadowOpacity: 0
+        }}
+        modal={false}
+        iconColor={colors.text}
+      />
+      
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={themedStyles.keyboardContainer}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+        >
+          <View style={themedStyles.content}>
+            <View style={themedStyles.header}>
+              <View style={themedStyles.iconContainer}>
+                <View style={themedStyles.iconCircle}>
+                  <Text style={themedStyles.iconText}>📱</Text>
+                </View>
               </View>
-            </TouchableWithoutFeedback>
-          </Animated.View>
-          
-          <View style={styles.footer}>
-            <Button
-              mode="text"
-              onPress={handleResendCode}
-              disabled={timeLeft > 0 || isResending}
-              style={styles.resendButton}
-              loading={isResending}
-              labelStyle={[
-                styles.resendButtonText,
-                { 
-                  color: timeLeft > 0 ? colors.textTertiary : colors.primary,
-                  fontWeight: '500'
-                }
+              
+              <Text style={themedStyles.title}>
+                Подтвердите номер
+              </Text>
+              
+              <Text style={themedStyles.subtitle}>
+                Введите 4-значный код, отправленный на
+              </Text>
+              
+              <Text style={themedStyles.phoneNumber}>
+                {formattedPhone}
+              </Text>
+            </View>
+
+            <Animated.View 
+              style={[
+                themedStyles.inputContainer,
+                { transform: [{ translateX: shakeAnim }] }
               ]}
             >
-              {timeLeft > 0 ? 
-                `Повторить через ${formatTime(timeLeft)}` : 
-                "Отправить код повторно"
-              }
-            </Button>
+              <TextInput
+                ref={textInputRef}
+                style={themedStyles.hiddenInput}
+                value={code}
+                onChangeText={handleCodeChange}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
+                keyboardType="number-pad"
+                maxLength={4}
+                autoFocus={Platform.OS === 'ios'}
+                returnKeyType="done"
+                caretHidden={Platform.OS === 'android'}
+                selection={Platform.OS === 'android' ? { start: code.length, end: code.length } : undefined}
+                importantForAutofill="no"
+                autoComplete="one-time-code"
+                textContentType="oneTimeCode"
+              />
+              
+              <TouchableWithoutFeedback onPress={focusTextInput}>
+                <View style={themedStyles.codeContainer}>
+                  {[0, 1, 2, 3].map((index) => (
+                    <View 
+                      key={index}
+                      style={getCodeInputStyle(index)}
+                    >
+                      <Text style={[
+                        themedStyles.codeText, 
+                        { 
+                          color: code[index] ? colors.text : colors.placeholder,
+                        }
+                      ]}>
+                        {code[index] || '•'}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </TouchableWithoutFeedback>
+            </Animated.View>
             
-            <Text style={styles.helpText}>
-              Не получили код? Проверьте спам или попробуйте снова
-            </Text>
+            <View style={themedStyles.footer}>
+              <TimerButton 
+                onResend={handleResendCode}
+                isResending={isResending}
+                colors={colors}
+              />
+              
+              <Text style={themedStyles.helpText}>
+                Не получили код? Проверьте спам или попробуйте снова
+              </Text>
+            </View>
           </View>
-        </View>
-      </KeyboardAvoidingView>
-    </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </TouchableWithoutFeedback>
+    </View>
   );
 });
 
-const themedStyles = (colors, theme) => ({
+const createThemedStyles = (colors, theme) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  keyboardContainer: {
+    flex: 1,
   },
   content: {
     flex: 1,
@@ -306,7 +344,7 @@ const themedStyles = (colors, theme) => ({
   },
   header: {
     alignItems: 'center',
-    marginTop: 40,
+    marginTop: 20,
     paddingHorizontal: 16,
   },
   iconContainer: {
@@ -356,7 +394,7 @@ const themedStyles = (colors, theme) => ({
     height: 1,
     width: 1,
     opacity: 0,
-    fontSize: 16, // Важно для Android
+    fontSize: 16,
   },
   codeContainer: {
     flexDirection: 'row',
@@ -387,13 +425,6 @@ const themedStyles = (colors, theme) => ({
     alignItems: 'center',
     paddingBottom: 40,
     paddingHorizontal: 16,
-  },
-  resendButton: {
-    marginBottom: 16,
-    paddingVertical: 4,
-  },
-  resendButtonText: {
-    fontSize: 16,
   },
   helpText: {
     fontSize: 14,

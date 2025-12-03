@@ -1,26 +1,20 @@
 import React, { useState, useEffect, useRef } from "react";
 import { 
   View, 
-  StyleSheet, 
-  KeyboardAvoidingView, 
   Platform, 
   TouchableWithoutFeedback, 
   Keyboard, 
   TouchableOpacity,
   Animated,
-  Dimensions,
-  StatusBar
+  StatusBar,
 } from "react-native";
-import { Button, Text, ActivityIndicator } from "react-native-paper";
+import { Text, ActivityIndicator } from "react-native-paper";
 import { observer } from "mobx-react-lite";
 import { MaskedTextInput } from "react-native-advanced-input-mask";
 import { useStores } from "../useStores";
 import { useNavigation } from "@react-navigation/native";
 import { useTheme } from '../contexts/ThemeContext';
 import { useThemedStyles } from '../hooks/useThemedStyles';
-import CustomHeader from "../components/CustomHeader";
-
-const { width, height } = Dimensions.get('window');
 
 const AuthScreen = observer(() => {
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -31,34 +25,85 @@ const AuthScreen = observer(() => {
   const { colors, theme } = useTheme();
   const styles = useThemedStyles(themedStyles);
   
-  // Анимации
+  // Анимации - инициализируем только один раз
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
-  const inputScaleAnim = useRef(new Animated.Value(1)).current;
-  const buttonScaleAnim = useRef(new Animated.Value(1)).current;
   const errorShakeAnim = useRef(new Animated.Value(0)).current;
+  const containerTranslateY = useRef(new Animated.Value(0)).current;
+  const hasAnimated = useRef(false);
 
+  // Начальная анимация появления
   useEffect(() => {
-    // Запуск анимации появления
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    if (!hasAnimated.current) {
+      hasAnimated.current = true;
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
   }, []);
 
+  // Обработка клавиатуры с плавной анимацией
+  useEffect(() => {
+    let keyboardWillShowSub;
+    let keyboardWillHideSub;
+    let keyboardDidShowSub;
+    let keyboardDidHideSub;
+
+    if (Platform.OS === 'ios') {
+      keyboardWillShowSub = Keyboard.addListener('keyboardWillShow', (e) => {
+        Animated.timing(containerTranslateY, {
+          toValue: -e.endCoordinates.height / 3,
+          duration: e.duration || 250,
+          useNativeDriver: true,
+        }).start();
+      });
+
+      keyboardWillHideSub = Keyboard.addListener('keyboardWillHide', (e) => {
+        Animated.timing(containerTranslateY, {
+          toValue: 0,
+          duration: e.duration || 250,
+          useNativeDriver: true,
+        }).start();
+      });
+    } else {
+      keyboardDidShowSub = Keyboard.addListener('keyboardDidShow', (e) => {
+        Animated.timing(containerTranslateY, {
+          toValue: -100,
+          duration: 250,
+          useNativeDriver: true,
+        }).start();
+      });
+
+      keyboardDidHideSub = Keyboard.addListener('keyboardDidHide', () => {
+        Animated.timing(containerTranslateY, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }).start();
+      });
+    }
+
+    return () => {
+      keyboardWillShowSub?.remove();
+      keyboardWillHideSub?.remove();
+      keyboardDidShowSub?.remove();
+      keyboardDidHideSub?.remove();
+    };
+  }, []);
+
+  // Анимация ошибки
   useEffect(() => {
     if (authStore.error) {
-      console.log(authStore.error);
       setLocalError(authStore.error);
-      // Анимация тряски при ошибке
       Animated.sequence([
         Animated.timing(errorShakeAnim, { toValue: 8, duration: 100, useNativeDriver: true }),
         Animated.timing(errorShakeAnim, { toValue: -8, duration: 100, useNativeDriver: true }),
@@ -74,16 +119,13 @@ const AuthScreen = observer(() => {
       cleaned = "+7" + cleaned.slice(1);
     }
     setPhoneNumber(cleaned);
-    console.log(cleaned);
     
-    // Очистка ошибки при вводе
     if (localError) {
       setLocalError("");
     }
   };
 
   const handleLogin = async () => {
-    console.log(phoneNumber);
     if (!phoneNumber || phoneNumber.length < 9) {
       setLocalError("Введите корректный номер телефона");
       return;
@@ -91,12 +133,6 @@ const AuthScreen = observer(() => {
 
     setLocalError("");
     const cleanedPhoneNumber = '7' + phoneNumber.replace(/\D/g, "");
-
-    // Анимация нажатия кнопки
-    Animated.sequence([
-      Animated.timing(buttonScaleAnim, { toValue: 0.96, duration: 100, useNativeDriver: true }),
-      Animated.timing(buttonScaleAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
-    ]).start();
 
     try {
       await authStore.sendVerificationCode(cleanedPhoneNumber);
@@ -106,24 +142,6 @@ const AuthScreen = observer(() => {
     }
   };
 
-  const handleInputFocus = () => {
-    setIsInputFocused(true);
-    Animated.timing(inputScaleAnim, {
-      toValue: 1.01,
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const handleInputBlur = () => {
-    setIsInputFocused(false);
-    Animated.timing(inputScaleAnim, {
-      toValue: 1,
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
-  };
-
   return (
     <View style={styles.container}>
       <StatusBar 
@@ -131,121 +149,110 @@ const AuthScreen = observer(() => {
         backgroundColor={colors.background}
       />
       
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.keyboardContainer}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
-      >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <Animated.View 
+          style={[
+            styles.content,
+            {
+              opacity: fadeAnim,
+              transform: [
+                { translateY: Animated.add(slideAnim, containerTranslateY) }
+              ]
+            }
+          ]}
+        >
+          {/* Заголовок */}
+          <View style={styles.header}>
+            <Text style={styles.title}>Вход в систему</Text>
+            <Text style={styles.subtitle}>
+              Введите номер телефона для получения кода
+            </Text>
+          </View>
+
+          {/* Поле ввода */}
           <Animated.View 
             style={[
-              styles.content,
-              {
-                opacity: fadeAnim,
-                transform: [{ translateY: slideAnim }]
+              styles.inputSection,
+              { 
+                transform: [{ translateX: errorShakeAnim }] 
               }
             ]}
           >
-            {/* Заголовок */}
-            <View style={styles.header}>
-              <Text style={styles.title}>Вход в систему</Text>
-              <Text style={styles.subtitle}>
-                Введите номер телефона для получения кода
-              </Text>
-            </View>
-
-            {/* Поле ввода */}
-            <Animated.View 
-              style={[
-                styles.inputSection,
-                { 
-                  transform: [
-                    { scale: inputScaleAnim },
-                    { translateX: errorShakeAnim }
-                  ] 
-                }
-              ]}
-            >
-              <Text style={styles.inputLabel}>Номер телефона</Text>
-              <View style={[
-                styles.inputWrapper,
-                isInputFocused && styles.inputWrapperFocused,
-                localError && styles.inputWrapperError
-              ]}>
-                <MaskedTextInput
-                  mask="+7 ([000]) [000]-[00]-[00]"
-                  value={phoneNumber}
-                  autocomplete={false}
-                  onChangeText={handlePhoneChange}
-                  onFocus={handleInputFocus}
-                  onBlur={handleInputBlur}
-                  keyboardType="phone-pad"
-                  placeholder="+7 (___) ___-__-__"
-                  style={styles.input}
-                  editable={!authStore.isLoading}
-                  placeholderTextColor={colors.placeholder}
-                  autoFocus={false}
-                  blurOnSubmit={false}
-                  returnKeyType="done"
-                />
-              </View>
-
-              {/* Ошибка */}
-              {localError ? (
-                <View style={styles.errorContainer}>
-                  <Text style={styles.errorText}>{localError}</Text>
-                </View>
-              ) : null}
-            </Animated.View>
-
-            {/* Кнопка */}
-            <Animated.View style={[
-              styles.buttonContainer,
-              { transform: [{ scale: buttonScaleAnim }] }
+            <Text style={styles.inputLabel}>Номер телефона</Text>
+            <View style={[
+              styles.inputWrapper,
+              isInputFocused && styles.inputWrapperFocused,
+              localError && styles.inputWrapperError
             ]}>
-              {authStore.isLoading ? (
-                <View style={styles.loaderContainer}>
-                  <ActivityIndicator size={20} color={colors.primary} />
-                </View>
-              ) : (
-                <TouchableOpacity
-                  onPress={handleLogin}
-                  disabled={authStore.isLoading || phoneNumber.length < 10}
-                  activeOpacity={0.8}
-                  style={[
-                    styles.button,
-                    phoneNumber.length >= 10 ? styles.buttonActive : styles.buttonDisabled
-                  ]}
-                >
-                  <Text style={[
-                    styles.buttonText,
-                    phoneNumber.length >= 10 ? styles.buttonTextActive : styles.buttonTextDisabled
-                  ]}>
-                    Получить код
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </Animated.View>
-
-            {/* Информация */}
-            <View style={styles.infoText}>
-              <Text style={styles.infoDescription}>
-                Мы отправим SMS с кодом подтверждения
-              </Text>
+              <MaskedTextInput
+                mask="+7 ([000]) [000]-[00]-[00]"
+                value={phoneNumber}
+                autocomplete={false}
+                onChangeText={handlePhoneChange}
+                onFocus={() => setIsInputFocused(true)}
+                onBlur={() => setIsInputFocused(false)}
+                keyboardType="phone-pad"
+                placeholder="+7 (___) ___-__-__"
+                style={styles.input}
+                editable={!authStore.isLoading}
+                placeholderTextColor={colors.placeholder}
+                autoFocus={false}
+                blurOnSubmit={false}
+                returnKeyType="done"
+              />
             </View>
 
-            {/* Футер */}
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>
-                Продолжая, вы соглашаетесь с{'\n'}
-                <Text style={styles.footerLink}>Условиями использования</Text>
-                {' и '}
-                <Text style={styles.footerLink}>Политикой конфиденциальности</Text>
-              </Text>
-            </View>
+            {localError ? (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{localError}</Text>
+              </View>
+            ) : null}
           </Animated.View>
-        </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
+
+          {/* Кнопка */}
+          <View style={styles.buttonContainer}>
+            {authStore.isLoading ? (
+              <View style={styles.loaderContainer}>
+                <ActivityIndicator size={20} color={colors.primary} />
+              </View>
+            ) : (
+              <TouchableOpacity
+                onPress={handleLogin}
+                disabled={authStore.isLoading || phoneNumber.length < 10}
+                activeOpacity={0.8}
+                style={[
+                  styles.button,
+                  phoneNumber.length >= 10 ? styles.buttonActive : styles.buttonDisabled
+                ]}
+              >
+                <Text style={[
+                  styles.buttonText,
+                  phoneNumber.length >= 10 ? styles.buttonTextActive : styles.buttonTextDisabled
+                ]}>
+                  Получить код
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Информация */}
+          <View style={styles.infoText}>
+            <Text style={styles.infoDescription}>
+              Мы отправим SMS с кодом подтверждения
+            </Text>
+          </View>
+
+          {/* Футер */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              Продолжая, вы соглашаетесь с{'\n'}
+              <Text style={styles.footerLink}>Условиями использования</Text>
+              {' и '}
+              <Text style={styles.footerLink}>Политикой конфиденциальности</Text>
+            </Text>
+          </View>
+        </Animated.View>
+      </TouchableWithoutFeedback>
     </View>
   );
 });
@@ -255,14 +262,10 @@ const themedStyles = (colors, theme) => ({
     flex: 1,
     backgroundColor: colors.background,
   },
-  keyboardContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
   content: {
     flex: 1,
     justifyContent: 'center',
+    paddingHorizontal: 24,
     paddingBottom: 60,
     gap: 32,
   },

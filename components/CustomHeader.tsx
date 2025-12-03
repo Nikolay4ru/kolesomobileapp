@@ -98,7 +98,7 @@ const CustomHeader = ({
             { backgroundColor: finalBackgroundColor },
             Platform.OS === 'android' && { paddingTop: statusBarHeight },
             // Добавляем отступ для iOS если modal = true
-            Platform.OS === 'ios' && !modal && { paddingTop: insets.top }
+            Platform.OS === 'ios' && !modal && { paddingTop: 0 }
           ]}
         >
           <View 

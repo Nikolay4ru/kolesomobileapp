@@ -113,11 +113,57 @@ const FullApp = observer(() => {
           if (data.type === 'app_update' || data.type === 'system') {
             if (Platform.OS === 'android' && data.download_url) {
               updateStore.setUpdateInfo({
-                // ... код обработки обновления
+                isUpdateAvailable: true,
+                currentVersion: DeviceInfo.getVersion(),
+                newVersion: data.new_version || data.version,
+                downloadUrl: data.download_url,
+                releaseNotes: data.release_notes,
+                forceUpdate: data.force_update || false
               });
             }
+            return;
           }
-          // ... остальной код обработки
+
+          const { type, notification_id, order_id, booking_id, storage_id, promo_code } = data;
+          setTimeout(() => {
+            if (!navigationRef.isReady()) {
+              console.log('Navigation not ready, waiting...');
+              return;
+            }
+            switch (type) {
+              case 'order':
+                if (order_id) {
+                  NavigationService.navigate('OrderDetail', { orderId: order_id });
+                } else {
+                  NavigationService.navigate('Orders');
+                }
+                break;
+              case 'service':
+                if (booking_id) {
+                  NavigationService.navigate('BookingDetail', { bookingId: booking_id });
+                } else {
+                  NavigationService.navigate('Booking');
+                }
+                break;
+              case 'storage':
+                if (storage_id) {
+                  NavigationService.navigate('StorageDetail', { storageId: storage_id });
+                } else {
+                  NavigationService.navigate('Storages');
+                }
+                break;
+              case 'promo':
+                NavigationService.navigate('ProductList', { promoCode: promo_code });
+                break;
+              case 'admin':
+                if (authStore.isAdmin) {
+                  NavigationService.navigateToAdmin('AdminOrders');
+                }
+                break;
+              default:
+                NavigationService.navigate('Notifications');
+            }
+          }, 500);
         };
 
         OneSignal.Notifications.addEventListener('click', handleNotificationClick);
