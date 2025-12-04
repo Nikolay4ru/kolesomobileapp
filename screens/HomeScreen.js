@@ -36,6 +36,8 @@ const HomeScreen = () => {
   const [error, setError] = useState(null);
   const [userBooking, setUserBooking] = useState(null);
   const slidesRef = useRef(null);
+  const [slides, setSlides] = useState([]);
+  const [slidesLoading, setSlidesLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [searchModalVisible, setSearchModalVisible] = useState(false);
   const navigation = useNavigation();
@@ -47,29 +49,39 @@ const HomeScreen = () => {
     Linking.openSettings();
   };
 
-  const slides = [
-    {
-      id: '1',
-      title: 'Сезонная распродажа',
-      subtitle: 'Премиум шины со скидкой до 40%',
-      image: 'https://images.unsplash.com/photo-1621839673705-6617adf9e890?w=800',
-      backgroundColor: theme === 'dark' ? '#2C2C2E' : '#1a1a1a'
-    },
-    {
-      id: '2',
-      title: 'Комплексное ТО',
-      subtitle: 'Полная диагностика + замена масла',
-      image: 'https://images.unsplash.com/photo-1625047509168-a7026f36de04?w=800',
-      backgroundColor: theme === 'dark' ? '#2C2C2E' : '#1a1a1a'
-    },
-    {
-      id: '3',
-      title: 'Автоаксессуары',
-      subtitle: 'Новинки сезона',
-      image: 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?w=800',
-      backgroundColor: theme === 'dark' ? '#2C2C2E' : '#1a1a1a'
+
+  // Добавьте функцию загрузки новостей
+const fetchNews = async () => {
+  try {
+    setSlidesLoading(true);
+    const response = await fetch('https://api.koleso.app/api/news.php');
+    
+    const data = await response.json();
+    console.log(data);
+    if (data.success && data.news.length > 0) {
+      // Преобразуем данные API в формат слайдов
+      const newsSlides = data.news.map(item => ({
+        id: item.id,
+        title: item.title,
+        subtitle: item.subtitle,
+        image: item.image,
+        linkUrl: item.linkUrl,
+        backgroundColor: theme === 'dark' ? '#2C2C2E' : '#1a1a1a'
+      }));
+      setSlides(newsSlides);
+    } else {
+      // Если нет новостей, используем заглушки
+      //setSlides(getDefaultSlides());
     }
-  ];
+  } catch (error) {
+    console.error('Error fetching news:', error);
+    setSlidesLoading(false);
+  } finally {
+    setSlidesLoading(false);
+  }
+};
+
+
 
   // Загрузка данных пользователя и записей
   useEffect(() => {
@@ -85,7 +97,7 @@ const HomeScreen = () => {
         console.error('Error fetching user booking:', err);
       }
     };
-    
+      fetchNews();
    // fetchUserData();
   }, []);
 
@@ -172,14 +184,20 @@ const HomeScreen = () => {
 
   const viewConfigRef = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const nextSlide = (activeSlide + 1) % slides.length;
-      slidesRef.current?.scrollToIndex({ index: nextSlide, animated: true });
-      setActiveSlide(nextSlide);
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [activeSlide]);
+useEffect(() => {
+  // Проверяем, что слайды загружены и их больше одного
+  if (!slides?.length || slides.length <= 1) {
+    return; // Нет смысла крутить карусель с 0 или 1 слайдом
+  }
+
+  const timer = setTimeout(() => {
+    const nextSlide = (activeSlide + 1) % slides.length;
+    slidesRef.current?.scrollToIndex({ index: nextSlide, animated: true });
+    setActiveSlide(nextSlide);
+  }, 5000);
+  
+  return () => clearTimeout(timer);
+}, [activeSlide, slides]);
 
 const renderSlide = ({ item }) => (
     <TouchableOpacity 
@@ -262,41 +280,51 @@ const renderSlide = ({ item }) => (
         style={styles.scrollView}
       >
   
+  {slidesLoading && (
+  <View>
+    <ActivityIndicator size="large" color={colors.primary} />
+  </View>
+)}
         {/* Slider */}
-        <View style={styles.sliderContainer}>
-          <Animated.FlatList
-            ref={slidesRef}
-            data={slides}
-            renderItem={renderSlide}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onScroll={Animated.event(
-              [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-              { useNativeDriver: false }
-            )}
-            onViewableItemsChanged={({ viewableItems }) => {
-              if (viewableItems.length > 0) {
-                setActiveSlide(viewableItems[0].index ?? 0);
-              }
-            }}
-            viewabilityConfig={viewConfigRef}
-            keyExtractor={item => item.id}
-            snapToInterval={screenWidth - 40}
-            decelerationRate="fast"
-          />
-          <View style={styles.pagination}>
-            {slides.map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.paginationDot,
-                  i === activeSlide && styles.activeDot
-                ]}
-              />
-            ))}
-          </View>
-        </View>
+        {slides.length == 0 ? (
+  <View>
+    
+  </View>
+) : (
+  <View style={styles.sliderContainer}>
+    <Animated.FlatList
+      ref={slidesRef}
+      data={slides}
+      renderItem={renderSlide}
+      horizontal
+      pagingEnabled
+      showsHorizontalScrollIndicator={false}
+      onScroll={Animated.event(
+        [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+        { useNativeDriver: false }
+      )}
+      onViewableItemsChanged={({ viewableItems }) => {
+        if (viewableItems.length > 0) {
+          setActiveSlide(viewableItems[0].index ?? 0);
+        }
+      }}
+      viewabilityConfig={viewConfigRef.current}
+      keyExtractor={(item) => item.id}
+    />
+    {/* Индикаторы слайдов */}
+    <View style={styles.pagination}>
+      {slides.map((_, index) => (
+        <View
+          key={index}
+          style={[
+            styles.paginationDot,
+            activeSlide === index && styles.paginationDotActive
+          ]}
+        />
+      ))}
+    </View>
+  </View>
+)}
 
 
   <TouchableOpacity 
