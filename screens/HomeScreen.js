@@ -13,6 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import { useNavigation } from "@react-navigation/native";
+import { observer } from 'mobx-react-lite';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../contexts/ThemeContext';
@@ -26,10 +27,16 @@ import BannerNotificationPermission from '../components/BannerNotificationPermis
 const API_URL = 'https://api.koleso.app/api';
 const { width: screenWidth } = Dimensions.get('window');
 
-const HomeScreen = () => {
+const HomeScreen = observer(() => {
   const { colors, theme } = useTheme();
   const styles = useThemedStyles(themedStyles);
-  const { authStore } = useStores();
+
+  const { authStore, ordersStore } = useStores();
+
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [ordersError, setOrdersError] = useState(null);
+
+
   const [activeSlide, setActiveSlide] = useState(0);
   const scrollX = useRef(new Animated.Value(0)).current;
   const [popularProducts, setPopularProducts] = useState([]);
@@ -79,6 +86,113 @@ const fetchNews = async () => {
   } finally {
     setSlidesLoading(false);
   }
+};
+
+
+
+// Загрузка заказов пользователя
+useEffect(() => {
+  const fetchOrders = async () => {
+    if (!authStore.isLoggedIn) {
+      setOrdersLoading(false);
+      return;
+    }
+    
+    try {
+      setOrdersLoading(true);
+      await ordersStore.loadOrders(authStore.token);
+      setOrdersError(null);
+    } catch (err) {
+      console.error('Error fetching orders:', err);
+      setOrdersError(err.message);
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
+  
+  fetchOrders();
+}, [authStore.isLoggedIn, authStore.token]);
+
+
+// Получение конфигурации статуса заказа
+const getStatusConfig = (status) => {
+  const statusConfigs = {
+    'new': { 
+      text: 'Новый', 
+      color: colors.warning,
+      dotColor: colors.warning
+    },
+    'processing': { 
+      text: 'В обработке', 
+      color: colors.primary,
+      dotColor: colors.primary
+    },
+    'shipped': { 
+      text: 'Отправлен', 
+      color: '#5856D6',
+      dotColor: '#5856D6'
+    },
+    'delivered': { 
+      text: 'Доставлен', 
+      color: colors.success,
+      dotColor: colors.success
+    },
+    'cancelled': { 
+      text: 'Отменен', 
+      color: colors.error,
+      dotColor: colors.error
+    },
+    'Отменён (Удален)': { 
+      text: 'Отменен', 
+      color: colors.error,
+      dotColor: colors.error
+    },
+     'delivered': { 
+      text: 'Завершен', 
+      color: colors.success,
+      dotColor: colors.success
+    }
+  };
+  
+ return statusConfigs[status] || { 
+      text: status, 
+      color: colors.primary,
+      dotColor: colors.primary
+    };
+  };
+
+// Форматирование даты заказа
+const formatOrderDate = (dateString) => {
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString;
+    
+    const months = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+    const day = date.getDate();
+    const month = months[date.getMonth()];
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    
+    return `${day} ${month}, ${hours}:${minutes}`;
+  } catch (e) {
+    return dateString;
+  }
+};
+
+// Получение названия первого товара в заказе
+const getFirstItemName = (order) => {
+  if (!order.items || order.items.length === 0) {
+    return 'Товары';
+  }
+  
+  const firstItem = order.items[0];
+  const itemCount = order.items.length;
+  
+  if (itemCount > 1) {
+    return `${firstItem.name} и еще ${itemCount - 1}`;
+  }
+  
+  return firstItem.name;
 };
 
 
@@ -427,41 +541,78 @@ const renderSlide = ({ item }) => (
           )}
         </View>
 
-        {/* Recent Orders */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Последние заказы</Text>
+       {/* Recent Orders */}
+{authStore.isLoggedIn && (
+  <View style={styles.section}>
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionTitle}>Последние заказы</Text>
+      <TouchableOpacity
+       onPress={() => navigation.navigate("ProfileMenu", { 
+    screen: "Orders" 
+  })}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.seeAllText}>История</Text>
+      </TouchableOpacity>
+    </View>
+    
+    {ordersLoading ? (
+      <View style={styles.ordersLoadingContainer}>
+        <ActivityIndicator size="small" color={colors.primary} />
+      </View>
+    ) : ordersError ? (
+      <View style={styles.ordersErrorContainer}>
+        <Text style={styles.ordersErrorText}>Не удалось загрузить заказы</Text>
+      </View>
+    ) : ordersStore.orders.length === 0 ? (
+      <View style={styles.noOrdersContainer}>
+        <Ionicons name="receipt-outline" size={48} color={colors.textSecondary} />
+        <Text style={styles.noOrdersText}>У вас пока нет заказов</Text>
+        <TouchableOpacity
+          style={styles.browseButton}
+          onPress={() => navigation.navigate('FilterAuto')}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.browseButtonText}>Начать покупки</Text>
+        </TouchableOpacity>
+      </View>
+    ) : (
+      <View style={styles.recentOrdersContainer}>
+        {ordersStore.orders.slice(0, 2).map((order) => {
+          const statusConfig = getStatusConfig(order.status);
+          
+          return (
             <TouchableOpacity
-              onPress={() => navigation.navigate("Orders")}
+              key={order.id}
+              style={styles.orderCard}
               activeOpacity={0.7}
+              onPress={() => navigation.navigate('ProfileMenu', {
+    screen: 'OrderDetail',
+    params: { orderId: order.id }
+  })}
             >
-              <Text style={styles.seeAllText}>История</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.recentOrdersContainer}>
-            <TouchableOpacity style={styles.orderCard} activeOpacity={0.7}>
               <View style={styles.orderStatus}>
-                <View style={[styles.orderStatusDot, { backgroundColor: colors.success }]} />
-                <Text style={styles.orderStatusText}>Доставлен</Text>
+                <View style={[styles.orderStatusDot, { backgroundColor: statusConfig.dotColor }]} />
+                <Text style={[styles.orderStatusText, { color: statusConfig.color }]}>
+                  {statusConfig.text}
+                </Text>
               </View>
-              <Text style={styles.orderNumber}>Заказ #12345</Text>
-              <Text style={styles.orderDate}>15 июня, 14:30</Text>
-              <Text style={styles.orderItems}>Шины Michelin x4</Text>
-              <Text style={styles.orderPrice}>48 900 ₽</Text>
+              <Text style={styles.orderNumber}>Заказ №{order.order_number}</Text>
+              <Text style={styles.orderDate}>{formatOrderDate(order.created_at)}</Text>
+              <Text style={styles.orderItems} numberOfLines={1}>
+                {getFirstItemName(order)}
+              </Text>
+              <Text style={styles.orderPrice}>
+                {parseFloat(order.total_amount).toLocaleString('ru-RU')} ₽
+              </Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.orderCard} activeOpacity={0.7}>
-              <View style={styles.orderStatus}>
-                <View style={[styles.orderStatusDot, { backgroundColor: colors.warning }]} />
-                <Text style={styles.orderStatusText}>В пути</Text>
-              </View>
-              <Text style={styles.orderNumber}>Заказ #12346</Text>
-              <Text style={styles.orderDate}>16 июня, 10:00</Text>
-              <Text style={styles.orderItems}>Моторное масло 5W30</Text>
-              <Text style={styles.orderPrice}>3 200 ₽</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+          );
+        })}
+      </View>
+    )}
+  </View>
+)}
+
 
         {/* Special Offers */}
         <View style={styles.section}>
@@ -599,7 +750,7 @@ const renderSlide = ({ item }) => (
       />
     </View>
   );
-};
+});
 
 const themedStyles = (colors, theme) => ({
   container: {
@@ -685,6 +836,48 @@ const themedStyles = (colors, theme) => ({
     width: 1,
     height: 40,
     backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+
+  // Стили для состояния загрузки заказов
+  ordersLoadingContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  
+  // Стили для состояния ошибки
+  ordersErrorContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ordersErrorText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  
+  // Стили для пустого состояния
+  noOrdersContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noOrdersText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    marginTop: 16,
+    marginBottom: 20,
+  },
+  browseButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  browseButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   
   // Booking Card
