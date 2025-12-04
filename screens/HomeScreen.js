@@ -210,14 +210,16 @@ const renderSlide = ({ item }) => (
         style={styles.slideImage}
         resizeMode="cover"
       />
-      <View style={styles.slideGradient} />
+      {/* Градиентный оверлей */}
+      <View style={styles.slideGradientOverlay} />
+      
       <View style={styles.slideTextWrap}>
-        <Text style={styles.slideTitle}>{item.title}</Text>
-        <Text style={styles.slideSubtitle}>{item.subtitle}</Text>
-        <View style={styles.slideButton}>
-          <Text style={styles.slideButtonText}>Подробнее</Text>
-          <Ionicons name="arrow-forward" size={16} color={theme === 'dark' ? '#000' : '#000'} />
+        {/* Полупрозрачная подложка под текстом */}
+        <View style={styles.slideTextBackground}>
+          <Text style={styles.slideTitle}>{item.title}</Text>
+          <Text style={styles.slideSubtitle}>{item.subtitle}</Text>
         </View>
+        
       </View>
     </TouchableOpacity>
   );
@@ -288,7 +290,7 @@ const renderSlide = ({ item }) => (
         {/* Slider */}
         {slides.length == 0 ? (
   <View>
-    
+
   </View>
 ) : (
   <View style={styles.sliderContainer}>
@@ -714,79 +716,122 @@ const themedStyles = (colors, theme) => ({
     color: 'rgba(255,255,255,0.9)',
   },
   
-  // Slider
-  sliderContainer: {
-    height: 200,
-    marginTop: 20,
-  },
-  slide: {
-    width: screenWidth - 40,
-    marginHorizontal: 20,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: theme === 'dark' ? colors.surface : '#000',
-  },
-  slideImage: {
-    width: '100%',
-    height: '100%',
-  },
-  slideGradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 120,
-    backgroundColor: 'transparent',
-    backgroundImage: 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.8))',
-  },
-  slideTextWrap: {
-    position: 'absolute',
-    left: 20,
-    bottom: 20,
-    right: 20,
-  },
-  slideTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  slideSubtitle: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.9)',
-    marginBottom: 12,
-  },
-  slideButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 100,
-    alignSelf: 'flex-start',
-  },
-  slideButtonText: {
-    color: '#000000',
-    fontWeight: '600',
-    fontSize: 14,
-    marginRight: 4,
-  },
-  pagination: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 12,
-  },
-  paginationDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.textTertiary,
-    marginHorizontal: 3,
-  },
-  activeDot: {
-    backgroundColor: theme === 'dark' ? colors.primary : colors.text,
-    width: 18,
-  },
+// Slider
+sliderContainer: {
+  height: 220,
+  marginTop: 5,
+},
+slide: {
+  width: screenWidth - 40,
+  marginHorizontal: 20,
+  borderRadius: 16,
+  overflow: 'hidden',
+  backgroundColor: theme === 'dark' ? colors.surface : '#000',
+},
+slideImage: {
+  width: '100%',
+  height: '100%',
+},
+// Новый градиентный оверлей
+slideGradientOverlay: {
+  position: 'absolute',
+  bottom: 0,
+  left: 0,
+  right: 0,
+  height: '60%', // Градиент занимает 60% высоты снизу
+  backgroundColor: 'rgba(0, 0, 0, 0)',
+  // Для Android используем простой фон, для iOS можно использовать библиотеку linear-gradient
+  ...Platform.select({
+    ios: {
+      // Для iOS можно установить react-native-linear-gradient
+      opacity: 0.8,
+    },
+    android: {
+      opacity: 0.8,
+    },
+  }),
+  // Эмуляция градиента через несколько слоев
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: -50 },
+  shadowOpacity: 0.9,
+  shadowRadius: 50,
+  elevation: 5,
+},
+slideTextWrap: {
+  position: 'absolute',
+  left: 0,
+  bottom: 0,
+  right: 0,
+},
+// Полупрозрачная подложка под текстом с blur эффектом
+slideTextBackground: {
+  backgroundColor: 'rgba(0, 0, 0, 0.5)', // Полупрозрачный черный фон
+  borderRadius: 0,
+  padding: 12,
+  marginBottom: 0,
+  // Эффект размытия (работает на iOS, на Android будет просто полупрозрачный фон)
+  ...(Platform.OS === 'ios' && {
+    backdropFilter: 'blur(10px)',
+  }),
+},
+slideTitle: {
+  fontSize: 20,
+  fontWeight: '700',
+  color: '#FFFFFF',
+  marginBottom: 4,
+  // Тень для текста для дополнительной читаемости
+  textShadowColor: 'rgba(0, 0, 0, 0.8)',
+  textShadowOffset: { width: 0, height: 1 },
+  textShadowRadius: 4,
+},
+slideSubtitle: {
+  fontSize: 14,
+  color: 'rgba(255, 255, 255, 0.95)',
+  lineHeight: 18,
+  // Тень для текста
+  textShadowColor: 'rgba(0, 0, 0, 0.8)',
+  textShadowOffset: { width: 0, height: 1 },
+  textShadowRadius: 4,
+},
+slideButton: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#FFFFFF',
+  paddingHorizontal: 16,
+  paddingVertical: 10,
+  borderRadius: 100,
+  alignSelf: 'flex-start',
+  // Тень для кнопки
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.25,
+  shadowRadius: 4,
+  elevation: 5,
+},
+slideButtonText: {
+  color: '#000000',
+  fontWeight: '600',
+  fontSize: 14,
+  marginRight: 4,
+},
+pagination: {
+  flexDirection: 'row',
+  justifyContent: 'center',
+  marginTop: 12,
+},
+paginationDot: {
+  width: 6,
+  height: 6,
+  borderRadius: 3,
+  backgroundColor: colors.textTertiary,
+  marginHorizontal: 3,
+  opacity: 0.4,
+},
+paginationDotActive: {
+  backgroundColor: theme === 'dark' ? colors.primary : '#FFFFFF',
+  width: 18,
+  opacity: 1,
+},
   
   // Quick Actions
   quickActionsContainer: {

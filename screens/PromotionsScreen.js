@@ -10,6 +10,8 @@ import {
   StatusBar,
   RefreshControl,
   Dimensions,
+  ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,6 +22,7 @@ import { useThemedStyles } from '../hooks/useThemedStyles';
 import CustomHeader from '../components/CustomHeader';
 
 const { width } = Dimensions.get('window');
+const API_URL = 'https://api.koleso.app/api';
 
 const PromotionsScreen = () => {
   const navigation = useNavigation();
@@ -30,76 +33,65 @@ const PromotionsScreen = () => {
   
   const [activeTab, setActiveTab] = useState('all');
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [promotions, setPromotions] = useState([]);
+  const [error, setError] = useState(null);
   
   // Получаем промо из параметров навигации (если есть)
   const selectedPromo = route.params?.promo;
 
-  // Моковые данные акций
-  const [promotions] = useState([
-    {
-      id: '1',
-      title: 'Сезонная распродажа',
-      subtitle: 'Премиум шины со скидкой до 40%',
-      description: 'Успейте приобрести премиальные летние шины с невероятной скидкой до 40%. В акции участвуют бренды Michelin, Continental, Bridgestone.',
-      image: 'https://images.unsplash.com/photo-1621839673705-6617adf9e890?w=800',
-      category: 'discount',
-      discount: '-40%',
-      validUntil: '30 июня 2025',
-      conditions: [
-        'Скидка действует на летние шины',
-        'При покупке комплекта из 4 шин',
-        'Не суммируется с другими акциями'
-      ]
-    },
-    {
-      id: '2',
-      title: 'Комплексное ТО',
-      subtitle: 'Полная диагностика + замена масла',
-      description: 'Комплексное техническое обслуживание вашего автомобиля по специальной цене. Включает полную диагностику и замену масла.',
-      image: 'https://images.unsplash.com/photo-1625047509168-a7026f36de04?w=800',
-      category: 'service',
-      price: '2 990 ₽',
-      oldPrice: '4 500 ₽',
-      validUntil: 'Постоянно',
-      includes: [
-        'Компьютерная диагностика',
-        'Замена моторного масла',
-        'Замена масляного фильтра',
-        'Проверка всех систем'
-      ]
-    },
-    {
-      id: '3',
-      title: 'Автоаксессуары',
-      subtitle: 'Новинки сезона',
-      description: 'Новое поступление автоаксессуаров. Скидка 20% на весь ассортимент при покупке от 5000 рублей.',
-      image: 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?w=800',
-      category: 'products',
-      discount: '-20%',
-      minOrder: 'от 5 000 ₽',
-      validUntil: '15 июля 2025'
-    },
-    {
-      id: '4',
-      title: 'Бесплатная диагностика',
-      subtitle: 'При покупке от 10 000 ₽',
-      description: 'Получите бесплатную компьютерную диагностику при покупке товаров или услуг на сумму от 10 000 рублей.',
-      image: 'https://images.unsplash.com/photo-1487754180451-c456f719a1fc?w=400',
-      category: 'bonus',
-      type: 'Бонус',
-      validUntil: 'Постоянно'
-    },
-    {
-      id: '5',
-      title: 'Летние шины',
-      subtitle: 'Скидка на весь ассортимент',
-      description: 'Специальные цены на летние шины всех размеров. Успейте купить до конца сезона!',
-      image: 'https://images.unsplash.com/photo-1565043666747-69f6646db940?w=400',
-      category: 'discount',
-      discount: '-30%',
-      validUntil: '30 июня 2025'
+  // Функция загрузки новостей/акций из API
+  const fetchPromotions = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch(`${API_URL}/news.php`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.success && data.news && data.news.length > 0) {
+        // Преобразуем новости в формат промо-акций
+        const formattedPromotions = data.news.map(item => ({
+          id: item.id,
+          title: item.title,
+          subtitle: item.subtitle,
+          description: item.subtitle,
+          image: item.image,
+          linkUrl: item.linkUrl,
+          category: 'all',
+          validUntil: new Date(item.createdAt).toLocaleDateString('ru-RU'),
+          displayOrder: item.displayOrder || 0,
+        }));
+        
+        setPromotions(formattedPromotions);
+      } else {
+        throw new Error('Нет доступных акций');
+      }
+    } catch (err) {
+      console.error('Error fetching promotions:', err);
+      setError(err.message || 'Не удалось загрузить акции');
+      setPromotions([]);
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
+
+  // Загружаем акции при монтировании
+  useEffect(() => {
+    fetchPromotions();
+  }, []);
+
+  // Если передана конкретная акция через навигацию, показываем её детали
+  useEffect(() => {
+    if (selectedPromo) {
+      navigation.navigate('PromotionDetail', { promotion: selectedPromo });
+    }
+  }, [selectedPromo]);
 
   const tabs = [
     { id: 'all', title: 'Все акции', icon: 'pricetags' },
@@ -110,11 +102,12 @@ const PromotionsScreen = () => {
 
   const filteredPromotions = activeTab === 'all' 
     ? promotions 
-    : promotions.filter(p => p.category === activeTab);
+    : promotions.filter(p => p.category === activeTab || p.category === 'all');
 
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1500);
+    await fetchPromotions();
+    setRefreshing(false);
   };
 
   const getCategoryColor = (category) => {
@@ -127,11 +120,23 @@ const PromotionsScreen = () => {
     }
   };
 
+  const handlePromotionPress = (item) => {
+    // Если есть внешняя ссылка, открываем её
+    if (item.linkUrl) {
+      Linking.openURL(item.linkUrl).catch(err => 
+        console.error('Failed to open URL:', err)
+      );
+    } else {
+      // Иначе открываем детальную страницу
+      navigation.navigate('PromotionDetail', { promotion: item });
+    }
+  };
+
   const renderPromotion = ({ item }) => (
     <TouchableOpacity 
       style={styles.promotionCard}
       activeOpacity={0.9}
-      onPress={() => navigation.navigate('PromotionDetail', { promotion: item })}
+      onPress={() => handlePromotionPress(item)}
     >
       <View style={styles.promotionImageContainer}>
         <Image source={{ uri: item.image }} style={styles.promotionImage} />
@@ -147,6 +152,11 @@ const PromotionsScreen = () => {
         {item.type && (
           <View style={[styles.badge, { backgroundColor: getCategoryColor(item.category) }]}>
             <Text style={styles.badgeText}>{item.type}</Text>
+          </View>
+        )}
+        {item.linkUrl && (
+          <View style={[styles.linkBadge, { backgroundColor: colors.primary }]}>
+            <Ionicons name="link" size={12} color="#FFF" />
           </View>
         )}
       </View>
@@ -178,6 +188,59 @@ const PromotionsScreen = () => {
     </TouchableOpacity>
   );
 
+  // Экран ошибки
+  if (error && !loading && !refreshing) {
+    return (
+      <View style={styles.container}>
+        <StatusBar 
+          barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
+          backgroundColor={colors.background}
+        />
+        
+        <CustomHeader 
+          title="Акции и предложения"
+          showBackButton={true}
+        />
+        
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={80} color={colors.error} />
+          <Text style={styles.errorTitle}>Ошибка загрузки</Text>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity 
+            style={[styles.retryButton, { backgroundColor: colors.primary }]}
+            onPress={fetchPromotions}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="refresh" size={20} color="#FFF" />
+            <Text style={styles.retryButtonText}>Повторить попытку</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // Индикатор загрузки
+  if (loading && !refreshing) {
+    return (
+      <View style={styles.container}>
+        <StatusBar 
+          barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
+          backgroundColor={colors.background}
+        />
+        
+        <CustomHeader 
+          title="Акции и предложения"
+          showBackButton={true}
+        />
+        
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Загрузка акций...</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar 
@@ -190,38 +253,7 @@ const PromotionsScreen = () => {
         showBackButton={true}
       />
 
-      {/* Tabs */}
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        style={styles.tabsContainer}
-        contentContainerStyle={styles.tabsContent}
-      >
-        {tabs.map((tab) => (
-          <TouchableOpacity
-            key={tab.id}
-            style={[
-              styles.tab,
-              activeTab === tab.id && styles.activeTab,
-              activeTab === tab.id && { backgroundColor: colors.primary + '15' }
-            ]}
-            onPress={() => setActiveTab(tab.id)}
-            activeOpacity={0.7}
-          >
-            <Ionicons 
-              name={tab.icon} 
-              size={18} 
-              color={activeTab === tab.id ? colors.primary : colors.textSecondary} 
-            />
-            <Text style={[
-              styles.tabText,
-              activeTab === tab.id && { color: colors.primary }
-            ]}>
-              {tab.title}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      
 
       {/* Promotions List */}
       <FlatList
@@ -235,13 +267,14 @@ const PromotionsScreen = () => {
             refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor={colors.primary}
+            colors={[colors.primary]}
           />
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="pricetags-outline" size={64} color={colors.textTertiary} />
             <Text style={styles.emptyText}>Нет доступных акций</Text>
-            <Text style={styles.emptySubtext}>Проверьте позже</Text>
+            <Text style={styles.emptySubtext}>Потяните вниз, чтобы обновить</Text>
           </View>
         }
       />
@@ -255,16 +288,69 @@ const themedStyles = (colors, theme) => ({
     backgroundColor: colors.background,
   },
   
+  // Loading
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
+  
+  // Error State
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  errorTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.text,
+    marginTop: 24,
+    marginBottom: 12,
+  },
+  errorText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 22,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  
   // Tabs
   tabsContainer: {
     backgroundColor: colors.card,
     maxHeight: 56,
-    borderBottomWidth: 1,
+    borderBottomWidth: 0,
     borderBottomColor: colors.border,
   },
   tabsContent: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 0,
+    marginTop: 4,
     gap: 8,
   },
   tab: {
@@ -305,13 +391,13 @@ const themedStyles = (colors, theme) => ({
   },
   promotionImageContainer: {
     position: 'relative',
-    height: 180,
+    height: 220,
     overflow: 'hidden',
   },
   promotionImage: {
     width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
+    height: '120%',
+    resizeMode: 'contain',
   },
   imageGradient: {
     position: 'absolute',
@@ -332,6 +418,16 @@ const themedStyles = (colors, theme) => ({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  linkBadge: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   promotionContent: {
     padding: 16,
