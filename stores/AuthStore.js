@@ -28,6 +28,12 @@ type UserProfile = {
   birthDate?: string; // Формат YYYY-MM-DD
   gender?: 'male' | 'female' | 'other';
   userType?: 'customer' | 'courier';
+  // Добавляем поля для баллов лояльности
+  loyaltyPoints?: number;
+  earnedPoints?: number;
+  usedPoints?: number;
+  expiringPoints?: number;
+  expiringDate?: string;
 };
 
 type AdminProfile = {
@@ -78,6 +84,7 @@ class AuthStore {
   pushSubscriptionId: string | null = null;
   oneSignalInitialized = false;
   isNotificationPermissionRequested = false;
+  isLoadingLoyalty = false;
   
   // Приватные поля
   _hasNotificationPermission = false;
@@ -887,6 +894,121 @@ updateCourierOnlineStatus = async (isOnline) => {
     return await this.verifyCode(code);
   }
 
+  // НОВЫЙ МЕТОД: Получение баланса баллов лояльности
+async fetchLoyaltyPoints(useCache = true) {
+  if (!this.user) return null;
+  
+  this.isLoadingLoyalty = true;
+  
+  try {
+    const params = new URLSearchParams({
+      action: 'get_balance',
+      use_cache: useCache ? '1' : '0'
+    });
+    
+    const response = await this.api.get(`/loyalty_1c.php?${params.toString()}`);
+        console.log('test');
+    console.log(response);
+    if (response.data.success) {
+      // Обновляем данные пользователя с информацией о баллах
+      this.user = {
+        ...this.user,
+        loyaltyPoints: response.data.balance || 0,
+        earnedPoints: response.data.earned || 0,
+        usedPoints: response.data.used || 0,
+        expiringPoints: response.data.expiring_points || 0,
+        expiringDate: response.data.expiring_date || null,
+        // Дополнительная информация
+        balanceCached: response.data.cached || false,
+        balanceCacheAge: response.data.cache_age || 0,
+        balanceWarning: response.data.warning || null
+      };
+      
+      this.persistAuthState();
+      
+      return {
+        success: true,
+        balance: response.data.balance,
+        earned: response.data.earned,
+        used: response.data.used,
+        expiring_points: response.data.expiring_points,
+        expiring_date: response.data.expiring_date,
+        cached: response.data.cached,
+        cache_age: response.data.cache_age,
+        warning: response.data.warning
+      };
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error("Failed to fetch loyalty points from 1C:", error);
+    this.error = error.message;
+    
+    // В случае ошибки возвращаем кэшированные данные если они есть
+    if (this.user?.loyaltyPoints !== undefined) {
+      return {
+        success: true,
+        balance: this.user.loyaltyPoints,
+        earned: this.user.earnedPoints || 0,
+        used: this.user.usedPoints || 0,
+        expiring_points: this.user.expiringPoints || 0,
+        expiring_date: this.user.expiringDate,
+        cached: true,
+        error: 'Using cached data due to error'
+      };
+    }
+    
+    throw error;
+  } finally {
+    this.isLoadingLoyalty = false;
+  }
+}
+
+
+async syncLoyaltyBalance() {
+  console.log('Forcing loyalty balance sync with 1C...');
+  return await this.fetchLoyaltyPoints(false);
+}
+
+// Получение истории операций с баллами
+async fetchLoyaltyHistory(page = 1, perPage = 20) {
+  if (!this.user) return null;
+  
+  try {
+    const params = new URLSearchParams({
+      action: 'get_history',
+      page: page.toString(),
+      per_page: perPage.toString()
+    });
+    
+    const response = await this.api.get(`/loyalty_1c.php?${params.toString()}`);
+    console.log(response);
+    return response.data;
+  } catch (error) {
+    console.error("Failed to fetch loyalty history from 1C:", error);
+    this.error = error.message;
+    throw error;
+  }
+}
+
+// Получение статистики баллов
+async fetchLoyaltyStats() {
+  if (!this.user) return null;
+  
+  try {
+    const params = new URLSearchParams({
+      action: 'get_stats'
+    });
+    
+    const response = await this.api.get(`/loyalty_1c.php?${params.toString()}`);
+    return response.data;
+  } catch (error) {
+    console.error("Failed to fetch loyalty stats from 1C:", error);
+    this.error = error.message;
+    throw error;
+  }
+}
+
   async fetchProfile() {
     console.log(this.user);
     if (!this.user) return;
@@ -902,19 +1024,31 @@ updateCourierOnlineStatus = async (isOnline) => {
           middleName: response.data.middle_name,
           email: response.data.email,
           birthDate: response.data.birth_date,
-          gender: response.data.gender
+          gender: response.data.gender,
+          loyaltyCardNumber: response.data.loyalty_card_number
+     
+     
         };
         console.log(this.user);
         
         this.persistAuthState();
       }
 
-      return response.data;
-    } catch (error) {
-      this.error = error.message;
-      throw error;
+   // Загружаем баллы лояльности с кэшем
+    try {
+      await this.fetchLoyaltyPoints(true);
+    } catch (loyaltyError) {
+      console.warn('Failed to load loyalty points, continuing without them:', loyaltyError);
+      // Не бросаем ошибку, продолжаем без баллов
     }
+
+    return response.data;
+  } catch (error) {
+    this.error = error.message;
+    throw error;
   }
+}
+
 
   async checkAdminStatus() {
     if (!this.user) return;

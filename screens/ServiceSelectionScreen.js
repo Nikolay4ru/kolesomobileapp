@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,45 +13,16 @@ import {
   Modal,
   Platform,
   KeyboardAvoidingView,
-  Appearance,
   StatusBar,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-
+import { useTheme } from '../contexts/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
 
 const ServiceBookingFlow = ({ navigation, route }) => {
-  // Theme detection
-  const [isDarkMode, setIsDarkMode] = useState(Appearance.getColorScheme() === 'dark');
-
-  useEffect(() => {
-    const subscription = Appearance.addChangeListener(({ colorScheme }) => {
-      setIsDarkMode(colorScheme === 'dark');
-    });
-    return () => subscription?.remove();
-  }, []);
-
-  // Dynamic colors based on theme
-  const COLORS = {
-    primary: '#007AFF',
-    secondary: isDarkMode ? '#5AC8FA' : '#007AFF',
-    accent: '#FF9500',
-    background: isDarkMode ? '#000000' : '#F2F1F6',
-    elevated: isDarkMode ? '#1C1C1E' : '#FFFFFF',
-    elevatedSecondary: isDarkMode ? '#2C2C2E' : '#FFFFFF',
-    separator: isDarkMode ? '#3A3A3C' : '#E5E5EA',
-    text: isDarkMode ? '#FFFFFF' : '#000000',
-    textSecondary: isDarkMode ? '#8E8E93' : '#6E6E73',
-    textTertiary: isDarkMode ? '#48484A' : '#C7C7CC',
-    success: isDarkMode ? '#32D74B' : '#34C759',
-    warning: isDarkMode ? '#FF9F0A' : '#FF9500',
-    error: isDarkMode ? '#FF453A' : '#FF3B30',
-    modalOverlay: isDarkMode ? 'rgba(0,0,0,0.75)' : 'rgba(0,0,0,0.4)',
-    inputBackground: isDarkMode ? '#1C1C1E' : '#F2F2F7',
-    cardSelected: isDarkMode ? '#0A84FF' : '#007AFF',
-  };
+  const { colors, theme } = useTheme();
 
   // Steps
   const STEPS = {
@@ -60,6 +31,8 @@ const ServiceBookingFlow = ({ navigation, route }) => {
     CAR: 2,
     DATETIME: 3,
   };
+
+  const stepTitles = ['Услуга', 'Магазин', 'Авто', 'Дата'];
 
   // State
   const [currentStep, setCurrentStep] = useState(STEPS.SERVICE);
@@ -84,10 +57,7 @@ const ServiceBookingFlow = ({ navigation, route }) => {
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
-  const progressAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.95)).current;
-  const buttonScaleAnim = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
 
   // Load car brands
   useEffect(() => {
@@ -125,67 +95,56 @@ const ServiceBookingFlow = ({ navigation, route }) => {
     {
       id: 1,
       name: 'Шиномонтаж',
-      description: 'Профессиональный монтаж и балансировка колес',
+      description: 'Монтаж и балансировка',
       icon: 'tire-repair',
       duration: '30-60 мин',
       price: 'от 1500₽',
-      color: '#007AFF',
+      emoji: '🔧',
     },
     {
       id: 2,
-      name: 'Заявка на выдачу с хранения',
-      description: 'Забронируйте время для получения хранения',
+      name: 'Выдача с хранения',
+      description: 'Получение колес',
       icon: 'inventory',
       duration: '15-30 мин',
       price: 'бесплатно',
-      color: '#34C759',
+      emoji: '📦',
     },
   ];
 
   // Car types
   const carTypes = [
-    { id: 1, name: 'Легковой', icon: 'directions-car', emoji: '🚗' },
-    { id: 2, name: 'Кроссовер', icon: 'airport-shuttle', emoji: '🚙' },
-    { id: 3, name: 'Внедорожник', icon: 'terrain', emoji: '🚐' },
-    { id: 4, name: 'Легкогрузовой', icon: 'local-shipping', emoji: '🚚' },
+    { id: 1, name: 'Легковой', emoji: '🚗' },
+    { id: 2, name: 'Кроссовер', emoji: '🚙' },
+    { id: 3, name: 'Внедорожник', emoji: '🚐' },
+    { id: 4, name: 'Легкогрузовой', emoji: '🚚' },
   ];
 
   // Time slots
-  const timeSlots = {
-    morning: ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30'],
-    afternoon: [
-      '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30',
-    ],
-    evening: ['18:00', '18:30', '19:00', '19:30'],
-  };
+  const timeSlots = [
+    '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
+    '15:00', '15:30', '16:00', '16:30', '17:00', '17:30',
+    '18:00', '18:30', '19:00', '19:30', '20:00', '20:30',
+  ];
 
   // Animations on step change
   useEffect(() => {
+    fadeAnim.setValue(0);
+    slideAnim.setValue(30);
+    
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 300,
         useNativeDriver: true,
       }),
-      Animated.spring(slideAnim, {
+      Animated.timing(slideAnim, {
         toValue: 0,
-        friction: 8,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 8,
-        tension: 40,
+        duration: 300,
         useNativeDriver: true,
       }),
     ]).start();
-
-    Animated.timing(progressAnim, {
-      toValue: (currentStep + 1) / Object.keys(STEPS).length,
-      duration: 500,
-      useNativeDriver: false,
-    }).start();
   }, [currentStep]);
 
   // Load stores
@@ -210,7 +169,7 @@ const ServiceBookingFlow = ({ navigation, route }) => {
   };
 
   // License plate validation
-  const validateLicensePlate = (text) => {
+  const validateLicensePlate = useCallback((text) => {
     const allowedLetters = 'АВЕКМНОРСТУХавекмнорстухABEKMHOPCTYXabekmhopctyx';
     const allowedChars = allowedLetters + '0123456789';
     let filteredText = '';
@@ -233,7 +192,7 @@ const ServiceBookingFlow = ({ navigation, route }) => {
       convertedText += latinToCyrillic[char] || char;
     }
     return convertedText.toUpperCase();
-  };
+  }, []);
 
   // Generate days
   const generateDays = () => {
@@ -247,45 +206,21 @@ const ServiceBookingFlow = ({ navigation, route }) => {
     return days;
   };
 
-  // Button animation
-  const animateButton = () => {
-    Animated.sequence([
-      Animated.timing(buttonScaleAnim, {
-        toValue: 0.95,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(buttonScaleAnim, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
-
   // Step navigation
   const goToNextStep = () => {
     if (currentStep < Object.keys(STEPS).length - 1) {
-      animateButton();
-      fadeAnim.setValue(0);
-      slideAnim.setValue(50);
-      scaleAnim.setValue(0.95);
       setCurrentStep(currentStep + 1);
     }
   };
 
   const goToPreviousStep = () => {
     if (currentStep > 0) {
-      fadeAnim.setValue(0);
-      slideAnim.setValue(-50);
-      scaleAnim.setValue(0.95);
       setCurrentStep(currentStep - 1);
     }
   };
 
   // Submit booking
   const handleSubmit = () => {
-    animateButton();
     const bookingData = {
       service: selectedService,
       store: selectedStore,
@@ -302,312 +237,331 @@ const ServiceBookingFlow = ({ navigation, route }) => {
     }, 300);
   };
 
-  // Service step
+  // Service step - Horizontal cards
   const renderServiceStep = () => (
     <Animated.View style={[styles.stepContainer, {
       opacity: fadeAnim,
-      transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
+      transform: [{ translateY: slideAnim }],
     }]}>
-      <Text style={[styles.stepTitle, { color: COLORS.text }]}>Выберите услугу</Text>
-      <Text style={[styles.stepSubtitle, { color: COLORS.textSecondary }]}>
-        Какая услуга вас интересует?
-      </Text>
-      <View style={styles.servicesGrid}>
-        {services.map((service) => (
-          <TouchableOpacity
-            key={service.id}
-            style={[
-              styles.serviceCard,
-              { 
-                backgroundColor: COLORS.elevated,
-                borderColor: selectedService?.id === service.id ? COLORS.primary : COLORS.separator,
-              },
-              selectedService?.id === service.id && styles.selectedServiceCard,
-            ]}
-            onPress={() => setSelectedService(service)}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.serviceIconContainer, { backgroundColor: COLORS.primary + '15' }]}>
-              <MaterialCommunityIcons
-                name={service.icon}
-                size={32}
-                color={COLORS.primary}
-              />
-            </View>
-            <View style={styles.serviceContent}>
-              <Text style={[styles.serviceName, { color: COLORS.text }]}>{service.name}</Text>
-              <Text style={[styles.serviceDescription, { color: COLORS.textSecondary }]}>
-                {service.description}
-              </Text>
-              <View style={styles.serviceMetaRow}>
-                <View style={styles.serviceMetaItem}>
-                  <Icon name="schedule" size={16} color={COLORS.textSecondary} />
-                  <Text style={[styles.serviceMetaText, { color: COLORS.textSecondary }]}>
-                    {service.duration}
-                  </Text>
-                </View>
-                <View style={styles.serviceMetaItem}>
-                  <Icon name="payments" size={16} color={COLORS.textSecondary} />
-                  <Text style={[styles.serviceMetaText, { color: COLORS.textSecondary }]}>
-                    {service.price}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </Animated.View>
-  );
-
-  // Store step
-  const renderStoreStep = () => (
-    <Animated.View style={[styles.stepContainer, {
-      opacity: fadeAnim,
-      transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
-    }]}>
-      <Text style={[styles.stepTitle, { color: COLORS.text }]}>Выберите магазин</Text>
-      <Text style={[styles.stepSubtitle, { color: COLORS.textSecondary }]}>
-        Магазины с выбранной услугой
-      </Text>
-      {loading ? (
-        <View style={styles.loader}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-        </View>
-      ) : (
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false} 
-          contentContainerStyle={styles.storesScroll}
-        >
-          {stores.map((store) => (
-            <TouchableOpacity
-              key={store.id}
-              style={[
-                styles.storeCard,
-                { 
-                  backgroundColor: COLORS.elevated,
-                  borderColor: selectedStore?.id === store.id ? COLORS.primary : COLORS.separator,
-                },
-                selectedStore?.id === store.id && styles.selectedStoreCard,
-              ]}
-              onPress={() => setSelectedStore(store)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.storeHeader}>
-                <View style={[styles.storeIconContainer, { backgroundColor: COLORS.primary + '15' }]}>
-                  <Icon name="store" size={24} color={COLORS.primary} />
-                </View>
-                <View style={[styles.storeStatus, { backgroundColor: COLORS.success + '20' }]}>
-                  <View style={[styles.statusDot, { backgroundColor: COLORS.success }]} />
-                  <Text style={[styles.statusText, { color: COLORS.success }]}>Открыто</Text>
-                </View>
-              </View>
-              <Text style={[styles.storeName, { color: COLORS.text }]}>{store.name}</Text>
-              <Text style={[styles.storeAddress, { color: COLORS.textSecondary }]}>
-                {store.address}
-              </Text>
-              <View style={styles.storeMetaContainer}>
-                <View style={styles.storeMetaItem}>
-                  <Icon name="schedule" size={14} color={COLORS.textSecondary} />
-                  <Text style={[styles.storeMetaText, { color: COLORS.textSecondary }]}>
-                    {store.working_hours || '9:00 - 21:00'}
-                  </Text>
-                </View>
-                <View style={styles.storeMetaItem}>
-                  <Icon name="near-me" size={14} color={COLORS.textSecondary} />
-                  <Text style={[styles.storeMetaText, { color: COLORS.textSecondary }]}>
-                    2.5 км
-                  </Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
-    </Animated.View>
-  );
-
-  // Car step
-  const renderCarStep = () => (
-    <Animated.View style={[styles.stepContainer, {
-      opacity: fadeAnim,
-      transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
-    }]}>
-      <Text style={[styles.stepTitle, { color: COLORS.text }]}>Данные автомобиля</Text>
-      <Text style={[styles.stepSubtitle, { color: COLORS.textSecondary }]}>
-        Информация о вашем авто
+      <Text style={[styles.stepQuestion, { color: colors.text }]}>
+        Какая услуга вам нужна?
       </Text>
       
-      <Text style={[styles.sectionTitle, { color: COLORS.text }]}>Тип автомобиля</Text>
-      <View style={styles.carTypesGrid}>
-        {carTypes.map((type) => (
-          <TouchableOpacity
-            key={type.id}
-            style={[
-              styles.carTypeCard,
-              {
-                backgroundColor: selectedCarType?.id === type.id ? COLORS.primary : COLORS.elevated,
-                borderColor: selectedCarType?.id === type.id ? COLORS.primary : COLORS.separator,
-              },
-            ]}
-            onPress={() => setSelectedCarType(type)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.carTypeEmoji}>{type.emoji}</Text>
-            <Text style={[
-              styles.carTypeName,
-              { color: selectedCarType?.id === type.id ? COLORS.elevated : COLORS.text }
-            ]}>
-              {type.name}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <View style={styles.inputSection}>
-        <TouchableOpacity
-          style={[styles.inputField, { backgroundColor: COLORS.inputBackground }]}
-          onPress={() => setShowBrandModal(true)}
-          activeOpacity={0.7}
-        >
-          <Icon name="directions-car" size={20} color={COLORS.textSecondary} />
-          <Text style={[
-            styles.inputFieldText,
-            { color: carBrand ? COLORS.text : COLORS.textSecondary }
-          ]}>
-            {carBrand || 'Марка автомобиля'}
-          </Text>
-          <Icon name="chevron-right" size={24} color={COLORS.textSecondary} />
-        </TouchableOpacity>
-
-        {carBrand && (
-          <TouchableOpacity
-            style={[styles.inputField, { backgroundColor: COLORS.inputBackground }]}
-            onPress={() => fetchCarModels(carBrand)}
-            activeOpacity={0.7}
-          >
-            <Icon name="build" size={20} color={COLORS.textSecondary} />
-            <Text style={[
-              styles.inputFieldText,
-              { color: carModel ? COLORS.text : COLORS.textSecondary }
-            ]}>
-              {carModel || 'Модель'}
-            </Text>
-            <Icon name="chevron-right" size={24} color={COLORS.textSecondary} />
-          </TouchableOpacity>
-        )}
-
-        <View style={[styles.inputField, { backgroundColor: COLORS.inputBackground }]}>
-          <Icon name="confirmation-number" size={20} color={COLORS.textSecondary} />
-          <TextInput
-            style={[styles.textInput, { color: COLORS.text }]}
-            placeholder="А123АА777"
-            placeholderTextColor={COLORS.textSecondary}
-            value={licensePlate}
-            onChangeText={(text) => setLicensePlate(validateLicensePlate(text))}
-            maxLength={9}
-            autoCapitalize="characters"
-          />
-        </View>
-      </View>
-    </Animated.View>
-  );
-
-  // Date/time step
-  const renderDateTimeStep = () => (
-    <Animated.View style={[styles.stepContainer, {
-      opacity: fadeAnim,
-      transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
-    }]}>
-      <Text style={[styles.stepTitle, { color: COLORS.text }]}>Выберите дату и время</Text>
-      <Text style={[styles.stepSubtitle, { color: COLORS.textSecondary }]}>
-        Доступные слоты для записи
-      </Text>
-      
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.datesScroll}
-      >
-        {generateDays().map((date, index) => {
-          const isSelected = selectedDate?.toDateString() === date.toDateString();
-          const isToday = index === 0;
+      <View style={styles.servicesContainer}>
+        {services.map((service) => {
+          const isSelected = selectedService?.id === service.id;
           return (
             <TouchableOpacity
-              key={index}
+              key={service.id}
               style={[
-                styles.dateCard,
-                {
-                  backgroundColor: isSelected ? COLORS.primary : COLORS.elevated,
-                  borderColor: isToday && !isSelected ? COLORS.accent : COLORS.separator,
+                styles.serviceCardHorizontal,
+                { 
+                  backgroundColor: isSelected ? colors.primary : colors.card,
                 },
               ]}
-              onPress={() => setSelectedDate(date)}
+              onPress={() => setSelectedService(service)}
               activeOpacity={0.7}
             >
-              <Text style={[
-                styles.dateWeekday,
-                { color: isSelected ? COLORS.elevated : COLORS.textSecondary }
-              ]}>
-                {date.toLocaleDateString('ru-RU', { weekday: 'short' })}
-              </Text>
-              <Text style={[
-                styles.dateDay,
-                { color: isSelected ? COLORS.elevated : COLORS.text }
-              ]}>
-                {date.getDate()}
-              </Text>
-              <Text style={[
-                styles.dateMonth,
-                { color: isSelected ? COLORS.elevated : COLORS.textSecondary }
-              ]}>
-                {date.toLocaleDateString('ru-RU', { month: 'short' })}
-              </Text>
-              {isToday && (
-                <View style={[styles.todayBadge, { backgroundColor: COLORS.accent }]}>
-                  <Text style={styles.todayText}>Сегодня</Text>
+              <View style={styles.serviceLeft}>
+                <Text style={styles.serviceEmoji}>{service.emoji}</Text>
+                <View style={styles.serviceTextContainer}>
+                  <Text style={[
+                    styles.serviceNameHorizontal, 
+                    { color: isSelected ? '#FFFFFF' : colors.text }
+                  ]}>
+                    {service.name}
+                  </Text>
+                  <Text style={[
+                    styles.serviceDescriptionHorizontal, 
+                    { color: isSelected ? 'rgba(255,255,255,0.8)' : colors.textSecondary }
+                  ]}>
+                    {service.description}
+                  </Text>
+                </View>
+              </View>
+              
+              {isSelected && (
+                <View style={[styles.serviceCheckmark, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                  <Icon name="check" size={20} color="#FFFFFF" />
                 </View>
               )}
             </TouchableOpacity>
           );
         })}
-      </ScrollView>
+      </View>
+    </Animated.View>
+  );
 
-      {selectedDate && (
-        <View style={styles.timeSlotsContainer}>
-          {Object.entries(timeSlots).map(([period, slots]) => (
-            <View key={period} style={styles.timePeriod}>
-              <Text style={[styles.timePeriodTitle, { color: COLORS.text }]}>
-                {period === 'morning' ? '🌅 Утро' : period === 'afternoon' ? '☀️ День' : '🌙 Вечер'}
+  // Store step - Vertical list
+  const renderStoreStep = () => (
+    <Animated.View style={[styles.stepContainer, {
+      opacity: fadeAnim,
+      transform: [{ translateY: slideAnim }],
+    }]}>
+      <Text style={[styles.stepQuestion, { color: colors.text }]}>
+        Где вам удобнее?
+      </Text>
+      
+      {loading ? (
+        <View style={styles.loaderCenter}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : (
+        <View style={styles.storesContainer}>
+          {stores.map((store) => {
+            const isSelected = selectedStore?.id === store.id;
+            return (
+              <TouchableOpacity
+                key={store.id}
+                style={[
+                  styles.storeCardVertical,
+                  { 
+                    backgroundColor: colors.card,
+                    borderColor: isSelected ? colors.primary : 'transparent',
+                  },
+                ]}
+                onPress={() => setSelectedStore(store)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.storeMainInfo}>
+                  <View style={styles.storeNameRow}>
+                    <View style={[styles.storeIcon, { backgroundColor: colors.primaryLight }]}>
+                      <Icon name="store" size={20} color={colors.primary} />
+                    </View>
+                    <View style={styles.storeNameContainer}>
+                      <Text style={[styles.storeNameVertical, { color: colors.text }]} numberOfLines={1}>
+                        {store.name}
+                      </Text>
+                      <View style={[styles.statusBadgeSmall, { backgroundColor: colors.successLight }]}>
+                        <View style={[styles.statusDotSmall, { backgroundColor: colors.success }]} />
+                        <Text style={[styles.statusTextSmall, { color: colors.success }]}>
+                          Открыто
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                  
+                  <Text style={[styles.storeAddressVertical, { color: colors.textSecondary }]} numberOfLines={2}>
+                    {store.address}
+                  </Text>
+                  
+                  <View style={styles.storeMetaRow}>
+                    <View style={styles.storeMetaBadge}>
+                      <Icon name="schedule" size={14} color={colors.textTertiary} />
+                      <Text style={[styles.storeMetaTextVertical, { color: colors.textSecondary }]}>
+                        {store.working_hours || '9:00 - 21:00'}
+                      </Text>
+                    </View>
+                    <View style={styles.storeMetaBadge}>
+                      <Icon name="near-me" size={14} color={colors.primary} />
+                      <Text style={[styles.storeMetaTextVertical, { color: colors.primary }]}>
+                        2.5 км
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                
+                {isSelected && (
+                  <View style={[styles.checkmarkCircle, { backgroundColor: colors.primary }]}>
+                    <Icon name="check" size={20} color="#FFFFFF" />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+    </Animated.View>
+  );
+
+  // Car step - Compact form
+  const renderCarStep = () => (
+    <Animated.View style={[styles.stepContainer, {
+      opacity: fadeAnim,
+      transform: [{ translateY: slideAnim }],
+    }]}>
+      <Text style={[styles.stepQuestion, { color: colors.text }]}>
+        Расскажите о вашем авто
+      </Text>
+      
+      {/* Car Types - Horizontal Scroll */}
+      <View style={styles.carTypeSection}>
+        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>ТИП КУЗОВА</Text>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.carTypesScroll}
+        >
+          {carTypes.map((type) => {
+            const isSelected = selectedCarType?.id === type.id;
+            return (
+              <TouchableOpacity
+                key={type.id}
+                style={[
+                  styles.carTypeChip,
+                  {
+                    backgroundColor: isSelected ? colors.primary : colors.card,
+                    borderColor: isSelected ? colors.primary : colors.border,
+                  },
+                ]}
+                onPress={() => setSelectedCarType(type)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.carTypeChipEmoji}>{type.emoji}</Text>
+                <Text style={[
+                  styles.carTypeChipText,
+                  { color: isSelected ? '#FFFFFF' : colors.text }
+                ]}>
+                  {type.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* Car Details */}
+      <View style={styles.carDetailsSection}>
+        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>ДЕТАЛИ</Text>
+        
+        <View style={styles.inputsContainer}>
+          <TouchableOpacity
+            style={[styles.inputBox, { backgroundColor: colors.inputBackground }]}
+            onPress={() => setShowBrandModal(true)}
+            activeOpacity={0.7}
+          >
+            <Icon name="directions-car" size={20} color={carBrand ? colors.primary : colors.textTertiary} />
+            <Text style={[
+              styles.inputBoxText,
+              { color: carBrand ? colors.text : colors.placeholder }
+            ]}>
+              {carBrand || 'Марка'}
+            </Text>
+          </TouchableOpacity>
+
+          {carBrand && (
+            <TouchableOpacity
+              style={[styles.inputBox, { backgroundColor: colors.inputBackground }]}
+              onPress={() => fetchCarModels(carBrand)}
+              activeOpacity={0.7}
+            >
+              <Icon name="build" size={20} color={carModel ? colors.primary : colors.textTertiary} />
+              <Text style={[
+                styles.inputBoxText,
+                { color: carModel ? colors.text : colors.placeholder }
+              ]}>
+                {carModel || 'Модель'}
               </Text>
-              <View style={styles.timeSlotsGrid}>
-                {slots.map((time) => (
-                  <TouchableOpacity
-                    key={time}
-                    style={[
-                      styles.timeSlot,
-                      {
-                        backgroundColor: selectedTime === time ? COLORS.primary : COLORS.elevated,
-                        borderColor: selectedTime === time ? COLORS.primary : COLORS.separator,
-                      },
-                    ]}
-                    onPress={() => setSelectedTime(time)}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.timeSlotText,
-                        { color: selectedTime === time ? COLORS.elevated : COLORS.text }
-                      ]}
-                    >
-                      {time}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          ))}
+            </TouchableOpacity>
+          )}
+
+          <View style={[styles.inputBox, { backgroundColor: colors.inputBackground }]}>
+            <Icon name="confirmation-number" size={20} color={licensePlate ? colors.primary : colors.textTertiary} />
+            <TextInput
+              style={[styles.inputBoxInput, { color: colors.text }]}
+              placeholder="А123АА777"
+              placeholderTextColor={colors.placeholder}
+              value={licensePlate}
+              onChangeText={(text) => setLicensePlate(validateLicensePlate(text))}
+              maxLength={9}
+              autoCapitalize="characters"
+            />
+          </View>
+        </View>
+      </View>
+    </Animated.View>
+  );
+
+  // Date/time step - Calendar style
+  const renderDateTimeStep = () => (
+    <Animated.View style={[styles.stepContainer, {
+      opacity: fadeAnim,
+      transform: [{ translateY: slideAnim }],
+    }]}>
+      <Text style={[styles.stepQuestion, { color: colors.text }]}>
+        Когда вам удобно?
+      </Text>
+      
+      {/* Date Selector */}
+      <View style={styles.dateSection}>
+        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>ДАТА</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.datesScrollHorizontal}
+        >
+          {generateDays().map((date, index) => {
+            const isSelected = selectedDate?.toDateString() === date.toDateString();
+            const isToday = index === 0;
+            return (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.dateChip,
+                  {
+                    backgroundColor: isSelected ? colors.primary : colors.card,
+                    borderColor: isSelected ? colors.primary : (isToday ? colors.border : 'transparent'),
+                  },
+                ]}
+                onPress={() => setSelectedDate(date)}
+                activeOpacity={0.7}
+              >
+                {isToday && !isSelected && (
+                  <View style={[styles.todayDot, { backgroundColor: colors.warning }]} />
+                )}
+                <Text style={[
+                  styles.dateChipWeekday,
+                  { color: isSelected ? 'rgba(255,255,255,0.8)' : colors.textTertiary }
+                ]}>
+                  {date.toLocaleDateString('ru-RU', { weekday: 'short' }).toUpperCase()}
+                </Text>
+                <Text style={[
+                  styles.dateChipDay,
+                  { color: isSelected ? '#FFFFFF' : colors.text }
+                ]}>
+                  {date.getDate()}
+                </Text>
+                <Text style={[
+                  styles.dateChipMonth,
+                  { color: isSelected ? 'rgba(255,255,255,0.7)' : colors.textSecondary }
+                ]}>
+                  {date.toLocaleDateString('ru-RU', { month: 'short' })}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* Time Selector */}
+      {selectedDate && (
+        <View style={styles.timeSection}>
+          <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>ВРЕМЯ</Text>
+          <View style={styles.timeSlotsWrap}>
+            {timeSlots.map((time) => {
+              const isSelected = selectedTime === time;
+              return (
+                <TouchableOpacity
+                  key={time}
+                  style={[
+                    styles.timeChip,
+                    {
+                      backgroundColor: isSelected ? colors.primary : colors.card,
+                    },
+                  ]}
+                  onPress={() => setSelectedTime(time)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[
+                    styles.timeChipText,
+                    { color: isSelected ? '#FFFFFF' : colors.text }
+                  ]}>
+                    {time}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
       )}
     </Animated.View>
@@ -646,53 +600,61 @@ const ServiceBookingFlow = ({ navigation, route }) => {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: COLORS.background }]}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} />
       
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: COLORS.background }]}>
-        <View style={styles.headerContent}>>
-          <TouchableOpacity
-            style={[styles.headerButton, { backgroundColor: COLORS.elevated }]}
-            onPress={currentStep === 0 ? () => navigation.goBack() : goToPreviousStep}
-            activeOpacity={0.7}
-          >
-            <Icon name="arrow-back" size={24} color={COLORS.text} />
-          </TouchableOpacity>
-          
-          <View style={styles.headerTitleContainer}>
-            <Text style={[styles.headerTitle, { color: COLORS.text }]}>Запись на сервис</Text>
-            <Text style={[styles.headerSubtitle, { color: COLORS.textSecondary }]}>
-              Шаг {currentStep + 1} из 4
-            </Text>
-          </View>
-          
-          <TouchableOpacity
-            style={[styles.headerButton, { backgroundColor: COLORS.elevated }]}
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.7}
-          >
-            <Icon name="close" size={24} color={COLORS.text} />
-          </TouchableOpacity>
+      {/* Compact Header */}
+      <View style={[styles.header, { backgroundColor: colors.background }]}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={currentStep === 0 ? () => navigation.goBack() : goToPreviousStep}
+          activeOpacity={0.7}
+        >
+          <Icon name="arrow-back" size={24} color={colors.text} />
+        </TouchableOpacity>
+        
+        {/* Step Indicators */}
+        <View style={styles.stepIndicators}>
+          {stepTitles.map((title, index) => (
+            <View key={index} style={styles.stepIndicatorItem}>
+              <View style={[
+                styles.stepDot,
+                {
+                  backgroundColor: index === currentStep ? colors.primary : 
+                                 index < currentStep ? colors.success : colors.border,
+                }
+              ]}>
+                {index < currentStep ? (
+                  <Icon name="check" size={12} color="#FFFFFF" />
+                ) : (
+                  <Text style={[
+                    styles.stepDotText,
+                    { color: index === currentStep ? '#FFFFFF' : colors.textTertiary }
+                  ]}>
+                    {index + 1}
+                  </Text>
+                )}
+              </View>
+              <Text style={[
+                styles.stepIndicatorLabel,
+                { 
+                  color: index === currentStep ? colors.text : colors.textTertiary,
+                  fontWeight: index === currentStep ? '600' : '400',
+                }
+              ]}>
+                {title}
+              </Text>
+            </View>
+          ))}
         </View>
         
-        {/* Progress */}
-        <View style={styles.progressContainer}>
-          <View style={[styles.progressBar, { backgroundColor: COLORS.separator }]}>
-            <Animated.View
-              style={[
-                styles.progressFill,
-                {
-                  backgroundColor: COLORS.primary,
-                  width: progressAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ['0%', '100%'],
-                  }),
-                },
-              ]}
-            />
-          </View>
-        </View>
+        <TouchableOpacity
+          style={styles.closeButton}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}
+        >
+          <Icon name="close" size={24} color={colors.text} />
+        </TouchableOpacity>
       </View>
 
       {/* Content */}
@@ -709,29 +671,27 @@ const ServiceBookingFlow = ({ navigation, route }) => {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Bottom Action */}
-      <View style={[styles.bottomContainer, { backgroundColor: COLORS.background }]}>
-        <Animated.View style={{ transform: [{ scale: buttonScaleAnim }] }}>
-          <TouchableOpacity
-            style={[
-              styles.continueButton,
-              {
-                backgroundColor: canProceed() ? COLORS.primary : COLORS.separator,
-                opacity: canProceed() ? 1 : 0.5,
-              },
-            ]}
-            onPress={currentStep === STEPS.DATETIME ? handleSubmit : goToNextStep}
-            disabled={!canProceed()}
-            activeOpacity={0.8}
-          >
-            <Text style={[
-              styles.continueButtonText,
-              { color: canProceed() ? '#FFFFFF' : COLORS.textSecondary }
-            ]}>
-              {currentStep === STEPS.DATETIME ? 'Записаться' : 'Продолжить'}
-            </Text>
-          </TouchableOpacity>
-        </Animated.View>
+      {/* Bottom Fixed Button */}
+      <View style={[styles.bottomBar, { 
+        backgroundColor: colors.background,
+        borderTopColor: colors.border,
+      }]}>
+        <TouchableOpacity
+          style={[
+            styles.mainButton, 
+            { 
+              backgroundColor: canProceed() ? colors.primary : colors.buttonDisabled,
+            }
+          ]}
+          onPress={currentStep === STEPS.DATETIME ? handleSubmit : goToNextStep}
+          disabled={!canProceed()}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.mainButtonText}>
+            {currentStep === STEPS.DATETIME ? 'Записаться' : 'Продолжить'}
+          </Text>
+          <Icon name={currentStep === STEPS.DATETIME ? 'check' : 'arrow-forward'} size={20} color="#FFFFFF" />
+        </TouchableOpacity>
       </View>
 
       {/* Brand Modal */}
@@ -741,32 +701,34 @@ const ServiceBookingFlow = ({ navigation, route }) => {
         transparent={true}
         onRequestClose={() => setShowBrandModal(false)}
       >
-        <View style={[styles.modalOverlay, { backgroundColor: COLORS.modalOverlay }]}>
-          <View style={[styles.modalContent, { backgroundColor: COLORS.elevated }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: COLORS.text }]}>Выберите марку</Text>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
+          <View style={[styles.modalSheet, { backgroundColor: colors.card }]}>
+            <View style={styles.modalHandle} />
+            
+            <View style={styles.modalHeaderBar}>
+              <Text style={[styles.modalTitleText, { color: colors.text }]}>Марка автомобиля</Text>
               <TouchableOpacity
-                style={[styles.modalCloseButton, { backgroundColor: COLORS.inputBackground }]}
+                style={[styles.modalCloseBtn, { backgroundColor: colors.surface }]}
                 onPress={() => setShowBrandModal(false)}
                 activeOpacity={0.7}
               >
-                <Icon name="close" size={20} color={COLORS.text} />
+                <Icon name="close" size={18} color={colors.text} />
               </TouchableOpacity>
             </View>
             
-            <View style={[styles.searchContainer, { backgroundColor: COLORS.inputBackground }]}>
-              <Icon name="search" size={20} color={COLORS.textSecondary} />
+            <View style={[styles.modalSearchBox, { backgroundColor: colors.inputBackground }]}>
+              <Icon name="search" size={18} color={colors.textTertiary} />
               <TextInput
-                style={[styles.searchInput, { color: COLORS.text }]}
-                placeholder="Поиск марки..."
-                placeholderTextColor={COLORS.textSecondary}
+                style={[styles.modalSearchInput, { color: colors.text }]}
+                placeholder="Поиск..."
+                placeholderTextColor={colors.placeholder}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
               />
             </View>
             
             {loadingBrands ? (
-              <ActivityIndicator size="large" color={COLORS.primary} style={styles.modalLoader} />
+              <ActivityIndicator size="large" color={colors.primary} style={styles.modalLoading} />
             ) : (
               <FlatList
                 data={carBrands.filter(brand => 
@@ -775,7 +737,7 @@ const ServiceBookingFlow = ({ navigation, route }) => {
                 keyExtractor={(item) => item}
                 renderItem={({ item }) => (
                   <TouchableOpacity
-                    style={[styles.modalItem, { backgroundColor: COLORS.elevated }]}
+                    style={styles.modalListItem}
                     onPress={() => {
                       setCarBrand(item);
                       setCarModel(null);
@@ -784,12 +746,12 @@ const ServiceBookingFlow = ({ navigation, route }) => {
                     }}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.modalItemText, { color: COLORS.text }]}>{item}</Text>
-                    <Icon name="chevron-right" size={20} color={COLORS.textSecondary} />
+                    <Text style={[styles.modalListItemText, { color: colors.text }]}>{item}</Text>
+                    <Icon name="chevron-right" size={18} color={colors.textTertiary} />
                   </TouchableOpacity>
                 )}
                 ItemSeparatorComponent={() => (
-                  <View style={[styles.modalSeparator, { backgroundColor: COLORS.separator }]} />
+                  <View style={[styles.modalDivider, { backgroundColor: colors.divider }]} />
                 )}
               />
             )}
@@ -804,40 +766,42 @@ const ServiceBookingFlow = ({ navigation, route }) => {
         transparent={true}
         onRequestClose={() => setShowModelModal(false)}
       >
-        <View style={[styles.modalOverlay, { backgroundColor: COLORS.modalOverlay }]}>
-          <View style={[styles.modalContent, { backgroundColor: COLORS.elevated }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: COLORS.text }]}>Выберите модель</Text>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
+          <View style={[styles.modalSheet, { backgroundColor: colors.card }]}>
+            <View style={styles.modalHandle} />
+            
+            <View style={styles.modalHeaderBar}>
+              <Text style={[styles.modalTitleText, { color: colors.text }]}>Модель автомобиля</Text>
               <TouchableOpacity
-                style={[styles.modalCloseButton, { backgroundColor: COLORS.inputBackground }]}
+                style={[styles.modalCloseBtn, { backgroundColor: colors.surface }]}
                 onPress={() => setShowModelModal(false)}
                 activeOpacity={0.7}
               >
-                <Icon name="close" size={20} color={COLORS.text} />
+                <Icon name="close" size={18} color={colors.text} />
               </TouchableOpacity>
             </View>
             
             {loadingModels ? (
-              <ActivityIndicator size="large" color={COLORS.primary} style={styles.modalLoader} />
+              <ActivityIndicator size="large" color={colors.primary} style={styles.modalLoading} />
             ) : (
               <FlatList
                 data={carModels}
                 keyExtractor={(item) => item}
                 renderItem={({ item }) => (
                   <TouchableOpacity
-                    style={[styles.modalItem, { backgroundColor: COLORS.elevated }]}
+                    style={styles.modalListItem}
                     onPress={() => {
                       setCarModel(item);
                       setShowModelModal(false);
                     }}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.modalItemText, { color: COLORS.text }]}>{item}</Text>
-                    <Icon name="chevron-right" size={20} color={COLORS.textSecondary} />
+                    <Text style={[styles.modalListItemText, { color: colors.text }]}>{item}</Text>
+                    <Icon name="chevron-right" size={18} color={colors.textTertiary} />
                   </TouchableOpacity>
                 )}
                 ItemSeparatorComponent={() => (
-                  <View style={[styles.modalSeparator, { backgroundColor: COLORS.separator }]} />
+                  <View style={[styles.modalDivider, { backgroundColor: colors.divider }]} />
                 )}
               />
             )}
@@ -852,415 +816,427 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  
+  // Compact Header
   header: {
-    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    paddingHorizontal: 20,
     paddingBottom: 16,
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 100,
-    borderBottomWidth: 0.5,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
-  },
-  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginBottom: 16,
   },
-  headerButton: {
+  backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerTitleContainer: {
+  closeButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+  
+  // Step Indicators
+  stepIndicators: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    paddingHorizontal: 12,
   },
-  headerSubtitle: {
-    fontSize: 13,
-    marginTop: 2,
+  stepIndicatorItem: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  stepDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepDotText: {
+    fontSize: 11,
+    fontWeight: '700',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  progressContainer: {
-    paddingHorizontal: 20,
+  stepIndicatorLabel: {
+    fontSize: 10,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  progressBar: {
-    height: 4,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 2,
-  },
+  
+  // Content
   content: {
     flex: 1,
-    marginTop: Platform.OS === 'ios' ? 120 : 100,
-    marginBottom: 100,
+    marginBottom: 80,
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 40,
+    paddingTop: 8,
   },
   stepContainer: {
     flex: 1,
-  },
-  stepTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 8,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
-  },
-  stepSubtitle: {
-    fontSize: 17,
-    marginBottom: 32,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 16,
-    marginTop: 24,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
-  },
-  // Service styles
-  servicesGrid: {
-    gap: 16,
-  },
-  serviceCard: {
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 2,
-    marginBottom: 4,
-  },
-  selectedServiceCard: {
-    transform: [{ scale: 0.98 }],
-  },
-  serviceIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  serviceContent: {
-    flex: 1,
-  },
-  serviceName: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 4,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
-  },
-  serviceDescription: {
-    fontSize: 15,
-    marginBottom: 16,
-    lineHeight: 20,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  serviceMetaRow: {
-    flexDirection: 'row',
-    gap: 20,
-  },
-  serviceMetaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  serviceMetaText: {
-    fontSize: 13,
-    fontWeight: '500',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  // Store styles
-  loader: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: 200,
-  },
-  storesScroll: {
-    paddingRight: 20,
-  },
-  storeCard: {
-    width: width * 0.8,
-    borderRadius: 16,
-    padding: 20,
-    marginRight: 16,
-    borderWidth: 2,
-  },
-  selectedStoreCard: {
-    transform: [{ scale: 0.98 }],
-  },
-  storeHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  storeIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  storeStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    gap: 6,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  storeName: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 4,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
-  },
-  storeAddress: {
-    fontSize: 15,
-    marginBottom: 16,
-    lineHeight: 20,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  storeMetaContainer: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  storeMetaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  storeMetaText: {
-    fontSize: 13,
-    fontWeight: '500',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  // Car styles
-  carTypesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 24,
-  },
-  carTypeCard: {
-    width: (width - 52) / 2,
-    borderRadius: 16,
-    paddingVertical: 20,
-    alignItems: 'center',
-    borderWidth: 2,
-  },
-  carTypeEmoji: {
-    fontSize: 32,
-    marginBottom: 8,
-  },
-  carTypeName: {
-    fontSize: 15,
-    fontWeight: '600',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  inputSection: {
-    gap: 12,
-  },
-  inputField: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 12,
-    padding: 16,
-    gap: 12,
-  },
-  inputFieldText: {
-    flex: 1,
-    fontSize: 17,
-    fontWeight: '500',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  textInput: {
-    flex: 1,
-    fontSize: 17,
-    fontWeight: '600',
-    letterSpacing: 1,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  // Date/time styles
-  datesScroll: {
-    paddingRight: 20,
-    marginBottom: 32,
-  },
-  dateCard: {
-    width: 80,
-    borderRadius: 16,
-    padding: 16,
-    marginRight: 12,
-    alignItems: 'center',
-    borderWidth: 2,
-  },
-  dateWeekday: {
-    fontSize: 13,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    marginBottom: 4,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  dateDay: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginVertical: 4,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
-  },
-  dateMonth: {
-    fontSize: 13,
-    fontWeight: '500',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  todayBadge: {
-    position: 'absolute',
-    top: -6,
-    right: -6,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  todayText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  timeSlotsContainer: {
     gap: 24,
   },
-  timePeriod: {
+  stepQuestion: {
+    fontSize: 28,
+    fontWeight: '800',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+    letterSpacing: -0.5,
+    marginBottom: 8,
+  },
+  
+  // Service Step - Horizontal Cards
+  servicesContainer: {
+    gap: 16,
+  },
+  serviceCardHorizontal: {
+    borderRadius: 16,
+    padding: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     gap: 12,
   },
-  timePeriodTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 4,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
-  },
-  timeSlotsGrid: {
+  serviceLeft: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  timeSlot: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 2,
-  },
-  timeSlotText: {
-    fontSize: 15,
-    fontWeight: '600',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  // Bottom action
-  bottomContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
-    borderTopWidth: 0.5,
-    borderTopColor: 'rgba(0,0,0,0.1)',
-  },
-  continueButton: {
-    borderRadius: 16,
-    paddingVertical: 16,
     alignItems: 'center',
-  },
-  continueButtonText: {
-    fontSize: 17,
-    fontWeight: '600',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  // Modal styles
-  modalOverlay: {
+    gap: 16,
     flex: 1,
-    justifyContent: 'flex-end',
   },
-  modalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: height * 0.8,
-    paddingTop: 16,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+  serviceEmoji: {
+    fontSize: 36,
   },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginBottom: 16,
+  serviceTextContainer: {
+    flex: 1,
+    gap: 4,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '600',
+  serviceNameHorizontal: {
+    fontSize: 18,
+    fontWeight: '700',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
-  modalCloseButton: {
+  serviceDescriptionHorizontal: {
+    fontSize: 14,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  serviceCheckmark: {
     width: 32,
     height: 32,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  searchContainer: {
+  
+  // Store Step - Vertical List
+  loaderCenter: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 200,
+  },
+  storesContainer: {
+    gap: 12,
+  },
+  storeCardVertical: {
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 2,
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 20,
-    marginBottom: 16,
+    justifyContent: 'space-between',
+  },
+  storeMainInfo: {
+    flex: 1,
+    gap: 10,
+  },
+  storeNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  storeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  storeNameContainer: {
+    flex: 1,
+    gap: 4,
+  },
+  storeNameVertical: {
+    fontSize: 16,
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+  },
+  statusBadgeSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    gap: 4,
+  },
+  statusDotSmall: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  statusTextSmall: {
+    fontSize: 11,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  storeAddressVertical: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+    marginLeft: 52,
+  },
+  storeMetaRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginLeft: 52,
+  },
+  storeMetaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  storeMetaTextVertical: {
+    fontSize: 12,
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  checkmarkCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  
+  // Car Step - Compact Form
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    marginBottom: 12,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  carTypeSection: {
+    gap: 12,
+  },
+  carTypesScroll: {
+    gap: 10,
+  },
+  carTypeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 12,
-    gap: 12,
+    gap: 8,
+    borderWidth: 2,
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 17,
+  carTypeChipEmoji: {
+    fontSize: 20,
+  },
+  carTypeChipText: {
+    fontSize: 15,
+    fontWeight: '600',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  modalLoader: {
-    marginTop: 40,
+  carDetailsSection: {
+    gap: 12,
   },
-  modalItem: {
+  inputsContainer: {
+    gap: 10,
+  },
+  inputBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 12,
+  },
+  inputBoxText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  inputBoxInput: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  
+  // Date/Time Step
+  dateSection: {
+    gap: 12,
+  },
+  datesScrollHorizontal: {
+    gap: 10,
+  },
+  dateChip: {
+    width: 60,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 2,
+    position: 'relative',
+  },
+  todayDot: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  dateChipWeekday: {
+    fontSize: 10,
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  dateChipDay: {
+    fontSize: 20,
+    fontWeight: '800',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+  },
+  dateChipMonth: {
+    fontSize: 11,
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  timeSection: {
+    gap: 12,
+  },
+  timeSlotsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  timeChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  timeChipText: {
+    fontSize: 15,
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  
+  // Bottom Bar
+  bottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    borderTopWidth: 1,
+  },
+  mainButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 14,
+    gap: 8,
+  },
+  mainButtonText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: height * 0.75,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+  },
+  modalHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 20,
+  },
+  modalHeaderBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    marginBottom: 16,
   },
-  modalItemText: {
-    fontSize: 17,
+  modalTitleText: {
+    fontSize: 20,
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+  },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalSearchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 10,
+  },
+  modalSearchInput: {
+    flex: 1,
+    fontSize: 16,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  modalSeparator: {
+  modalLoading: {
+    marginTop: 40,
+  },
+  modalListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
+  modalListItemText: {
+    fontSize: 16,
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  modalDivider: {
     height: 0.5,
     marginLeft: 20,
   },

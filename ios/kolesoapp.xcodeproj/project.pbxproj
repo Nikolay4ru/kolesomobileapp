@@ -280,7 +280,7 @@
 				CODE_SIGN_ENTITLEMENTS = kolesoapp/kolesoapp.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 52;
+				CURRENT_PROJECT_VERSION = 57;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = NLC7F4RZS6;
 				ENABLE_BITCODE = NO;
@@ -298,7 +298,7 @@
 					"$(PROJECT_DIR)/ClickstreamAnalytics.xcframework/ios-arm64/ClickstreamAnalytics.framework",
 				);
 				MARKETING_VERSION = 1.0;
-				ONLY_ACTIVE_ARCH = NO;
+				ONLY_ACTIVE_ARCH = YES;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -323,7 +323,7 @@
 				CODE_SIGN_ENTITLEMENTS = kolesoapp/kolesoappRelease.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 52;
+				CURRENT_PROJECT_VERSION = 57;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = NLC7F4RZS6;
 				INFOPLIST_FILE = kolesoapp/Info.plist;

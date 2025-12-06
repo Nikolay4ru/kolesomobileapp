@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,9 @@ import {
   StatusBar,
   Platform,
 } from 'react-native';
-import { useNavigation } from "@react-navigation/native";
+
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+
 import { observer } from 'mobx-react-lite';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -35,6 +37,21 @@ const HomeScreen = observer(() => {
 
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState(null);
+
+
+const [loyaltyData, setLoyaltyData] = useState({
+  balance: 0,
+  earned: 0,
+  used: 0,
+  expiringPoints: 0,
+  expiringDate: null,
+  cached: false,
+  cacheAge: 0
+});
+const [isLoadingLoyalty, setIsLoadingLoyalty] = useState(false);
+const [loyaltyError, setLoyaltyError] = useState(null);
+
+
 
 
   const [activeSlide, setActiveSlide] = useState(0);
@@ -112,6 +129,94 @@ useEffect(() => {
   
   fetchOrders();
 }, [authStore.isLoggedIn, authStore.token]);
+
+
+
+// Загрузка баланса баллов из 1С
+const fetchLoyaltyBalance = useCallback(async (forceSync = false) => {
+  if (!authStore.isLoggedIn) return;
+  
+  setIsLoadingLoyalty(true);
+  setLoyaltyError(null);
+  
+  try {
+    let data;
+    
+    if (forceSync) {
+      // Принудительная синхронизация с 1С (без кэша)
+      data = await authStore.syncLoyaltyBalance();
+    } else {
+      // Обычная загрузка (с кэшем)
+      data = await authStore.fetchLoyaltyPoints(true);
+    }
+    
+    if (data && data.success) {
+      setLoyaltyData({
+        balance: data.balance || 0,
+        earned: data.earned || 0,
+        used: data.used || 0,
+        expiringPoints: data.expiring_points || 0,
+        expiringDate: data.expiring_date,
+        cached: data.cached || false,
+        cacheAge: data.cache_age || 0
+      });
+    }
+  } catch (error) {
+    console.error('Failed to fetch loyalty balance:', error);
+    setLoyaltyError('Не удалось загрузить баланс баллов');
+    
+    // Показываем данные из authStore если они есть
+    if (authStore.user?.loyaltyPoints !== undefined) {
+      setLoyaltyData({
+        balance: authStore.user.loyaltyPoints || 0,
+        earned: authStore.user.earnedPoints || 0,
+        used: authStore.user.usedPoints || 0,
+        expiringPoints: authStore.user.expiringPoints || 0,
+        expiringDate: authStore.user.expiringDate,
+        cached: true,
+        cacheAge: 999999
+      });
+    }
+  } finally {
+    setIsLoadingLoyalty(false);
+  }
+}, [authStore]);
+
+
+  // Загрузка данных при фокусе экрана
+useFocusEffect(
+  useCallback(() => {
+    if (authStore.isLoggedIn) {
+      // Загружаем баланс с использованием кэша
+      fetchLoyaltyBalance(false);
+    }
+  }, [authStore.isLoggedIn, fetchLoyaltyBalance])
+);
+
+
+
+// Обработчик обновления (pull to refresh)
+const onRefresh = useCallback(async () => {
+  setRefreshing(true);
+  
+  try {
+    // При pull-to-refresh принудительно синхронизируем с 1С
+    await fetchLoyaltyBalance(true);
+    
+    // Также обновляем другие данные на экране
+    // await loadOtherData();
+  } catch (error) {
+    console.error('Refresh error:', error);
+  } finally {
+    setRefreshing(false);
+  }
+}, [fetchLoyaltyBalance]);
+
+// Форматирование чисел с разделителями
+const formatNumber = (num) => {
+  if (!num) return '0';
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+};
 
 
 // Получение конфигурации статуса заказа
@@ -443,37 +548,93 @@ const renderSlide = ({ item }) => (
 )}
 
 
+{/* Loyalty Card - отображается только для авторизованных пользователей */}
+{authStore.isLoggedIn && (
   <TouchableOpacity 
-          style={styles.loyaltyCard} 
-          activeOpacity={0.95}
-          onPress={() => navigation.navigate('LoyaltyCard')}
-        >
-          <View style={styles.loyaltyHeader}>
+    style={[
+      styles.loyaltyCard,
+      { 
+        backgroundColor: theme === 'dark' ? colors.primary : '#81b4b5'
+      }
+    ]}
+    activeOpacity={0.95}
+    onPress={() => navigation.navigate('LoyaltyCard')}
+  >
+    <View style={styles.loyaltyHeader}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.loyaltyTitle}>Ваша карта лояльности</Text>
+        
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 4 }}>
+          {isLoadingLoyalty ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : loyaltyError ? (
             <View>
-              <Text style={styles.loyaltyTitle}>Ваша карта лояльности</Text>
-              <Text style={[styles.loyaltyStatValue, { fontSize: 20, marginTop: 4 }]}>12 450 <Text style={styles.loyaltyStatLabel}>баллов</Text></Text>
+              <Text style={[styles.loyaltyErrorText]}>
+                Ошибка загрузки
+              </Text>
+              <TouchableOpacity onPress={() => fetchLoyaltyBalance(true)}>
+                <Text style={[styles.loyaltyRetryText]}>
+                  Повторить
+                </Text>
+              </TouchableOpacity>
             </View>
-            <View style={styles.loyaltyButton}>
-              <Ionicons name="qr-code" size={24} color="#FFFFFF" />
-            </View>
+          ) : (
+            <>
+              <Text style={[styles.loyaltyStatValue, { fontSize: 28, marginRight: 8 }]}>
+                {formatNumber(loyaltyData.balance)}
+              </Text>
+              <Text style={styles.loyaltyStatLabel}>баллов</Text>
+            </>
+          )}
+        </View>
+        
+        {/* Индикатор кэша */}
+        {loyaltyData.cached && !isLoadingLoyalty && (
+          <View style={styles.cacheIndicator}>
+            <Ionicons name="time-outline" size={12} color="rgba(255,255,255,0.6)" />
+            <Text style={styles.cacheText}>
+              Обновлено {Math.floor(loyaltyData.cacheAge / 60)} мин назад
+            </Text>
           </View>
-          <View style={styles.loyaltyStats}>
-            <View style={styles.loyaltyStat}>
-              <Text style={styles.loyaltyStatValue}>3%</Text>
-              <Text style={styles.loyaltyStatLabel}>Оплата баллами</Text>
-            </View>
-            <View style={styles.loyaltyStatDivider} />
-            <View style={styles.loyaltyStat}>
-              <Text style={styles.loyaltyStatValue}>500</Text>
-              <Text style={styles.loyaltyStatLabel}>Приветственные баллы</Text>
-            </View>
-            <View style={styles.loyaltyStatDivider} />
-            <View style={styles.loyaltyStat}>
-              <Text style={styles.loyaltyStatValue}>-30%</Text>
-              <Text style={styles.loyaltyStatLabel}>на шиномонтаж</Text>
-            </View>
-          </View>
-        </TouchableOpacity>
+        )}
+        
+        {/* Предупреждение об истекающих баллах */}
+        {loyaltyData.expiringPoints > 0 && loyaltyData.expiringDate && (
+          <Text style={styles.expiringText}>
+            {formatNumber(loyaltyData.expiringPoints)} баллов сгорят до{' '}
+            {new Date(loyaltyData.expiringDate).toLocaleDateString('ru-RU')}
+          </Text>
+        )}
+      </View>
+      
+      <View style={styles.loyaltyButton}>
+        <Ionicons name="qr-code" size={24} color="#FFFFFF" />
+      </View>
+    </View>
+
+    <View style={styles.loyaltyStats}>
+      <View style={styles.loyaltyStat}>
+        <Text style={styles.loyaltyStatValue}>
+          {formatNumber(loyaltyData.earned)}
+        </Text>
+        <Text style={styles.loyaltyStatLabel}>Заработано</Text>
+      </View>
+      <View style={styles.loyaltyStatDivider} />
+      <View style={styles.loyaltyStat}>
+        <Text style={styles.loyaltyStatValue}>
+          {formatNumber(loyaltyData.used)}
+        </Text>
+        <Text style={styles.loyaltyStatLabel}>Потрачено</Text>
+      </View>
+      <View style={styles.loyaltyStatDivider} />
+      <View style={styles.loyaltyStat}>
+        <Text style={styles.loyaltyStatValue}>3%</Text>
+        <Text style={styles.loyaltyStatLabel}>Кешбэк</Text>
+      </View>
+    </View>
+  </TouchableOpacity>
+)}
+
 
 
          {/* User Booking Card */}
@@ -1339,6 +1500,35 @@ paginationDotActive: {
   infoCardText: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.8)',
+  },
+
+// Loyalty Card Specific
+  loyaltyErrorText: {
+    fontSize: 14,
+    color: '#FF6B6B',
+    fontWeight: '500',
+  },
+  loyaltyRetryText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    textDecorationLine: 'underline',
+    marginTop: 4,
+  },
+  cacheIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 4,
+  },
+  cacheText: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.6)',
+  },
+  expiringText: {
+    fontSize: 11,
+    color: '#FFD700',
+    fontWeight: '500',
+    marginTop: 4,
   },
   
   // Others

@@ -806,7 +806,7 @@ const handleAddRelatedProducts = async (relatedProducts) => {
 
   return (
     // statusBarHeight
-    <View style={[styles.container,]}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <CustomHeader 
         title=""
         navigation={navigation}
@@ -1459,7 +1459,7 @@ const handleAddRelatedProducts = async (relatedProducts) => {
       
 
   
-    </View>
+    </SafeAreaView>
   );
 });
 
