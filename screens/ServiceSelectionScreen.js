@@ -47,6 +47,7 @@ const ServiceBookingFlow = ({ navigation, route }) => {
   const [carModel, setCarModel] = useState(null);
   const [licensePlate, setLicensePlate] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [userLocation, setUserLocation] = useState(null);
 
   const [carBrands, setCarBrands] = useState([]);
   const [carModels, setCarModels] = useState([]);
@@ -55,17 +56,58 @@ const ServiceBookingFlow = ({ navigation, route }) => {
   const [showBrandModal, setShowBrandModal] = useState(false);
   const [showModelModal, setShowModelModal] = useState(false);
 
+  // Time slots availability
+  const [timeSlotsByPeriod, setTimeSlotsByPeriod] = useState({
+    morning: [],
+    day: [],
+    evening: []
+  });
+  const [loadingTimeSlots, setLoadingTimeSlots] = useState(false);
+
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
-  // Load car brands
+  // Get user geolocation
+  useEffect(() => {
+    const getUserLocation = async () => {
+      try {
+        // Request permission and get location
+        // Implementation depends on your geolocation library
+        // Example: using @react-native-community/geolocation
+        const position = {
+          latitude: 59.9311, // Default to St. Petersburg
+          longitude: 30.3609
+        };
+        setUserLocation(position);
+      } catch (error) {
+        console.error('Error getting location:', error);
+      }
+    };
+    getUserLocation();
+  }, []);
+
+  // Calculate distance between two coordinates
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371; // Earth's radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
+  // Load car brands from 1C
   useEffect(() => {
     const fetchCarBrands = async () => {
       try {
         setLoadingBrands(true);
         const response = await fetch('https://api.koleso.app/api/car-brands.php');
         const data = await response.json();
+        // Assuming 1C returns array of {name, id} objects
         setCarBrands(data);
         setLoadingBrands(false);
       } catch (error) {
@@ -75,14 +117,16 @@ const ServiceBookingFlow = ({ navigation, route }) => {
     fetchCarBrands();
   }, []);
 
-  // Load car models
+  // Load car models from 1C
   const fetchCarModels = async (brand) => {
     setLoadingModels(true);
     setShowBrandModal(false);
     try {
       const response = await fetch(`https://api.koleso.app/api/car-models.php?brand=${encodeURIComponent(brand)}`);
       const data = await response.json();
+      // Assuming 1C returns array of {name, id, type} objects
       setCarModels(data);
+      
       setLoadingModels(false);
       setShowModelModal(true);
     } catch (error) {
@@ -114,18 +158,10 @@ const ServiceBookingFlow = ({ navigation, route }) => {
 
   // Car types
   const carTypes = [
-    { id: 1, name: 'Легковой', emoji: '🚗' },
-    { id: 2, name: 'Кроссовер', emoji: '🚙' },
-    { id: 3, name: 'Внедорожник', emoji: '🚐' },
-    { id: 4, name: 'Легкогрузовой', emoji: '🚚' },
-  ];
-
-  // Time slots
-  const timeSlots = [
-    '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
-    '15:00', '15:30', '16:00', '16:30', '17:00', '17:30',
-    '18:00', '18:30', '19:00', '19:30', '20:00', '20:30',
+    { id: 1, name: 'Легковой', emoji: '🚗', type: 'Легковой' },
+    { id: 2, name: 'Кроссовер', emoji: '🚙', type: 'Кроссовер' },
+    { id: 3, name: 'Внедорожник', emoji: '🚐', type: 'Внедорожники' },
+    { id: 4, name: 'Легкогрузовой', emoji: '🚚', type: 'Грузовой' },
   ];
 
   // Animations on step change
@@ -147,19 +183,33 @@ const ServiceBookingFlow = ({ navigation, route }) => {
     ]).start();
   }, [currentStep]);
 
-  // Load stores
+  // Load stores and sort by distance
   useEffect(() => {
     if (currentStep === STEPS.STORE) {
       fetchStores();
     }
-  }, [currentStep]);
+  }, [currentStep, userLocation]);
 
   const fetchStores = async () => {
     setLoading(true);
     try {
       const response = await fetch('https://api.koleso.app/api/stores_service.php');
       const data = await response.json();
-      const filteredStores = data.filter(store => store.id !== 8 && store.is_active === '1');
+      let filteredStores = data.filter(store => store.id !== 8 && store.is_active === '1');
+      
+      // Sort by distance if location available
+      if (userLocation) {
+        filteredStores = filteredStores.map(store => ({
+          ...store,
+          distance: calculateDistance(
+            userLocation.latitude,
+            userLocation.longitude,
+            parseFloat(store.latitude || 0),
+            parseFloat(store.longitude || 0)
+          )
+        })).sort((a, b) => a.distance - b.distance);
+      }
+      
       setStores(filteredStores);
     } catch (error) {
       setStores([]);
@@ -168,31 +218,69 @@ const ServiceBookingFlow = ({ navigation, route }) => {
     }
   };
 
-  // License plate validation
+  // Load time slots from 1C when date and store selected
+  useEffect(() => {
+    if (selectedDate && selectedStore && selectedCarType) {
+      fetchTimeSlots();
+    }
+  }, [selectedDate, selectedStore, selectedCarType]);
+
+  const fetchTimeSlots = async () => {
+    setLoadingTimeSlots(true);
+    try {
+      const dateStr = selectedDate.toISOString().split('T')[0].replace(/-/g, '');
+      const response = await fetch('https://api.koleso.app/api/1c_booking.php?ИмяМетода=dayData', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          day: dateStr,
+          store: selectedStore.id.toString(),
+          storage: selectedService?.id === 2,
+          autoType: selectedCarType?.id.toString()
+        })
+      });
+      
+      const data = await response.json();
+      if (data.status === 'success' && data.result.length > 0) {
+        setTimeSlotsByPeriod(data.result[0]);
+      }
+    } catch (error) {
+      console.error('Error loading time slots:', error);
+    } finally {
+      setLoadingTimeSlots(false);
+    }
+  };
+
+  // License plate validation - only allowed Cyrillic letters
   const validateLicensePlate = useCallback((text) => {
-    const allowedLetters = 'АВЕКМНОРСТУХавекмнорстухABEKMHOPCTYXabekmhopctyx';
+    const allowedLetters = 'АВЕКМНОРСТУХавекмнорстух';
     const allowedChars = allowedLetters + '0123456789';
     let filteredText = '';
+    
     for (let i = 0; i < text.length; i++) {
       if (allowedChars.includes(text[i])) {
         filteredText += text[i];
       }
     }
-    const latinToCyrillic = {
-      'A': 'А', 'B': 'В', 'E': 'Е', 'K': 'К', 'M': 'М',
-      'H': 'Н', 'O': 'О', 'P': 'Р', 'C': 'С', 'T': 'Т',
-      'Y': 'У', 'X': 'Х',
-      'a': 'а', 'b': 'в', 'e': 'е', 'k': 'к', 'm': 'м',
-      'h': 'н', 'o': 'о', 'p': 'р', 'c': 'с', 't': 'т',
-      'y': 'у', 'x': 'х'
-    };
-    let convertedText = '';
-    for (let i = 0; i < filteredText.length; i++) {
-      const char = filteredText[i];
-      convertedText += latinToCyrillic[char] || char;
-    }
-    return convertedText.toUpperCase();
+    
+    return filteredText.toUpperCase();
   }, []);
+
+  // Format license plate for display
+  const formatLicensePlate = (plate) => {
+    if (!plate) return '';
+    // Format: A 123 AA 77 (Russian format)
+    const cleaned = plate.replace(/\s/g, '');
+    if (cleaned.length === 0) return '';
+    
+    let formatted = '';
+    if (cleaned.length >= 1) formatted += cleaned[0];
+    if (cleaned.length >= 4) formatted += ' ' + cleaned.substring(1, 4);
+    if (cleaned.length >= 6) formatted += ' ' + cleaned.substring(4, 6);
+    if (cleaned.length >= 7) formatted += ' ' + cleaned.substring(6);
+    
+    return formatted;
+  };
 
   // Generate days
   const generateDays = () => {
@@ -235,6 +323,45 @@ const ServiceBookingFlow = ({ navigation, route }) => {
       alert('Запись успешно создана!');
       navigation.goBack();
     }, 300);
+  };
+
+  // Render Russian license plate component
+  const RussianLicensePlate = ({ value, onChangeText }) => {
+    const [isFocused, setIsFocused] = useState(false);
+    
+    return (
+      <View style={styles.licensePlateContainer}>
+        <View style={[
+          styles.licensePlate,
+          { 
+            borderColor: isFocused ? colors.primary : colors.border,
+            backgroundColor: '#FFFFFF',
+          }
+        ]}>
+          <View style={styles.plateContent}>
+            <TextInput
+              style={[styles.plateInput, { color: '#000000' }]}
+              placeholder="А123АА777"
+              placeholderTextColor="rgba(0,0,0,0.3)"
+              value={value}
+              onChangeText={(text) => onChangeText(validateLicensePlate(text))}
+              maxLength={9}
+              autoCapitalize="characters"
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
+            />
+          </View>
+          <View style={styles.plateRegion}>
+            <Text style={styles.plateRegionCode}>RUS</Text>
+            <View style={styles.plateFlag}>
+              <View style={[styles.plateFlagStripe, { backgroundColor: '#FFFFFF' }]} />
+              <View style={[styles.plateFlagStripe, { backgroundColor: '#0039A6' }]} />
+              <View style={[styles.plateFlagStripe, { backgroundColor: '#D52B1E' }]} />
+            </View>
+          </View>
+        </View>
+      </View>
+    );
   };
 
   // Service step - Horizontal cards
@@ -292,7 +419,7 @@ const ServiceBookingFlow = ({ navigation, route }) => {
     </Animated.View>
   );
 
-  // Store step - Vertical list
+  // Store step - Sorted by distance
   const renderStoreStep = () => (
     <Animated.View style={[styles.stepContainer, {
       opacity: fadeAnim,
@@ -301,6 +428,12 @@ const ServiceBookingFlow = ({ navigation, route }) => {
       <Text style={[styles.stepQuestion, { color: colors.text }]}>
         Где вам удобнее?
       </Text>
+      
+      {userLocation && (
+        <Text style={[styles.locationHint, { color: colors.textSecondary }]}>
+          📍 Отсортировано по удаленности от вас
+        </Text>
+      )}
       
       {loading ? (
         <View style={styles.loaderCenter}>
@@ -352,12 +485,14 @@ const ServiceBookingFlow = ({ navigation, route }) => {
                         {store.working_hours || '9:00 - 21:00'}
                       </Text>
                     </View>
-                    <View style={styles.storeMetaBadge}>
-                      <Icon name="near-me" size={14} color={colors.primary} />
-                      <Text style={[styles.storeMetaTextVertical, { color: colors.primary }]}>
-                        2.5 км
-                      </Text>
-                    </View>
+                    {store.distance && (
+                      <View style={styles.storeMetaBadge}>
+                        <Icon name="near-me" size={14} color={colors.primary} />
+                        <Text style={[styles.storeMetaTextVertical, { color: colors.primary }]}>
+                          {store.distance.toFixed(1)} км
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 </View>
                 
@@ -374,7 +509,7 @@ const ServiceBookingFlow = ({ navigation, route }) => {
     </Animated.View>
   );
 
-  // Car step - Compact form
+  // Car step - With Russian license plate
   const renderCarStep = () => (
     <Animated.View style={[styles.stepContainer, {
       opacity: fadeAnim,
@@ -455,24 +590,16 @@ const ServiceBookingFlow = ({ navigation, route }) => {
             </TouchableOpacity>
           )}
 
-          <View style={[styles.inputBox, { backgroundColor: colors.inputBackground }]}>
-            <Icon name="confirmation-number" size={20} color={licensePlate ? colors.primary : colors.textTertiary} />
-            <TextInput
-              style={[styles.inputBoxInput, { color: colors.text }]}
-              placeholder="А123АА777"
-              placeholderTextColor={colors.placeholder}
-              value={licensePlate}
-              onChangeText={(text) => setLicensePlate(validateLicensePlate(text))}
-              maxLength={9}
-              autoCapitalize="characters"
-            />
-          </View>
+          <RussianLicensePlate 
+            value={licensePlate}
+            onChangeText={setLicensePlate}
+          />
         </View>
       </View>
     </Animated.View>
   );
 
-  // Date/time step - Calendar style
+  // Date/time step - With colored availability
   const renderDateTimeStep = () => (
     <Animated.View style={[styles.stepContainer, {
       opacity: fadeAnim,
@@ -533,35 +660,200 @@ const ServiceBookingFlow = ({ navigation, route }) => {
         </ScrollView>
       </View>
 
-      {/* Time Selector */}
+      {/* Time Selector with color-coded availability */}
       {selectedDate && (
         <View style={styles.timeSection}>
           <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>ВРЕМЯ</Text>
-          <View style={styles.timeSlotsWrap}>
-            {timeSlots.map((time) => {
-              const isSelected = selectedTime === time;
-              return (
-                <TouchableOpacity
-                  key={time}
-                  style={[
-                    styles.timeChip,
-                    {
-                      backgroundColor: isSelected ? colors.primary : colors.card,
-                    },
-                  ]}
-                  onPress={() => setSelectedTime(time)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[
-                    styles.timeChipText,
-                    { color: isSelected ? '#FFFFFF' : colors.text }
-                  ]}>
-                    {time}
+          
+          {loadingTimeSlots ? (
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 20 }} />
+          ) : (
+            <>
+              {/* Morning slots */}
+              {timeSlotsByPeriod.morning && timeSlotsByPeriod.morning.length > 0 && (
+                <View style={styles.timePeriodGroup}>
+                  <Text style={[styles.timePeriodLabel, { color: colors.textTertiary }]}>
+                    🌅 Утро
                   </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+                  <View style={styles.timeSlotsWrap}>
+                    {timeSlotsByPeriod.morning.map((slot) => {
+                      const isSelected = selectedTime === slot.time;
+                      const isAvailable = !slot.disable;
+                      const availabilityColor = isAvailable 
+                        ? 'rgba(76, 175, 80, 0.1)' // Light green
+                        : 'rgba(244, 67, 54, 0.1)'; // Light red
+                      const borderColor = isAvailable
+                        ? '#4CAF50' // Green
+                        : '#F44336'; // Red
+                      
+                      return (
+                        <TouchableOpacity
+                          key={slot.Id}
+                          style={[
+                            styles.timeChip,
+                            {
+                              backgroundColor: isSelected ? colors.primary : availabilityColor,
+                              borderWidth: 1.5,
+                              borderColor: isSelected ? colors.primary : borderColor,
+                            },
+                          ]}
+                          onPress={() => isAvailable && setSelectedTime(slot.time)}
+                          disabled={!isAvailable}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[
+                            styles.timeChipText,
+                            { 
+                              color: isSelected ? '#FFFFFF' : (isAvailable ? colors.text : colors.textTertiary),
+                              opacity: isAvailable ? 1 : 0.5,
+                            }
+                          ]}>
+                            {slot.time}
+                          </Text>
+                          {isAvailable && slot.count !== undefined && (
+                            <Text style={[
+                              styles.slotsAvailable,
+                              { color: isSelected ? 'rgba(255,255,255,0.7)' : colors.textTertiary }
+                            ]}>
+                              {slot.count}
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
+              {/* Day slots */}
+              {timeSlotsByPeriod.day && timeSlotsByPeriod.day.length > 0 && (
+                <View style={styles.timePeriodGroup}>
+                  <Text style={[styles.timePeriodLabel, { color: colors.textTertiary }]}>
+                    ☀️ День
+                  </Text>
+                  <View style={styles.timeSlotsWrap}>
+                    {timeSlotsByPeriod.day.map((slot) => {
+                      const isSelected = selectedTime === slot.time;
+                      const isAvailable = !slot.disable;
+                      const availabilityColor = isAvailable 
+                        ? 'rgba(76, 175, 80, 0.1)'
+                        : 'rgba(244, 67, 54, 0.1)';
+                      const borderColor = isAvailable
+                        ? '#4CAF50'
+                        : '#F44336';
+                      
+                      return (
+                        <TouchableOpacity
+                          key={slot.Id}
+                          style={[
+                            styles.timeChip,
+                            {
+                              backgroundColor: isSelected ? colors.primary : availabilityColor,
+                              borderWidth: 1.5,
+                              borderColor: isSelected ? colors.primary : borderColor,
+                            },
+                          ]}
+                          onPress={() => isAvailable && setSelectedTime(slot.time)}
+                          disabled={!isAvailable}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[
+                            styles.timeChipText,
+                            { 
+                              color: isSelected ? '#FFFFFF' : (isAvailable ? colors.text : colors.textTertiary),
+                              opacity: isAvailable ? 1 : 0.5,
+                            }
+                          ]}>
+                            {slot.time}
+                          </Text>
+                          {isAvailable && slot.count !== undefined && (
+                            <Text style={[
+                              styles.slotsAvailable,
+                              { color: isSelected ? 'rgba(255,255,255,0.7)' : colors.textTertiary }
+                            ]}>
+                              {slot.count}
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
+              {/* Evening slots */}
+              {timeSlotsByPeriod.evening && timeSlotsByPeriod.evening.length > 0 && (
+                <View style={styles.timePeriodGroup}>
+                  <Text style={[styles.timePeriodLabel, { color: colors.textTertiary }]}>
+                    🌙 Вечер
+                  </Text>
+                  <View style={styles.timeSlotsWrap}>
+                    {timeSlotsByPeriod.evening.map((slot) => {
+                      const isSelected = selectedTime === slot.time;
+                      const isAvailable = !slot.disable;
+                      const availabilityColor = isAvailable 
+                        ? 'rgba(76, 175, 80, 0.1)'
+                        : 'rgba(244, 67, 54, 0.1)';
+                      const borderColor = isAvailable
+                        ? '#4CAF50'
+                        : '#F44336';
+                      
+                      return (
+                        <TouchableOpacity
+                          key={slot.Id}
+                          style={[
+                            styles.timeChip,
+                            {
+                              backgroundColor: isSelected ? colors.primary : availabilityColor,
+                              borderWidth: 1.5,
+                              borderColor: isSelected ? colors.primary : borderColor,
+                            },
+                          ]}
+                          onPress={() => isAvailable && setSelectedTime(slot.time)}
+                          disabled={!isAvailable}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[
+                            styles.timeChipText,
+                            { 
+                              color: isSelected ? '#FFFFFF' : (isAvailable ? colors.text : colors.textTertiary),
+                              opacity: isAvailable ? 1 : 0.5,
+                            }
+                          ]}>
+                            {slot.time}
+                          </Text>
+                          {isAvailable && slot.count !== undefined && (
+                            <Text style={[
+                              styles.slotsAvailable,
+                              { color: isSelected ? 'rgba(255,255,255,0.7)' : colors.textTertiary }
+                            ]}>
+                              {slot.count}
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
+              {/* Legend */}
+              <View style={styles.availabilityLegend}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#4CAF50' }]} />
+                  <Text style={[styles.legendText, { color: colors.textSecondary }]}>
+                    Свободно
+                  </Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#F44336' }]} />
+                  <Text style={[styles.legendText, { color: colors.textSecondary }]}>
+                    Занято
+                  </Text>
+                </View>
+              </View>
+            </>
+          )}
         </View>
       )}
     </Animated.View>
@@ -731,25 +1023,27 @@ const ServiceBookingFlow = ({ navigation, route }) => {
               <ActivityIndicator size="large" color={colors.primary} style={styles.modalLoading} />
             ) : (
               <FlatList
-                data={carBrands.filter(brand => 
-                  brand.toLowerCase().includes(searchQuery.toLowerCase())
-                )}
-                keyExtractor={(item) => item}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.modalListItem}
-                    onPress={() => {
-                      setCarBrand(item);
-                      setCarModel(null);
-                      setShowBrandModal(false);
-                      setSearchQuery('');
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.modalListItemText, { color: colors.text }]}>{item}</Text>
-                    <Icon name="chevron-right" size={18} color={colors.textTertiary} />
-                  </TouchableOpacity>
-                )}
+  data={carBrands.filter(brand => 
+    brand?.name?.toLowerCase().includes(searchQuery.toLowerCase())
+  )}
+  keyExtractor={(item) => item?.id?.toString() || Math.random().toString()}
+  renderItem={({ item }) => (
+    <TouchableOpacity
+      style={styles.modalListItem}
+      onPress={() => {
+        setCarBrand(item.name);
+        setCarModel(null);
+        setShowBrandModal(false);
+        setSearchQuery('');
+      }}
+      activeOpacity={0.7}
+    >
+      <Text style={[styles.modalListItemText, { color: colors.text }]}>
+        {item.name || 'Unknown'}
+      </Text>
+      <Icon name="chevron-right" size={18} color={colors.textTertiary} />
+    </TouchableOpacity>
+  )}
                 ItemSeparatorComponent={() => (
                   <View style={[styles.modalDivider, { backgroundColor: colors.divider }]} />
                 )}
@@ -786,17 +1080,29 @@ const ServiceBookingFlow = ({ navigation, route }) => {
             ) : (
               <FlatList
                 data={carModels}
-                keyExtractor={(item) => item}
+                keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={styles.modalListItem}
                     onPress={() => {
-                      setCarModel(item);
+                      setCarModel(item.name);
+                      // Auto-select car type based on model type from 1C
+                      const matchingType = carTypes.find(t => t.type === item.type);
+                      if (matchingType) {
+                        setSelectedCarType(matchingType);
+                      }
                       setShowModelModal(false);
                     }}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.modalListItemText, { color: colors.text }]}>{item}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.modalListItemText, { color: colors.text }]}>{item.name}</Text>
+                      {item.type && (
+                        <Text style={[styles.modelTypeLabel, { color: colors.textSecondary }]}>
+                          {item.type}
+                        </Text>
+                      )}
+                    </View>
                     <Icon name="chevron-right" size={18} color={colors.textTertiary} />
                   </TouchableOpacity>
                 )}
@@ -891,7 +1197,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   
-  // Service Step - Horizontal Cards
+  locationHint: {
+    fontSize: 13,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+    marginBottom: 8,
+    fontStyle: 'italic',
+  },
+
+  // Service Step
   servicesContainer: {
     gap: 16,
   },
@@ -933,7 +1246,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   
-  // Store Step - Vertical List
+  // Store Step
   loaderCenter: {
     flex: 1,
     justifyContent: 'center',
@@ -1024,7 +1337,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   
-  // Car Step - Compact Form
+  // Car Step
   inputLabel: {
     fontSize: 12,
     fontWeight: '600',
@@ -1075,11 +1388,53 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  inputBoxInput: {
+  
+  // Russian License Plate (inspired by nomerogram.ru)
+  licensePlateContainer: {
+    marginTop: 4,
+  },
+  licensePlate: {
+    borderWidth: 2,
+    borderRadius: 8,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    height: 56,
+  },
+  plateContent: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+    justifyContent: 'center',
+    paddingLeft: 16,
+  },
+  plateInput: {
+    fontSize: 20,
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    letterSpacing: 2,
+  },
+  plateRegion: {
+    width: 60,
+    backgroundColor: '#FFFFFF',
+    borderLeftWidth: 2,
+    borderLeftColor: '#000000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 8,
+    gap: 4,
+  },
+  plateRegionCode: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#000000',
+    letterSpacing: 0.5,
+  },
+  plateFlag: {
+    width: 24,
+    height: 16,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  plateFlagStripe: {
+    flex: 1,
   },
   
   // Date/Time Step
@@ -1125,19 +1480,58 @@ const styles = StyleSheet.create({
   timeSection: {
     gap: 12,
   },
+  timePeriodGroup: {
+    gap: 12,
+    marginBottom: 16,
+  },
+  timePeriodLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
   timeSlotsWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
   timeChip: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 10,
+    minWidth: 70,
+    alignItems: 'center',
+    gap: 2,
   },
   timeChipText: {
     fontSize: 15,
     fontWeight: '700',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  slotsAvailable: {
+    fontSize: 10,
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  availabilityLegend: {
+    flexDirection: 'row',
+    gap: 20,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  legendText: {
+    fontSize: 12,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   
@@ -1234,6 +1628,11 @@ const styles = StyleSheet.create({
   modalListItemText: {
     fontSize: 16,
     fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  modelTypeLabel: {
+    fontSize: 12,
+    marginTop: 2,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   modalDivider: {
